@@ -1,0 +1,81 @@
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { logger } from 'hono/logger';
+import { secureHeaders } from 'hono/secure-headers';
+import { requestId } from 'hono/request-id';
+
+import type { AppEnv, Env } from './env';
+import { uploadRoutes } from './routes/upload';
+import { fileRoutes } from './routes/files';
+import { tenantRoutes } from './routes/tenant';
+import { adminRoutes } from './routes/admin';
+import { webhookRoutes } from './routes/webhooks';
+import { internalUploadRoutes } from './routes/internal-upload';
+import { errorHandler } from './middleware/error-handler';
+import type { ProcessingQueueMessage } from '@storage-brain/shared';
+
+// Create Hono app
+const app = new Hono<AppEnv>();
+
+// Global middleware
+app.use('*', secureHeaders());
+app.use('*', requestId());
+app.use('*', logger());
+app.use(
+  '*',
+  cors({
+    origin: '*', // Configure appropriately for production
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization'],
+    exposeHeaders: ['X-Request-Id'],
+    maxAge: 86400,
+  })
+);
+
+// Error handling
+app.onError(errorHandler);
+
+// Health check
+app.get('/health', (c) => {
+  return c.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: c.env.ENVIRONMENT,
+  });
+});
+
+// API routes
+app.route('/api/v1/upload', uploadRoutes);
+app.route('/api/v1/files', fileRoutes);
+app.route('/api/v1/tenant', tenantRoutes);
+app.route('/api/v1/admin', adminRoutes);
+app.route('/webhooks', webhookRoutes);
+
+// Internal routes (for presigned URL uploads)
+app.route('/_internal', internalUploadRoutes);
+
+// 404 handler
+app.notFound((c) => {
+  return c.json(
+    {
+      error: {
+        code: 'NOT_FOUND',
+        message: `Route ${c.req.method} ${c.req.path} not found`,
+      },
+    },
+    404
+  );
+});
+
+// Export for Cloudflare Workers
+export default {
+  fetch: app.fetch,
+
+  // Queue consumer for async processing (only used when queue is enabled)
+  async queue(batch: MessageBatch<ProcessingQueueMessage>, env: Env): Promise<void> {
+    if (batch.messages.length > 0) {
+      const { processQueueBatch } = await import('./services/processor');
+      await processQueueBatch(batch, env);
+    }
+  },
+};

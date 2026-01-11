@@ -1,0 +1,31 @@
+{
+  "name": "storage-brain",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Edge-native file storage micro-product built on Cloudflare Workers",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@storage-brain/api",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "eslint packages/*/src --ext .ts,.tsx",
+    "lint:fix": "eslint packages/*/src --ext .ts,.tsx --fix",
+    "format": "prettier --write \"packages/*/src/**/*.ts\"",
+    "format:check": "prettier --check \"packages/*/src/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run test --workspaces --if-present",
+    "clean": "rm -rf packages/*/dist packages/*/.wrangler"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "eslint": "^8.56.0",
+    "@typescript-eslint/eslint-plugin": "^6.19.0",
+    "@typescript-eslint/parser": "^6.19.0",
+    "prettier": "^3.2.4",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

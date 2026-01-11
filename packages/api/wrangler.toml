@@ -1,0 +1,41 @@
+name = "storage-brain-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "storage-brain-db"
+database_id = "4ed90c66-738c-4199-893a-158f24b5c50b"
+
+# R2 Bucket binding
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "storage-brain-files"
+
+# Queue bindings for async processing (requires Workers Paid plan)
+# Uncomment when upgraded to paid plan:
+# [[queues.producers]]
+# binding = "PROCESSING_QUEUE"
+# queue = "storage-brain-processing"
+#
+# [[queues.consumers]]
+# queue = "storage-brain-processing"
+# max_batch_size = 10
+# max_batch_timeout = 30
+
+# Environment variables (non-secret)
+[vars]
+ENVIRONMENT = "production"
+
+# Staging environment
+[env.staging]
+name = "storage-brain-api-staging"
+[env.staging.vars]
+ENVIRONMENT = "staging"
+
+# Production environment
+[env.production]
+name = "storage-brain-api"
+[env.production.vars]
+ENVIRONMENT = "production"

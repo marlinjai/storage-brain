@@ -1,0 +1,26 @@
+{
+  "name": "@storage-brain/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Storage Brain API - Cloudflare Workers",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "wrangler d1 migrations apply storage-brain-db",
+    "db:migrate:local": "wrangler d1 migrations apply storage-brain-db --local",
+    "db:studio": "wrangler d1 studio storage-brain-db"
+  },
+  "dependencies": {
+    "@storage-brain/shared": "*",
+    "hono": "^4.0.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240117.0",
+    "wrangler": "^3.24.0",
+    "typescript": "^5.3.3"
+  }
+}
