@@ -1,3 +1,9 @@
+---
+title: Clarifying Questions
+description: Q&A on Storage Brain design choices
+order: 5
+---
+
 # Clarifying Questions for Storage Brain Implementation
 
 Before we proceed with the RFC and implementation, please clarify the following:

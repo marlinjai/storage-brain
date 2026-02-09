@@ -1,3 +1,9 @@
+---
+title: Implementation Plan
+description: Phase-by-phase execution guide
+order: 3
+---
+
 # Implementation Plan: Storage Brain
 
 **Status**: Ready for Execution (All decisions finalized)

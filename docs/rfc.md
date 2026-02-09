@@ -1,3 +1,9 @@
+---
+title: RFC
+description: Full architecture specification for Storage Brain
+order: 1
+---
+
 # RFC: Storage Brain - Edge-Native File Storage Micro-Product
 
 **Status**: Approved

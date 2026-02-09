@@ -1,3 +1,9 @@
+---
+title: Quick Start
+description: Key decisions and deployment architecture overview
+order: 2
+---
+
 # Quick Start Guide - Storage Brain
 
 ## Key Decisions Summary

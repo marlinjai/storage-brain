@@ -1,3 +1,9 @@
+---
+title: Decisions
+description: Architectural rationale for key design choices
+order: 4
+---
+
 # Architecture Decisions & Rationale
 
 This document captures key architectural decisions made during the planning phase, with rationale for each choice.
