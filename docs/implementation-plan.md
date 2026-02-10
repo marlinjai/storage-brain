@@ -13,7 +13,7 @@ order: 3
 
 ## Overview
 
-This document provides a step-by-step implementation plan for the Storage Brain micro-product. Follow this plan after answering the clarifying questions in `CLARIFYING_QUESTIONS.md` and reviewing the RFC in `RFC.md`.
+This document provides a step-by-step implementation plan for the Storage Brain micro-product. Follow this plan after answering the [clarifying questions](./clarifying-questions) and reviewing the [RFC](./rfc).
 
 ---
 
@@ -26,7 +26,7 @@ Before starting implementation, ensure you have:
 - [ ] D1 database created (or plan to create during setup)
 - [ ] Node.js 18+ installed
 - [ ] TypeScript knowledge
-- [x] Answers to all clarifying questions (see `CLARIFYING_QUESTIONS.md`)
+- [x] Answers to all [clarifying questions](./clarifying-questions)
 
 ---
 
@@ -322,9 +322,9 @@ UploadNode/
 ├── .cursor/
 │   └── rules/              # Cursor rules (already created)
 ├── docs/
-│   ├── CLARIFYING_QUESTIONS.md
-│   ├── RFC.md
-│   └── IMPLEMENTATION_PLAN.md
+│   ├── clarifying-questions
+│   ├── rfc
+│   └── implementation-plan
 ├── packages/
 │   ├── api/                # Cloudflare Workers API
 │   │   ├── src/
@@ -363,8 +363,8 @@ UploadNode/
 ## Execution Checklist
 
 ### Before Starting
-- [ ] Review RFC.md thoroughly
-- [ ] Answer all clarifying questions
+- [ ] Review the [RFC](./rfc) thoroughly
+- [ ] Answer all [clarifying questions](./clarifying-questions)
 - [ ] Set up Cloudflare account and resources
 - [ ] Install development dependencies
 
@@ -402,7 +402,7 @@ UploadNode/
 
 ## Next Steps
 
-All clarifying questions have been answered (see `CLARIFYING_QUESTIONS.md` and `DECISIONS.md`).
+All clarifying questions have been answered (see [clarifying questions](./clarifying-questions) and [decisions](./decisions)).
 
 1. **Review** the finalized RFC and decisions
 2. **Set up** Cloudflare resources (account, R2 bucket, D1 database)

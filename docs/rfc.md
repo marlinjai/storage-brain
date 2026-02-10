@@ -544,7 +544,7 @@ console.log(fileInfo.url); // Public R2 URL
 
 ## 11. Decisions Summary
 
-All clarifying questions have been answered. See `CLARIFYING_QUESTIONS.md` for full details and `DECISIONS.md` for rationale.
+All clarifying questions have been answered. See [clarifying questions](./clarifying-questions) for full details and [decisions](./decisions) for rationale.
 
 **Key Decisions**:
 - **Database**: D1 (edge-native, free tier sufficient)

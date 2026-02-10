@@ -209,4 +209,4 @@ processor-worker (Cloudflare Worker)
 2. ✅ Decisions documented
 3. 🚀 **Ready to start Phase 1 implementation**
 
-See `IMPLEMENTATION_PLAN.md` for step-by-step execution guide.
+See the [Implementation Plan](./implementation-plan) for step-by-step execution guide.
