@@ -25,8 +25,8 @@ Storage Brain uses a three-layer design:
 
 ## Documentation
 
-- [RFC](./rfc) — Full architecture specification
-- [Quick Start](./quickstart) — Key decisions and deployment architecture
-- [Implementation Plan](./implementation-plan) — Phase-by-phase execution guide
-- [Decisions](./decisions) — Architectural rationale
-- [Clarifying Questions](./clarifying-questions) — Q&A on design choices
+- [RFC](/projects/storage-brain/rfc) — Full architecture specification
+- [Quick Start](/projects/storage-brain/quickstart) — Key decisions and deployment architecture
+- [Implementation Plan](/projects/storage-brain/implementation-plan) — Phase-by-phase execution guide
+- [Decisions](/projects/storage-brain/decisions) — Architectural rationale
+- [Clarifying Questions](/projects/storage-brain/clarifying-questions) — Q&A on design choices

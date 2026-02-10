@@ -13,7 +13,7 @@ order: 3
 
 ## Overview
 
-This document provides a step-by-step implementation plan for the Storage Brain micro-product. Follow this plan after answering the [clarifying questions](./clarifying-questions) and reviewing the [RFC](./rfc).
+This document provides a step-by-step implementation plan for the Storage Brain micro-product. Follow this plan after answering the [clarifying questions](/projects/storage-brain/clarifying-questions) and reviewing the [RFC](/projects/storage-brain/rfc).
 
 ---
 
@@ -26,7 +26,7 @@ Before starting implementation, ensure you have:
 - [ ] D1 database created (or plan to create during setup)
 - [ ] Node.js 18+ installed
 - [ ] TypeScript knowledge
-- [x] Answers to all [clarifying questions](./clarifying-questions)
+- [x] Answers to all [clarifying questions](/projects/storage-brain/clarifying-questions)
 
 ---
 
@@ -363,8 +363,8 @@ UploadNode/
 ## Execution Checklist
 
 ### Before Starting
-- [ ] Review the [RFC](./rfc) thoroughly
-- [ ] Answer all [clarifying questions](./clarifying-questions)
+- [ ] Review the [RFC](/projects/storage-brain/rfc) thoroughly
+- [ ] Answer all [clarifying questions](/projects/storage-brain/clarifying-questions)
 - [ ] Set up Cloudflare account and resources
 - [ ] Install development dependencies
 
@@ -402,7 +402,7 @@ UploadNode/
 
 ## Next Steps
 
-All clarifying questions have been answered (see [clarifying questions](./clarifying-questions) and [decisions](./decisions)).
+All clarifying questions have been answered (see [clarifying questions](/projects/storage-brain/clarifying-questions) and [decisions](/projects/storage-brain/decisions)).
 
 1. **Review** the finalized RFC and decisions
 2. **Set up** Cloudflare resources (account, R2 bucket, D1 database)
