@@ -19,11 +19,11 @@ This document captures key architectural decisions made during the planning phas
 - **Future**: Can migrate to Prisma Accelerate later if caching becomes critical
 
 **Trade-offs**:
-- ✅ Simpler setup, no external dependencies
-- ✅ Free for MVP scale
-- ✅ Edge-native performance
-- ❌ Less advanced query features than PostgreSQL
-- ❌ No built-in caching (can add later)
+- Simpler setup, no external dependencies
+- Free for MVP scale
+- Edge-native performance
+- Less advanced query features than PostgreSQL
+- No built-in caching (can add later)
 
 ## Authentication: Simple API Keys
 

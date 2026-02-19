@@ -8,7 +8,6 @@ A lightweight, edge-native file storage service built on Cloudflare Workers, R2,
 - **Micro-Product Ready**: Exportable, reusable, pluggable architecture
 - **Type-Safe**: Full TypeScript with autocomplete support
 - **Multi-Tenant**: Secure tenant isolation and quota management
-- **Context-Aware Processing**: OCR, thumbnails, and extensible pipeline
 
 ## Tech Stack
 
@@ -20,11 +19,11 @@ A lightweight, edge-native file storage service built on Cloudflare Workers, R2,
 | **Database** | D1 | Cloudflare SQL, edge-native |
 | **Storage** | R2 | S3-compatible, presigned URLs |
 | **Validation** | Zod | Runtime type safety |
-| **Processing** | Cloudflare Queues | Async job processing |
+| **Package Manager** | pnpm | Workspaces for monorepo |
 
 ## Architecture
 
-Three-layer design:
+Two-layer design:
 
 ```
 ┌─────────────────────────────────────────┐
@@ -32,40 +31,36 @@ Three-layer design:
 └─────────────────┬───────────────────────┘
                   │ TypeScript SDK
 ┌─────────────────▼───────────────────────┐
-│       C. Exportable Client SDK          │
+│   SDK (@marlinjai/storage-brain-sdk)    │
 │   - Type-safe API client                │
 │   - Progress tracking, retry logic      │
 └─────────────────┬───────────────────────┘
                   │ HTTP/REST
 ┌─────────────────▼───────────────────────┐
-│       A. Gatekeeper (API)               │
+│       Gatekeeper (API)                  │
 │   - Handshake + presigned URLs          │
 │   - Quota validation                    │
 │   - API key authentication              │
-└─────────────────┬───────────────────────┘
-                  │ R2 Upload
-┌─────────────────▼───────────────────────┐
-│       B. Processor (Worker)             │
-│   - OCR (invoice context)               │
-│   - Thumbnails (framer-site context)    │
 │   - Webhooks                            │
-└─────────────────────────────────────────┘
+└─────────────────┬───────────────────────┘
+                  │
+         ┌───────┴───────┐
+         ▼               ▼
+┌─────────────┐  ┌─────────────┐
+│  R2 Bucket  │  │ D1 Database │
+└─────────────┘  └─────────────┘
 ```
 
 ## Project Structure
 
 ```
-UploadNode/
-├── docs/                    # Documentation
-│   ├── RFC.md              # Architecture spec (approved)
-│   ├── DECISIONS.md        # Architecture rationale
-│   ├── CLARIFYING_QUESTIONS.md  # All decisions
-│   └── IMPLEMENTATION_PLAN.md   # Execution guide
+storage-brain/
 ├── packages/
-│   ├── api/                # Cloudflare Workers API
-│   ├── client-sdk/         # TypeScript SDK
-│   └── shared/             # Shared types & utilities
-└── .cursor/rules/          # Development rules
+│   ├── api/      # Cloudflare Workers API (@storage-brain/api)
+│   ├── sdk/      # TypeScript SDK (@marlinjai/storage-brain-sdk on npm)
+│   └── shared/   # Internal types & Zod schemas (@storage-brain/shared)
+├── docs/         # Clearify documentation
+└── package.json  # pnpm workspaces root
 ```
 
 ## Key Decisions
@@ -74,17 +69,56 @@ UploadNode/
 - **Auth**: Simple API keys per tenant (`sk_live_` / `sk_test_` prefix)
 - **File Types**: Images (JPEG, PNG, WebP, GIF, AVIF) + PDFs
 - **Quotas**: Hard limits, per-tenant configurable (default 500MB)
-- **Thumbnails**: 3 sizes (200x200, 400x400, 800x800) in WebP
 - **Deployment**: Single worker on workers.dev (MVP)
 
-See [DECISIONS.md](./docs/DECISIONS.md) for full rationale.
+See [DECISIONS.md](./docs/internal/decisions.md) for full rationale.
+
+## Getting Started
+
+```bash
+# Install dependencies
+pnpm install
+
+# Start API dev server
+pnpm dev
+
+# Build all packages
+pnpm build
+
+# Build SDK only
+pnpm build:sdk
+
+# Type check
+pnpm typecheck
+```
+
+## SDK Usage
+
+```bash
+npm install @marlinjai/storage-brain-sdk
+```
+
+```typescript
+import { StorageBrain } from '@marlinjai/storage-brain-sdk';
+
+const storage = new StorageBrain({
+  apiKey: 'sk_live_your_api_key_here',
+});
+
+const file = await storage.upload(fileBlob, {
+  context: 'invoice',
+  onProgress: (p) => console.log(`${p}%`),
+});
+```
+
+See [packages/sdk/README.md](./packages/sdk/README.md) for full SDK documentation.
 
 ## Documentation
 
-- **[RFC.md](./docs/RFC.md)**: Complete architecture specification
-- **[DECISIONS.md](./docs/DECISIONS.md)**: Architecture decisions and rationale
-- **[IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md)**: Step-by-step execution guide
-- **[CLARIFYING_QUESTIONS.md](./docs/CLARIFYING_QUESTIONS.md)**: All answered questions
+- **[Architecture](./docs/public/architecture.md)**: System architecture and design overview
+- **[SDK Guide](./docs/public/sdk.md)**: TypeScript SDK usage and reference
+- **[API Reference](./docs/public/api-reference.md)**: REST API endpoints
+- **[Quickstart](./docs/public/quickstart.md)**: Getting started guide
 
 ## Status
 
@@ -96,14 +130,7 @@ See [DECISIONS.md](./docs/DECISIONS.md) for full rationale.
 1. **Foundation Setup** - Project structure, Workers, D1 schema, shared types
 2. **Gatekeeper API** - Auth, handshake, file management, quotas
 3. **Client SDK** - TypeScript SDK with progress tracking
-4. **Processing Pipeline** - OCR, thumbnails, webhooks
-5. **Testing & Deployment** - Tests, docs, production deploy
-
-## Getting Started
-
-1. **Review**: Read [RFC.md](./docs/RFC.md) and [DECISIONS.md](./docs/DECISIONS.md)
-2. **Prerequisites**: Set up Cloudflare account, R2 bucket, D1 database
-3. **Implement**: Follow [IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md)
+4. **Testing & Deployment** - Tests, docs, production deploy
 
 ## References
 

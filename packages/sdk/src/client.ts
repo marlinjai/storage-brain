@@ -1,5 +1,5 @@
-import type { AllowedMimeType } from '@storage-brain/shared';
-import { ALLOWED_MIME_TYPES, RETRY_CONFIG } from '@storage-brain/shared';
+import type { AllowedMimeType } from './constants';
+import { ALLOWED_MIME_TYPES, RETRY_CONFIG } from './constants';
 import type {
   StorageBrainConfig,
   UploadOptions,
@@ -18,7 +18,7 @@ import {
   parseApiError,
 } from './errors';
 
-const DEFAULT_BASE_URL = 'https://storage-brain-api.workers.dev';
+const DEFAULT_BASE_URL = 'https://storage-brain-api.marlin-pohl.workers.dev';
 const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_MAX_RETRIES = 3;
 
@@ -33,7 +33,7 @@ const DEFAULT_MAX_RETRIES = 3;
  *
  * // Upload a file
  * const file = await storage.upload(fileBlob, {
- *   context: 'newsletter',
+ *   context: 'my-app',
  *   onProgress: (p) => console.log(`${p}%`),
  * });
  *
@@ -60,7 +60,7 @@ export class StorageBrain {
   /**
    * Upload a file
    */
-  async upload(file: File | Blob, options: UploadOptions): Promise<FileInfo> {
+  async upload(file: File | Blob, options: UploadOptions = {}): Promise<FileInfo> {
     const { context, tags, onProgress, webhookUrl, signal } = options;
 
     // Get file info
@@ -93,8 +93,8 @@ export class StorageBrain {
 
     onProgress?.(90);
 
-    // Poll for file status (processing may take time)
-    const fileInfo = await this.waitForProcessing(handshake.fileId, signal);
+    // Fetch the completed file info
+    const fileInfo = await this.getFile(handshake.fileId);
 
     onProgress?.(100);
 
@@ -108,7 +108,7 @@ export class StorageBrain {
     fileType: AllowedMimeType;
     fileName: string;
     fileSizeBytes: number;
-    context: string;
+    context?: string;
     tags?: Record<string, string>;
     webhookUrl?: string;
   }): Promise<UploadHandshake> {
@@ -116,7 +116,16 @@ export class StorageBrain {
   }
 
   /**
+   * Check if running in a browser environment
+   */
+  private isBrowser(): boolean {
+    return typeof window !== 'undefined' && typeof XMLHttpRequest !== 'undefined';
+  }
+
+  /**
    * Upload file content to presigned URL
+   * Uses XMLHttpRequest in browsers (for progress tracking) and fetch in Node.js
+   * Returns upload response which may include immediate OCR results for small files
    */
   private async uploadToPresignedUrl(
     presignedUrl: string,
@@ -124,55 +133,30 @@ export class StorageBrain {
     contentType: string,
     onProgress?: (progress: number) => void,
     signal?: AbortSignal
-  ): Promise<void> {
+  ): Promise<{ processingStatus?: string; metadata?: Record<string, unknown> } | null> {
     // Determine if URL is relative (our internal endpoint) or absolute (direct R2)
     const uploadUrl = presignedUrl.startsWith('/')
       ? `${this.baseUrl}${presignedUrl}`
       : presignedUrl;
 
+    // Build headers
+    const headers: Record<string, string> = {
+      'Content-Type': contentType,
+    };
+
+    // Add auth header for internal endpoint
+    if (presignedUrl.startsWith('/')) {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    }
+
     try {
-      // Use XMLHttpRequest for progress tracking
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-
-        xhr.upload.addEventListener('progress', (event) => {
-          if (event.lengthComputable && onProgress) {
-            onProgress(Math.round((event.loaded / event.total) * 100));
-          }
-        });
-
-        xhr.addEventListener('load', () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve();
-          } else {
-            reject(new UploadError(`Upload failed with status ${xhr.status}`));
-          }
-        });
-
-        xhr.addEventListener('error', () => {
-          reject(new NetworkError('Network error during upload'));
-        });
-
-        xhr.addEventListener('abort', () => {
-          reject(new UploadError('Upload was cancelled'));
-        });
-
-        if (signal) {
-          signal.addEventListener('abort', () => {
-            xhr.abort();
-          });
-        }
-
-        xhr.open('PUT', uploadUrl);
-        xhr.setRequestHeader('Content-Type', contentType);
-
-        // Add auth header for internal endpoint
-        if (presignedUrl.startsWith('/')) {
-          xhr.setRequestHeader('Authorization', `Bearer ${this.apiKey}`);
-        }
-
-        xhr.send(file);
-      });
+      if (this.isBrowser()) {
+        // Use XMLHttpRequest in browsers for progress tracking
+        return await this.uploadWithXHR(uploadUrl, file, headers, onProgress, signal);
+      } else {
+        // Use fetch in Node.js (no granular progress, but works universally)
+        return await this.uploadWithFetch(uploadUrl, file, headers, onProgress, signal);
+      }
     } catch (error) {
       if (error instanceof StorageBrainError) {
         throw error;
@@ -185,33 +169,116 @@ export class StorageBrain {
   }
 
   /**
-   * Wait for file processing to complete
+   * Upload using XMLHttpRequest (browser only, supports progress)
+   * Returns the parsed JSON response if available
    */
-  private async waitForProcessing(
-    fileId: string,
-    signal?: AbortSignal,
-    maxWaitMs = 60000,
-    pollIntervalMs = 1000
-  ): Promise<FileInfo> {
-    const startTime = Date.now();
+  private uploadWithXHR(
+    url: string,
+    file: File | Blob,
+    headers: Record<string, string>,
+    onProgress?: (progress: number) => void,
+    signal?: AbortSignal
+  ): Promise<{ processingStatus?: string; metadata?: Record<string, unknown> } | null> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
 
-    while (Date.now() - startTime < maxWaitMs) {
-      if (signal?.aborted) {
-        throw new UploadError('Operation was cancelled');
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable && onProgress) {
+          onProgress(Math.round((event.loaded / event.total) * 100));
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          // Try to parse JSON response
+          try {
+            const response = JSON.parse(xhr.responseText);
+            resolve(response);
+          } catch {
+            resolve(null);
+          }
+        } else {
+          reject(new UploadError(`Upload failed with status ${xhr.status}`));
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        reject(new NetworkError('Network error during upload'));
+      });
+
+      xhr.addEventListener('abort', () => {
+        reject(new UploadError('Upload was cancelled'));
+      });
+
+      if (signal) {
+        signal.addEventListener('abort', () => {
+          xhr.abort();
+        });
       }
 
-      const file = await this.getFile(fileId);
-
-      if (file.processingStatus === 'completed' || file.processingStatus === 'failed') {
-        return file;
+      xhr.open('PUT', url);
+      for (const [key, value] of Object.entries(headers)) {
+        xhr.setRequestHeader(key, value);
       }
+      xhr.send(file);
+    });
+  }
 
-      // Wait before polling again
-      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  /**
+   * Upload using fetch (works in Node.js and browsers, limited progress support)
+   * Returns the parsed JSON response if available
+   */
+  private async uploadWithFetch(
+    url: string,
+    file: File | Blob,
+    headers: Record<string, string>,
+    onProgress?: (progress: number) => void,
+    signal?: AbortSignal
+  ): Promise<{ processingStatus?: string; metadata?: Record<string, unknown> } | null> {
+    // In Node.js, we can't track granular upload progress with fetch
+    // Report 0% at start and 100% on completion
+    onProgress?.(0);
+
+    // Convert Blob to buffer for Node.js compatibility
+    const body = await this.blobToBuffer(file);
+
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers,
+      body,
+      signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new UploadError(`Upload failed with status ${response.status}: ${errorText}`);
     }
 
-    // Return current state even if not fully processed
-    return this.getFile(fileId);
+    onProgress?.(100);
+
+    // Try to parse JSON response
+    try {
+      const result = await response.json();
+      return result as { processingStatus?: string; metadata?: Record<string, unknown> };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Convert Blob to ArrayBuffer for Node.js fetch compatibility
+   */
+  private async blobToBuffer(blob: File | Blob): Promise<ArrayBuffer> {
+    if (typeof blob.arrayBuffer === 'function') {
+      return blob.arrayBuffer();
+    }
+    // Fallback for older environments
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsArrayBuffer(blob);
+    });
   }
 
   /**

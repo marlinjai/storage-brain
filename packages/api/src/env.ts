@@ -1,4 +1,4 @@
-import type { D1Database, R2Bucket, Queue } from '@cloudflare/workers-types';
+import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import type { TenantContext } from '@storage-brain/shared';
 
 /**
@@ -11,15 +11,11 @@ export interface Env {
   // R2 Bucket
   BUCKET: R2Bucket;
 
-  // Processing Queue (optional - requires Workers Paid plan)
-  PROCESSING_QUEUE?: Queue;
-
   // Environment variables
   ENVIRONMENT: 'development' | 'staging' | 'production';
 
   // Secrets (set via wrangler secret put)
   ADMIN_API_KEY?: string;
-  GCP_VISION_API_KEY?: string;
 }
 
 /**

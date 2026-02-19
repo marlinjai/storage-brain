@@ -13,7 +13,7 @@ order: 3
 
 ## Overview
 
-This document provides a step-by-step implementation plan for the Storage Brain micro-product. Follow this plan after answering the [clarifying questions](/projects/storage-brain/clarifying-questions) and reviewing the [RFC](/projects/storage-brain/rfc).
+This document provides a step-by-step implementation plan for the Storage Brain micro-product. Follow this plan after answering the [Clarifying Questions](./clarifying-questions) and reviewing the [RFC](./rfc).
 
 ---
 
@@ -26,7 +26,7 @@ Before starting implementation, ensure you have:
 - [ ] D1 database created (or plan to create during setup)
 - [ ] Node.js 18+ installed
 - [ ] TypeScript knowledge
-- [x] Answers to all [clarifying questions](/projects/storage-brain/clarifying-questions)
+- [x] Answers to all [Clarifying Questions](./clarifying-questions)
 
 ---
 
@@ -322,9 +322,11 @@ UploadNode/
 ├── .cursor/
 │   └── rules/              # Cursor rules (already created)
 ├── docs/
-│   ├── clarifying-questions
-│   ├── rfc
-│   └── implementation-plan
+│   └── internal/
+│       ├── clarifying-questions
+│       ├── rfc
+│       ├── decisions
+│       └── implementation-plan
 ├── packages/
 │   ├── api/                # Cloudflare Workers API
 │   │   ├── src/
@@ -363,8 +365,8 @@ UploadNode/
 ## Execution Checklist
 
 ### Before Starting
-- [ ] Review the [RFC](/projects/storage-brain/rfc) thoroughly
-- [ ] Answer all [clarifying questions](/projects/storage-brain/clarifying-questions)
+- [ ] Review the [RFC](./rfc) thoroughly
+- [ ] Answer all [Clarifying Questions](./clarifying-questions)
 - [ ] Set up Cloudflare account and resources
 - [ ] Install development dependencies
 
@@ -402,7 +404,7 @@ UploadNode/
 
 ## Next Steps
 
-All clarifying questions have been answered (see [clarifying questions](/projects/storage-brain/clarifying-questions) and [decisions](/projects/storage-brain/decisions)).
+All clarifying questions have been answered (see [Clarifying Questions](./clarifying-questions) and [Decisions](./decisions)).
 
 1. **Review** the finalized RFC and decisions
 2. **Set up** Cloudflare resources (account, R2 bucket, D1 database)

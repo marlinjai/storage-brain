@@ -61,7 +61,7 @@ uploadRoutes.post('/request', async (c) => {
     storedPath,
     fileType,
     sizeBytes: fileSize,
-    context: validatedBody.context,
+    context: validatedBody.context ?? null,
     tags: validatedBody.tags ?? null,
     webhookUrl: validatedBody.webhookUrl,
   });

@@ -1,9 +1,7 @@
 import type {
   AllowedMimeType,
-  ProcessingContext,
   UploadSessionStatus,
   ProcessingStatus,
-  ThumbnailSize,
 } from './constants';
 
 /**
@@ -30,10 +28,11 @@ export interface StoredFile {
   storedPath: string;
   fileType: AllowedMimeType;
   sizeBytes: number;
-  context: ProcessingContext;
+  context: string | null;
   tags: Record<string, string> | null;
   metadata: FileMetadata | null;
   processingStatus: ProcessingStatus;
+  webhookUrl: string | null;
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
@@ -43,51 +42,7 @@ export interface StoredFile {
  * File metadata (stored as JSON)
  */
 export interface FileMetadata {
-  thumbnailUrls?: ThumbnailUrls;
-  ocrData?: OcrResult;
-  imageInfo?: ImageInfo;
-  processingError?: string;
   [key: string]: unknown;
-}
-
-/**
- * Thumbnail URLs for different sizes
- */
-export type ThumbnailUrls = {
-  [K in ThumbnailSize]?: string;
-};
-
-/**
- * OCR result from Google Cloud Vision
- */
-export interface OcrResult {
-  fullText: string;
-  confidence: number;
-  blocks: OcrBlock[];
-}
-
-export interface OcrBlock {
-  text: string;
-  confidence: number;
-  boundingBox: BoundingBox;
-}
-
-export interface BoundingBox {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-/**
- * Image information extracted from EXIF
- */
-export interface ImageInfo {
-  width: number;
-  height: number;
-  format: string;
-  colorSpace?: string;
-  hasAlpha?: boolean;
 }
 
 /**
@@ -111,7 +66,7 @@ export interface RequestUploadInput {
   fileType: AllowedMimeType;
   fileName: string;
   fileSizeBytes?: number;
-  context: ProcessingContext;
+  context?: string;
   tags?: Record<string, string>;
   webhookUrl?: string;
 }
@@ -133,7 +88,7 @@ export interface FileResponse {
   originalName: string;
   fileType: AllowedMimeType;
   sizeBytes: number;
-  context: ProcessingContext;
+  context: string | null;
   tags: Record<string, string> | null;
   metadata: FileMetadata | null;
   processingStatus: ProcessingStatus;
@@ -144,7 +99,7 @@ export interface FileResponse {
 export interface ListFilesInput {
   limit?: number;
   cursor?: string;
-  context?: ProcessingContext;
+  context?: string;
   fileType?: AllowedMimeType;
 }
 
@@ -174,26 +129,14 @@ export interface ApiError {
 }
 
 /**
- * Webhook payload sent after processing
+ * Webhook payload sent after upload
  */
 export interface WebhookPayload {
-  event: 'file.processed' | 'file.failed';
+  event: 'file.uploaded' | 'file.failed';
   fileId: string;
   tenantId: string;
   file: FileResponse;
   timestamp: string;
-}
-
-/**
- * Queue message for processing
- */
-export interface ProcessingQueueMessage {
-  fileId: string;
-  tenantId: string;
-  context: ProcessingContext;
-  storedPath: string;
-  fileType: AllowedMimeType;
-  webhookUrl?: string;
 }
 
 /**

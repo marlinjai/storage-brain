@@ -7,15 +7,18 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=@storage-brain/api",
-    "build": "npm run build --workspaces --if-present",
+    "dev": "pnpm --filter @storage-brain/api dev",
+    "dev:sdk": "pnpm --filter @marlinjai/storage-brain-sdk dev",
+    "build": "pnpm -r --if-present run build",
+    "build:sdk": "pnpm --filter @marlinjai/storage-brain-sdk build",
     "lint": "eslint packages/*/src --ext .ts,.tsx",
     "lint:fix": "eslint packages/*/src --ext .ts,.tsx --fix",
     "format": "prettier --write \"packages/*/src/**/*.ts\"",
     "format:check": "prettier --check \"packages/*/src/**/*.ts\"",
-    "typecheck": "tsc --noEmit",
-    "test": "npm run test --workspaces --if-present",
-    "clean": "rm -rf packages/*/dist packages/*/.wrangler"
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "test": "pnpm -r --if-present run test",
+    "clean": "rm -rf packages/*/dist packages/*/.wrangler",
+    "publish:sdk": "pnpm --filter @marlinjai/storage-brain-sdk build && pnpm --filter @marlinjai/storage-brain-sdk publish --access public"
   },
   "devDependencies": {
     "@marlinjai/clearify": "^1.6.6",

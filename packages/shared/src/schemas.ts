@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import {
   ALLOWED_MIME_TYPES,
-  PROCESSING_CONTEXTS,
   MAX_FILE_SIZE_BYTES,
   API_KEY_PREFIX_LIVE,
   API_KEY_PREFIX_TEST,
@@ -11,11 +10,6 @@ import {
  * File type validation
  */
 export const fileTypeSchema = z.enum(ALLOWED_MIME_TYPES as unknown as [string, ...string[]]);
-
-/**
- * Processing context validation
- */
-export const processingContextSchema = z.enum(PROCESSING_CONTEXTS);
 
 /**
  * Tags validation (string key-value pairs)
@@ -38,7 +32,7 @@ export const requestUploadSchema = z.object({
     .positive()
     .max(MAX_FILE_SIZE_BYTES, `File size exceeds maximum of ${MAX_FILE_SIZE_BYTES} bytes`)
     .optional(),
-  context: processingContextSchema,
+  context: z.string().max(100).optional(),
   tags: tagsSchema,
   webhookUrl: z.string().url().optional(),
 });
@@ -51,7 +45,7 @@ export type RequestUploadSchema = z.infer<typeof requestUploadSchema>;
 export const listFilesQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   cursor: z.string().optional(),
-  context: processingContextSchema.optional(),
+  context: z.string().max(100).optional(),
   fileType: fileTypeSchema.optional(),
 });
 
@@ -88,7 +82,7 @@ export type CreateTenantSchema = z.infer<typeof createTenantSchema>;
  * Webhook payload validation
  */
 export const webhookPayloadSchema = z.object({
-  event: z.enum(['file.processed', 'file.failed']),
+  event: z.enum(['file.uploaded', 'file.failed']),
   fileId: z.string().uuid(),
   tenantId: z.string().uuid(),
   file: z.object({
@@ -97,7 +91,7 @@ export const webhookPayloadSchema = z.object({
     originalName: z.string(),
     fileType: fileTypeSchema,
     sizeBytes: z.number().int().positive(),
-    context: processingContextSchema,
+    context: z.string().max(100).nullable(),
     tags: z.record(z.string(), z.string()).nullable(),
     metadata: z.record(z.string(), z.unknown()).nullable(),
     processingStatus: z.enum(['pending', 'processing', 'completed', 'failed']),

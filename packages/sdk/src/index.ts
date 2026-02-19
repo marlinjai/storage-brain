@@ -11,6 +11,7 @@ export type {
   QuotaInfo,
   TenantInfo,
   UploadHandshake,
+  FileMetadata,
 } from './types';
 
 // Errors
@@ -26,19 +27,17 @@ export {
   ValidationError,
 } from './errors';
 
-// Re-export useful types from shared
+// Constants and types from constants
 export type {
-  ProcessingContext,
   AllowedMimeType,
   ProcessingStatus,
-  FileMetadata,
-  ThumbnailUrls,
-  OcrResult,
-} from '@storage-brain/shared';
+} from './constants';
 
-// Re-export constants
 export {
+  ALLOWED_FILE_TYPES,
   ALLOWED_MIME_TYPES,
-  PROCESSING_CONTEXTS,
-  THUMBNAIL_SIZES,
-} from '@storage-brain/shared';
+  IMAGE_MIME_TYPES,
+  DOCUMENT_MIME_TYPES,
+  PROCESSING_STATUSES,
+  MAX_FILE_SIZE_BYTES,
+} from './constants';

@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../env';
 import { getUploadSessionByFileId, updateUploadSessionStatus, getFileById, updateFileProcessingStatus } from '../db/queries';
-import type { ProcessingQueueMessage } from '@storage-brain/shared';
+import { sendWebhook } from '../services/webhook';
+import type { FileResponse } from '@storage-brain/shared';
 
 export const webhookRoutes = new Hono<AppEnv>();
 
@@ -48,31 +49,42 @@ webhookRoutes.post('/r2-upload-complete', async (c) => {
   // Update session status
   await updateUploadSessionStatus(c.env.DB, session.id, 'completed');
 
-  // Get file record to queue processing
+  // Get file record
   const file = await getFileById(c.env.DB, fileId, tenantId);
   if (!file) {
     console.error(`File record not found: ${fileId}`);
     return c.json({ error: 'File record not found' }, 404);
   }
 
-  // Queue file for processing (if queue is available)
-  if (c.env.PROCESSING_QUEUE) {
-    const message: ProcessingQueueMessage = {
-      fileId: file.id,
-      tenantId: file.tenantId,
-      context: file.context,
-      storedPath: file.storedPath,
+  // Mark file as completed immediately
+  await updateFileProcessingStatus(c.env.DB, file.id, 'completed');
+  console.log(`File marked as completed: ${fileId}`);
+
+  // Fire webhook if configured (non-blocking via waitUntil)
+  if (file.webhookUrl) {
+    const fileResponse: FileResponse = {
+      id: file.id,
+      url: `/api/v1/files/download/${encodeURIComponent(file.storedPath)}`,
+      originalName: file.originalName,
       fileType: file.fileType,
-      // webhookUrl is stored in file metadata if provided
+      sizeBytes: file.sizeBytes,
+      context: file.context,
+      tags: file.tags,
+      metadata: file.metadata,
+      processingStatus: 'completed',
+      createdAt: new Date(file.createdAt).toISOString(),
     };
 
-    await c.env.PROCESSING_QUEUE.send(message);
-    console.log(`Queued file for processing: ${fileId}`);
-    return c.json({ status: 'queued', fileId });
+    c.executionCtx.waitUntil(
+      sendWebhook({
+        fileId: file.id,
+        tenantId: file.tenantId,
+        file: fileResponse,
+        webhookUrl: file.webhookUrl,
+        event: 'file.uploaded',
+      })
+    );
   }
 
-  // No queue available - mark as completed without processing
-  console.log(`Queue not available, marking file as completed: ${fileId}`);
-  await updateFileProcessingStatus(c.env.DB, file.id, 'completed');
-  return c.json({ status: 'completed', fileId, note: 'Processing queue not available' });
+  return c.json({ status: 'completed', fileId });
 });

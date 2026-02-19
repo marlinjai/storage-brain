@@ -11,7 +11,7 @@ Before we proceed with the RFC and implementation, please clarify the following:
 ## 1. Database Choice
 - **Question**: Do you prefer **D1** (Cloudflare's native SQL) or **Prisma with Accelerate**?
 - **Recommendation**: Start with D1 for simplicity and edge-native performance, migrate to Prisma if needed later.
-- **Your Choice**: ✅ **D1** (Recommended)
+- **Your Choice**: **D1** (Recommended)
 
 **Rationale**:
 - **D1**: Free tier (5M reads/day, 100K writes/day, 5GB storage). Workers Paid plan ($5/month) includes 25B reads/month, 50M writes/month, 5GB storage. Edge-native, zero config, perfect for Cloudflare Workers.
@@ -23,7 +23,7 @@ Before we proceed with the RFC and implementation, please clarify the following:
   - Option A: Simple API key per tenant (stored in database)
   - Option B: JWT tokens with tenant claims
   - Option C: OAuth2-style client credentials
-- **Your Choice**: ✅ **Option A: Simple API key per tenant** (Recommended)
+- **Your Choice**: **Option A: Simple API key per tenant** (Recommended)
 
 **Rationale**:
 - Simplest to implement for MVP
@@ -37,7 +37,7 @@ Before we proceed with the RFC and implementation, please clarify the following:
   - All types?
   - Image types only (jpg, png, webp, etc.)?
   - Specific whitelist?
-- **Your Choice**: ✅ **Images + PDFs** (Recommended for MVP)
+- **Your Choice**: **Images + PDFs** (Recommended for MVP)
 
 **Rationale**:
 - **MVP Whitelist**: Images (JPEG, PNG, WebP, GIF, AVIF) + PDFs
@@ -53,7 +53,7 @@ Before we proceed with the RFC and implementation, please clarify the following:
   - Hard limit (reject uploads when exceeded)?
   - Soft limit (warn but allow)?
   - Per-tenant custom limits?
-- **Your Choice**: ✅ **Hard limit with per-tenant custom limits** (Recommended)
+- **Your Choice**: **Hard limit with per-tenant custom limits** (Recommended)
 
 **Rationale**:
 - **Hard limits**: Reject uploads when quota exceeded (prevents unexpected costs)
@@ -67,7 +67,7 @@ Before we proceed with the RFC and implementation, please clarify the following:
   - Do you have a GCP account set up?
   - Should we use service account keys or Workload Identity?
   - What's the budget/rate limit per tenant?
-- **Your Choice**: ✅ **GCP Account Ready, API Key, Add Margin**
+- **Your Choice**: **GCP Account Ready, API Key, Add Margin**
 
 **Rationale**:
 - **Authentication**: Use API key from environment variable (simplest for MVP)
@@ -83,7 +83,7 @@ Before we proceed with the RFC and implementation, please clarify the following:
   - What dimensions? (e.g., 200x200, 400x400)
   - What format? (jpg, webp, avif)
   - Multiple sizes or single?
-- **Your Choice**: ✅ **Multiple sizes, WebP format** (Recommended)
+- **Your Choice**: **Multiple sizes, WebP format** (Recommended)
 
 **Rationale**:
 - **Sizes**: Generate 3 sizes for responsive images
@@ -99,13 +99,13 @@ Before we proceed with the RFC and implementation, please clarify the following:
   - Configured per tenant in database?
   - Passed in upload request?
   - Optional feature?
-- **Your Choice**: ✅ **Optional feature, passed in upload request** (Recommended for MVP)
+- **Your Choice**: **Optional feature, passed in upload request** (Recommended for MVP)
 
 **Rationale**:
 - **MVP**: Make webhooks optional, pass `webhook_url` in upload request
 - **Flexibility**: Different webhooks per upload (useful for different contexts)
 - **Future**: Can add per-tenant default webhooks in database later
-- **Implementation**: 
+- **Implementation**:
   - Optional `webhook_url` field in upload request
   - Call webhook after processing completes
   - Include file metadata in webhook payload
@@ -116,12 +116,12 @@ Before we proceed with the RFC and implementation, please clarify the following:
   - Self-service signup?
   - Admin-created only?
   - Import from existing system?
-- **Your Choice**: ✅ **Admin-created only** (Not priority for MVP)
+- **Your Choice**: **Admin-created only** (Not priority for MVP)
 
 **Rationale**:
 - **MVP**: Admin creates tenants via database migration or simple admin script
 - **Future**: Self-service signup can be added later
-- **Implementation**: 
+- **Implementation**:
   - Manual tenant creation via SQL or admin endpoint (protected)
   - Generate API key on tenant creation
   - Store in `tenants` table
@@ -132,7 +132,7 @@ Before we proceed with the RFC and implementation, please clarify the following:
   - Single worker for all functionality?
   - Separate workers for API vs. processing?
   - Custom domain or workers.dev?
-- **Your Choice**: ✅ **Single worker for MVP, workers.dev initially** (Recommended)
+- **Your Choice**: **Single worker for MVP, workers.dev initially** (Recommended)
 
 **Rationale**:
 - **MVP**: Single worker for simplicity
@@ -150,7 +150,7 @@ Before we proceed with the RFC and implementation, please clarify the following:
   - NPM package?
   - Bundled with monorepo?
   - CDN script tag?
-- **Your Choice**: ✅ **NPM package + bundled with monorepo** (Recommended)
+- **Your Choice**: **NPM package + bundled with monorepo** (Recommended)
 
 **Rationale**:
 - **Primary**: NPM package for external use (`@your-org/storage-brain`)
@@ -164,7 +164,7 @@ Before we proceed with the RFC and implementation, please clarify the following:
   - Cloudflare Analytics only?
   - Custom logging to external service?
   - Metrics dashboard?
-- **Your Choice**: ✅ **Cloudflare Analytics + Basic Logging** (Recommended for MVP)
+- **Your Choice**: **Cloudflare Analytics + Basic Logging** (Recommended for MVP)
 
 **Rationale**:
 - **MVP**: Cloudflare Analytics (built-in, free)
@@ -187,12 +187,12 @@ Before we proceed with the RFC and implementation, please clarify the following:
   - [ ] Widget component (Phase 2)
 
 **MVP Priority** (Phase 1):
-1. ✅ Handshake endpoint + presigned URLs
-2. ✅ Basic file upload to R2
-3. ✅ Database tracking (tenants, files, sessions)
-4. ✅ Client SDK (TypeScript)
-5. ✅ OCR processing (invoice context)
-6. ✅ Thumbnail generation (framer-site context)
+1. Handshake endpoint + presigned URLs
+2. Basic file upload to R2
+3. Database tracking (tenants, files, sessions)
+4. Client SDK (TypeScript)
+5. OCR processing (invoice context)
+6. Thumbnail generation (framer-site context)
 
 **Phase 2** (Future):
 - Dashboard UI

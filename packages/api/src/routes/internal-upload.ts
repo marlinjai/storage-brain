@@ -2,13 +2,15 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../env';
 import {
   getFileByStoredPath,
+  getFileById,
   getUploadSessionByFileId,
   updateUploadSessionStatus,
   updateFileSizeBytes,
   updateFileProcessingStatus,
 } from '../db/queries';
 import { uploadToR2 } from '../services/r2';
-import type { ProcessingQueueMessage } from '@storage-brain/shared';
+import { sendWebhook } from '../services/webhook';
+import type { FileResponse } from '@storage-brain/shared';
 
 export const internalUploadRoutes = new Hono<AppEnv>();
 
@@ -70,29 +72,37 @@ internalUploadRoutes.put('/upload/*', async (c) => {
   // Update upload session status
   await updateUploadSessionStatus(c.env.DB, session.id, 'completed');
 
-  // Queue for processing if queue is available
-  if (c.env.PROCESSING_QUEUE) {
-    const message: ProcessingQueueMessage = {
-      fileId: file.id,
-      tenantId: file.tenantId,
-      context: file.context,
-      storedPath: file.storedPath,
-      fileType: file.fileType,
-    };
-
-    await c.env.PROCESSING_QUEUE.send(message);
-    console.log(`Queued file for processing: ${file.id}`);
-
-    return c.json({
-      status: 'queued',
-      fileId: file.id,
-      sizeBytes: actualSize,
-    });
-  }
-
-  // No queue available - mark as completed immediately
+  // Mark file as completed (no processing)
   await updateFileProcessingStatus(c.env.DB, file.id, 'completed');
-  console.log(`File upload completed (no queue): ${file.id}`);
+
+  // Fire webhook if configured (non-blocking via waitUntil)
+  if (file.webhookUrl) {
+    const updatedFile = await getFileById(c.env.DB, file.id, file.tenantId);
+    if (updatedFile) {
+      const fileResponse: FileResponse = {
+        id: updatedFile.id,
+        url: `/api/v1/files/download/${encodeURIComponent(updatedFile.storedPath)}`,
+        originalName: updatedFile.originalName,
+        fileType: updatedFile.fileType,
+        sizeBytes: updatedFile.sizeBytes,
+        context: updatedFile.context,
+        tags: updatedFile.tags,
+        metadata: updatedFile.metadata,
+        processingStatus: updatedFile.processingStatus,
+        createdAt: new Date(updatedFile.createdAt).toISOString(),
+      };
+
+      c.executionCtx.waitUntil(
+        sendWebhook({
+          fileId: updatedFile.id,
+          tenantId: updatedFile.tenantId,
+          file: fileResponse,
+          webhookUrl: file.webhookUrl,
+          event: 'file.uploaded',
+        })
+      );
+    }
+  }
 
   return c.json({
     status: 'completed',

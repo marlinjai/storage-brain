@@ -13,17 +13,6 @@ database_id = "4ed90c66-738c-4199-893a-158f24b5c50b"
 binding = "BUCKET"
 bucket_name = "storage-brain-files"
 
-# Queue bindings for async processing (requires Workers Paid plan)
-# Uncomment when upgraded to paid plan:
-# [[queues.producers]]
-# binding = "PROCESSING_QUEUE"
-# queue = "storage-brain-processing"
-#
-# [[queues.consumers]]
-# queue = "storage-brain-processing"
-# max_batch_size = 10
-# max_batch_timeout = 30
-
 # Environment variables (non-secret)
 [vars]
 ENVIRONMENT = "production"

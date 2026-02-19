@@ -1,9 +1,20 @@
 import type {
-  ProcessingContext,
   AllowedMimeType,
   ProcessingStatus,
-  FileMetadata,
-} from '@storage-brain/shared';
+} from './constants';
+
+// ============================================================================
+// Shared Types (inlined from @storage-brain/shared)
+// ============================================================================
+
+/**
+ * File metadata (stored as JSON)
+ */
+export type FileMetadata = { [key: string]: unknown };
+
+// ============================================================================
+// SDK-Specific Types
+// ============================================================================
 
 /**
  * Configuration for Storage Brain client
@@ -23,8 +34,8 @@ export interface StorageBrainConfig {
  * Options for uploading a file
  */
 export interface UploadOptions {
-  /** Processing context for the file */
-  context: ProcessingContext;
+  /** Optional free-form context label for the file */
+  context?: string;
   /** Optional tags for the file */
   tags?: Record<string, string>;
   /** Progress callback (0-100) */
@@ -49,8 +60,8 @@ export interface FileInfo {
   fileType: AllowedMimeType;
   /** File size in bytes */
   sizeBytes: number;
-  /** Processing context */
-  context: ProcessingContext;
+  /** Free-form context label */
+  context: string | null;
   /** User-defined tags */
   tags: Record<string, string> | null;
   /** Processing results and metadata */
@@ -69,8 +80,8 @@ export interface ListFilesOptions {
   limit?: number;
   /** Cursor for pagination */
   cursor?: string;
-  /** Filter by processing context */
-  context?: ProcessingContext;
+  /** Filter by context */
+  context?: string;
   /** Filter by file type */
   fileType?: AllowedMimeType;
 }

@@ -4,7 +4,7 @@ import { logger } from 'hono/logger';
 import { secureHeaders } from 'hono/secure-headers';
 import { requestId } from 'hono/request-id';
 
-import type { AppEnv, Env } from './env';
+import type { AppEnv } from './env';
 import { uploadRoutes } from './routes/upload';
 import { fileRoutes } from './routes/files';
 import { tenantRoutes } from './routes/tenant';
@@ -12,7 +12,6 @@ import { adminRoutes } from './routes/admin';
 import { webhookRoutes } from './routes/webhooks';
 import { internalUploadRoutes } from './routes/internal-upload';
 import { errorHandler } from './middleware/error-handler';
-import type { ProcessingQueueMessage } from '@storage-brain/shared';
 
 // Create Hono app
 const app = new Hono<AppEnv>();
@@ -70,12 +69,4 @@ app.notFound((c) => {
 // Export for Cloudflare Workers
 export default {
   fetch: app.fetch,
-
-  // Queue consumer for async processing (only used when queue is enabled)
-  async queue(batch: MessageBatch<ProcessingQueueMessage>, env: Env): Promise<void> {
-    if (batch.messages.length > 0) {
-      const { processQueueBatch } = await import('./services/processor');
-      await processQueueBatch(batch, env);
-    }
-  },
 };

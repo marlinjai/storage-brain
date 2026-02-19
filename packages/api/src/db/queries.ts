@@ -4,7 +4,6 @@ import type {
   StoredFile,
   UploadSession,
   AllowedMimeType,
-  ProcessingContext,
   UploadSessionStatus,
   ProcessingStatus,
   ListFilesInput,
@@ -97,7 +96,7 @@ interface CreateFileInput {
   storedPath: string;
   fileType: AllowedMimeType;
   sizeBytes: number;
-  context: ProcessingContext;
+  context: string | null;
   tags: Record<string, string> | null;
   webhookUrl?: string;
 }
@@ -253,10 +252,11 @@ function mapFileRow(row: Record<string, unknown>): StoredFile {
     storedPath: row.stored_path as string,
     fileType: row.file_type as AllowedMimeType,
     sizeBytes: row.size_bytes as number,
-    context: row.context as ProcessingContext,
+    context: (row.context as string) ?? null,
     tags: row.tags ? (JSON.parse(row.tags as string) as Record<string, string>) : null,
     metadata: row.metadata ? (JSON.parse(row.metadata as string) as Record<string, unknown>) : null,
     processingStatus: row.processing_status as ProcessingStatus,
+    webhookUrl: (row.webhook_url as string) ?? null,
     createdAt: row.created_at as number,
     updatedAt: row.updated_at as number,
     deletedAt: (row.deleted_at as number) ?? null,
