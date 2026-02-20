@@ -4,6 +4,7 @@ import { RETRY_CONFIG } from '@storage-brain/shared';
 interface WebhookInput {
   fileId: string;
   tenantId: string;
+  workspaceId?: string | null;
   file: FileResponse;
   webhookUrl: string;
   event: WebhookPayload['event'];
@@ -14,12 +15,13 @@ interface WebhookInput {
  * Returns true if the webhook was delivered successfully, false otherwise.
  */
 export async function sendWebhook(input: WebhookInput): Promise<boolean> {
-  const { fileId, tenantId, file, webhookUrl, event } = input;
+  const { fileId, tenantId, workspaceId, file, webhookUrl, event } = input;
 
   const payload: WebhookPayload = {
     event,
     fileId,
     tenantId,
+    workspaceId: workspaceId ?? null,
     file,
     timestamp: new Date().toISOString(),
   };
