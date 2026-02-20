@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.0] - 2026-02-20
+
+### Added
+- Managed workspaces — tenant → workspace hierarchy for multi-tenant apps
+  - `workspaces` table with per-workspace byte quotas and metadata
+  - Workspace CRUD API at `/api/v1/workspaces` (create, list, get, update, delete)
+  - Upload route supports optional `workspaceId` with workspace quota checks
+  - File listing/responses include `workspaceId` for workspace-scoped queries
+  - Cascading quota enforcement (tenant → workspace)
+  - Workspace delete soft-deletes all associated files and releases quota
+  - SDK: `withWorkspace()` for scoped client instances
+  - SDK: `createWorkspace()`, `listWorkspaces()`, `getWorkspace()`, `updateWorkspace()`, `deleteWorkspace()`
+  - `X-Workspace-Id` CORS header support
+
+### Fixed
+- Admin routes reordered before tenant-auth routes to prevent auth interception
+
 ## [0.4.0] - 2026-02-19
 
 ### Removed
