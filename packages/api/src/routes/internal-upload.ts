@@ -89,6 +89,7 @@ internalUploadRoutes.put('/upload/*', async (c) => {
         tags: updatedFile.tags,
         metadata: updatedFile.metadata,
         processingStatus: updatedFile.processingStatus,
+        workspaceId: updatedFile.workspaceId,
         createdAt: new Date(updatedFile.createdAt).toISOString(),
       };
 
@@ -96,6 +97,7 @@ internalUploadRoutes.put('/upload/*', async (c) => {
         sendWebhook({
           fileId: updatedFile.id,
           tenantId: updatedFile.tenantId,
+          workspaceId: updatedFile.workspaceId,
           file: fileResponse,
           webhookUrl: file.webhookUrl,
           event: 'file.uploaded',

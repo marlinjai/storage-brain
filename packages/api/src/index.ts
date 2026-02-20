@@ -9,6 +9,7 @@ import { uploadRoutes } from './routes/upload';
 import { fileRoutes } from './routes/files';
 import { tenantRoutes } from './routes/tenant';
 import { adminRoutes } from './routes/admin';
+import { workspaceRoutes } from './routes/workspaces';
 import { webhookRoutes } from './routes/webhooks';
 import { internalUploadRoutes } from './routes/internal-upload';
 import { errorHandler } from './middleware/error-handler';
@@ -25,7 +26,7 @@ app.use(
   cors({
     origin: '*', // Configure appropriately for production
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Workspace-Id'],
     exposeHeaders: ['X-Request-Id'],
     maxAge: 86400,
   })
@@ -43,11 +44,16 @@ app.get('/health', (c) => {
   });
 });
 
-// API routes
+// Admin routes first (own auth middleware, must not be intercepted by tenant auth)
+app.route('/api/v1/admin', adminRoutes);
+
+// Tenant & workspace routes (tenant authMiddleware)
+app.route('/api/v1/tenant', tenantRoutes);
+app.route('/api/v1/workspaces', workspaceRoutes);
+
+// Data routes (all use tenant authMiddleware)
 app.route('/api/v1/upload', uploadRoutes);
 app.route('/api/v1/files', fileRoutes);
-app.route('/api/v1/tenant', tenantRoutes);
-app.route('/api/v1/admin', adminRoutes);
 app.route('/webhooks', webhookRoutes);
 
 // Internal routes (for presigned URL uploads)

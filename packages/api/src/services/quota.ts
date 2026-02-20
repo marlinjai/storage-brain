@@ -152,3 +152,80 @@ export async function recalculateQuota(db: D1Database, tenantId: string): Promis
 
   return totalUsed;
 }
+
+// ============================================================================
+// Workspace Quota Functions
+// ============================================================================
+
+/**
+ * Check if a workspace has enough quota for a file of the given size.
+ * Returns null if workspace has no quota limit (unlimited within tenant quota).
+ */
+export async function checkWorkspaceQuota(
+  db: D1Database,
+  workspaceId: string,
+  fileSizeBytes: number
+): Promise<QuotaCheckResult | null> {
+  const result = await db
+    .prepare('SELECT quota_bytes, used_bytes FROM workspaces WHERE id = ?')
+    .bind(workspaceId)
+    .first<{ quota_bytes: number | null; used_bytes: number }>();
+
+  if (!result || result.quota_bytes === null) {
+    return null; // No workspace-level quota
+  }
+
+  const availableBytes = result.quota_bytes - result.used_bytes;
+  const hasCapacity = availableBytes >= fileSizeBytes;
+
+  return {
+    hasCapacity,
+    quotaBytes: result.quota_bytes,
+    usedBytes: result.used_bytes,
+    availableBytes,
+  };
+}
+
+/**
+ * Reserve quota at workspace level
+ */
+export async function reserveWorkspaceQuota(
+  db: D1Database,
+  workspaceId: string,
+  sizeBytes: number
+): Promise<void> {
+  const now = Date.now();
+
+  const result = await db
+    .prepare(
+      `UPDATE workspaces
+       SET used_bytes = used_bytes + ?, updated_at = ?
+       WHERE id = ? AND (quota_bytes IS NULL OR (quota_bytes - used_bytes) >= ?)`
+    )
+    .bind(sizeBytes, now, workspaceId, sizeBytes)
+    .run();
+
+  if (result.meta.changes === 0) {
+    throw new Error('Insufficient workspace quota or workspace not found');
+  }
+}
+
+/**
+ * Release quota at workspace level
+ */
+export async function releaseWorkspaceQuota(
+  db: D1Database,
+  workspaceId: string,
+  sizeBytes: number
+): Promise<void> {
+  const now = Date.now();
+
+  await db
+    .prepare(
+      `UPDATE workspaces
+       SET used_bytes = MAX(0, used_bytes - ?), updated_at = ?
+       WHERE id = ?`
+    )
+    .bind(sizeBytes, now, workspaceId)
+    .run();
+}

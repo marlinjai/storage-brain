@@ -9,6 +9,9 @@ import type {
   QuotaInfo,
   TenantInfo,
   UploadHandshake,
+  Workspace,
+  CreateWorkspaceInput,
+  UpdateWorkspaceInput,
 } from './types';
 import {
   StorageBrainError,
@@ -45,6 +48,7 @@ export class StorageBrain {
   private readonly baseUrl: string;
   private readonly timeout: number;
   private readonly maxRetries: number;
+  private readonly workspaceId?: string;
 
   constructor(config: StorageBrainConfig) {
     if (!config.apiKey) {
@@ -55,13 +59,28 @@ export class StorageBrain {
     this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, '');
     this.timeout = config.timeout ?? DEFAULT_TIMEOUT;
     this.maxRetries = config.maxRetries ?? DEFAULT_MAX_RETRIES;
+    this.workspaceId = config.workspaceId;
+  }
+
+  /**
+   * Return a new client instance scoped to a specific workspace.
+   * All uploads and file listings will default to this workspace.
+   */
+  withWorkspace(workspaceId: string): StorageBrain {
+    return new StorageBrain({
+      apiKey: this.apiKey,
+      baseUrl: this.baseUrl,
+      timeout: this.timeout,
+      maxRetries: this.maxRetries,
+      workspaceId,
+    });
   }
 
   /**
    * Upload a file
    */
   async upload(file: File | Blob, options: UploadOptions = {}): Promise<FileInfo> {
-    const { context, tags, onProgress, webhookUrl, signal } = options;
+    const { context, tags, onProgress, webhookUrl, signal, workspaceId } = options;
 
     // Get file info
     const fileName = file instanceof File ? file.name : 'file';
@@ -73,6 +92,9 @@ export class StorageBrain {
       throw new InvalidFileTypeError(fileType, [...ALLOWED_MIME_TYPES]);
     }
 
+    // Resolve workspace: option override > client default
+    const resolvedWorkspaceId = workspaceId ?? this.workspaceId;
+
     // Request upload handshake
     const handshake = await this.requestUpload({
       fileType,
@@ -81,6 +103,7 @@ export class StorageBrain {
       context,
       tags,
       webhookUrl,
+      workspaceId: resolvedWorkspaceId,
     });
 
     onProgress?.(10);
@@ -111,6 +134,7 @@ export class StorageBrain {
     context?: string;
     tags?: Record<string, string>;
     webhookUrl?: string;
+    workspaceId?: string;
   }): Promise<UploadHandshake> {
     return this.request<UploadHandshake>('POST', '/api/v1/upload/request', params);
   }
@@ -299,6 +323,10 @@ export class StorageBrain {
     if (options?.context) params.set('context', options.context);
     if (options?.fileType) params.set('fileType', options.fileType);
 
+    // Resolve workspace: option override > client default
+    const resolvedWorkspaceId = options?.workspaceId ?? this.workspaceId;
+    if (resolvedWorkspaceId) params.set('workspaceId', resolvedWorkspaceId);
+
     const query = params.toString();
     const path = query ? `/api/v1/files?${query}` : '/api/v1/files';
 
@@ -326,6 +354,46 @@ export class StorageBrain {
     return this.request<TenantInfo>('GET', '/api/v1/tenant/info');
   }
 
+  // ==========================================================================
+  // Workspace Methods
+  // ==========================================================================
+
+  /**
+   * Create a workspace
+   */
+  async createWorkspace(input: CreateWorkspaceInput): Promise<Workspace> {
+    return this.request<Workspace>('POST', '/api/v1/workspaces', input);
+  }
+
+  /**
+   * List workspaces
+   */
+  async listWorkspaces(): Promise<Workspace[]> {
+    const result = await this.request<{ workspaces: Workspace[] }>('GET', '/api/v1/workspaces');
+    return result.workspaces;
+  }
+
+  /**
+   * Get a workspace by ID
+   */
+  async getWorkspace(workspaceId: string): Promise<Workspace> {
+    return this.request<Workspace>('GET', `/api/v1/workspaces/${workspaceId}`);
+  }
+
+  /**
+   * Update a workspace
+   */
+  async updateWorkspace(workspaceId: string, updates: UpdateWorkspaceInput): Promise<Workspace> {
+    return this.request<Workspace>('PATCH', `/api/v1/workspaces/${workspaceId}`, updates);
+  }
+
+  /**
+   * Delete a workspace and soft-delete all its files
+   */
+  async deleteWorkspace(workspaceId: string): Promise<void> {
+    await this.request<{ success: boolean }>('DELETE', `/api/v1/workspaces/${workspaceId}`);
+  }
+
   /**
    * Make an authenticated API request with retry logic
    */
@@ -342,12 +410,17 @@ export class StorageBrain {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        };
+        if (this.workspaceId) {
+          headers['X-Workspace-Id'] = this.workspaceId;
+        }
+
         const response = await fetch(url, {
           method,
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`,
-          },
+          headers,
           body: body ? JSON.stringify(body) : undefined,
           signal: controller.signal,
         });

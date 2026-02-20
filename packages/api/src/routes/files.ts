@@ -36,6 +36,7 @@ fileRoutes.get('/', async (c) => {
     tags: file.tags,
     metadata: file.metadata,
     processingStatus: file.processingStatus,
+    workspaceId: file.workspaceId,
     createdAt: new Date(file.createdAt).toISOString(),
   }));
 
@@ -74,6 +75,7 @@ fileRoutes.get('/:fileId', async (c) => {
     tags: file.tags,
     metadata: file.metadata,
     processingStatus: file.processingStatus,
+    workspaceId: file.workspaceId,
     createdAt: new Date(file.createdAt).toISOString(),
   });
 });

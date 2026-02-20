@@ -12,6 +12,9 @@ export type {
   TenantInfo,
   UploadHandshake,
   FileMetadata,
+  Workspace,
+  CreateWorkspaceInput,
+  UpdateWorkspaceInput,
 } from './types';
 
 // Errors

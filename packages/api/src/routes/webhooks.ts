@@ -72,6 +72,7 @@ webhookRoutes.post('/r2-upload-complete', async (c) => {
       tags: file.tags,
       metadata: file.metadata,
       processingStatus: 'completed',
+      workspaceId: file.workspaceId,
       createdAt: new Date(file.createdAt).toISOString(),
     };
 
@@ -79,6 +80,7 @@ webhookRoutes.post('/r2-upload-complete', async (c) => {
       sendWebhook({
         fileId: file.id,
         tenantId: file.tenantId,
+        workspaceId: file.workspaceId,
         file: fileResponse,
         webhookUrl: file.webhookUrl,
         event: 'file.uploaded',

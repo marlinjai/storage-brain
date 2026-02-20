@@ -3,9 +3,9 @@ import type { AppEnv } from '../env';
 import { authMiddleware } from '../middleware/auth';
 import { requestUploadSchema, type AllowedMimeType } from '@storage-brain/shared';
 import { ApiError } from '../middleware/error-handler';
-import { checkQuota, reserveQuota } from '../services/quota';
+import { checkQuota, reserveQuota, checkWorkspaceQuota, reserveWorkspaceQuota } from '../services/quota';
 import { generatePresignedUrl } from '../services/r2';
-import { createUploadSession, createFile } from '../db/queries';
+import { createUploadSession, createFile, getWorkspaceById } from '../db/queries';
 import { MAX_FILE_SIZE_BYTES, ALLOWED_MIME_TYPES } from '@storage-brain/shared';
 
 export const uploadRoutes = new Hono<AppEnv>();
@@ -41,12 +41,28 @@ uploadRoutes.post('/request', async (c) => {
     );
   }
 
-  // Check quota
+  // Check tenant quota
   const quotaCheck = await checkQuota(c.env.DB, tenant.id, fileSize);
   if (!quotaCheck.hasCapacity) {
     throw ApiError.quotaExceeded(
       `Quota exceeded. Used: ${quotaCheck.usedBytes}/${quotaCheck.quotaBytes} bytes`
     );
+  }
+
+  // If workspaceId provided, verify workspace and check workspace quota
+  const workspaceId = validatedBody.workspaceId;
+  if (workspaceId) {
+    const workspace = await getWorkspaceById(c.env.DB, workspaceId, tenant.id);
+    if (!workspace) {
+      throw ApiError.notFound('Workspace not found');
+    }
+
+    const wsQuota = await checkWorkspaceQuota(c.env.DB, workspaceId, fileSize);
+    if (wsQuota && !wsQuota.hasCapacity) {
+      throw ApiError.quotaExceeded(
+        `Workspace quota exceeded. Used: ${wsQuota.usedBytes}/${wsQuota.quotaBytes} bytes`
+      );
+    }
   }
 
   // Generate file ID and storage path
@@ -64,6 +80,7 @@ uploadRoutes.post('/request', async (c) => {
     context: validatedBody.context ?? null,
     tags: validatedBody.tags ?? null,
     webhookUrl: validatedBody.webhookUrl,
+    workspaceId,
   });
 
   // Generate presigned URL for R2 upload
@@ -79,6 +96,9 @@ uploadRoutes.post('/request', async (c) => {
   // Reserve quota (will be confirmed after upload completes)
   if (fileSize > 0) {
     await reserveQuota(c.env.DB, tenant.id, fileSize);
+    if (workspaceId) {
+      await reserveWorkspaceQuota(c.env.DB, workspaceId, fileSize);
+    }
   }
 
   return c.json({

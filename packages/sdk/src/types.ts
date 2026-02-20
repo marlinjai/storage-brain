@@ -28,6 +28,8 @@ export interface StorageBrainConfig {
   timeout?: number;
   /** Number of retry attempts for failed requests (default: 3) */
   maxRetries?: number;
+  /** Default workspace ID — auto-sends with upload/list requests */
+  workspaceId?: string;
 }
 
 /**
@@ -44,6 +46,8 @@ export interface UploadOptions {
   webhookUrl?: string;
   /** Abort signal for cancellation */
   signal?: AbortSignal;
+  /** Workspace to upload into (overrides client default) */
+  workspaceId?: string;
 }
 
 /**
@@ -68,6 +72,8 @@ export interface FileInfo {
   metadata: FileMetadata | null;
   /** Current processing status */
   processingStatus: ProcessingStatus;
+  /** Workspace the file belongs to, or null for tenant-level files */
+  workspaceId: string | null;
   /** ISO 8601 timestamp */
   createdAt: string;
 }
@@ -84,6 +90,8 @@ export interface ListFilesOptions {
   context?: string;
   /** Filter by file type */
   fileType?: AllowedMimeType;
+  /** Filter by workspace */
+  workspaceId?: string;
 }
 
 /**
@@ -141,4 +149,41 @@ export interface UploadHandshake {
     maxSizeBytes: number;
     allowedTypes: AllowedMimeType[];
   };
+}
+
+// ============================================================================
+// Workspace Types
+// ============================================================================
+
+/**
+ * Workspace entity
+ */
+export interface Workspace {
+  id: string;
+  name: string;
+  slug: string;
+  quotaBytes: number | null;
+  usedBytes: number;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Input for creating a workspace
+ */
+export interface CreateWorkspaceInput {
+  name: string;
+  slug: string;
+  quotaBytes?: number;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Input for updating a workspace
+ */
+export interface UpdateWorkspaceInput {
+  name?: string;
+  quotaBytes?: number | null;
+  metadata?: Record<string, unknown>;
 }

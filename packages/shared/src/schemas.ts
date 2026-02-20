@@ -35,6 +35,7 @@ export const requestUploadSchema = z.object({
   context: z.string().max(100).optional(),
   tags: tagsSchema,
   webhookUrl: z.string().url().optional(),
+  workspaceId: z.string().uuid().optional(),
 });
 
 export type RequestUploadSchema = z.infer<typeof requestUploadSchema>;
@@ -47,6 +48,7 @@ export const listFilesQuerySchema = z.object({
   cursor: z.string().optional(),
   context: z.string().max(100).optional(),
   fileType: fileTypeSchema.optional(),
+  workspaceId: z.string().uuid().optional(),
 });
 
 export type ListFilesQuerySchema = z.infer<typeof listFilesQuerySchema>;
@@ -85,6 +87,7 @@ export const webhookPayloadSchema = z.object({
   event: z.enum(['file.uploaded', 'file.failed']),
   fileId: z.string().uuid(),
   tenantId: z.string().uuid(),
+  workspaceId: z.string().uuid().nullable(),
   file: z.object({
     id: z.string().uuid(),
     url: z.string().url(),
@@ -95,6 +98,7 @@ export const webhookPayloadSchema = z.object({
     tags: z.record(z.string(), z.string()).nullable(),
     metadata: z.record(z.string(), z.unknown()).nullable(),
     processingStatus: z.enum(['pending', 'processing', 'completed', 'failed']),
+    workspaceId: z.string().uuid().nullable(),
     createdAt: z.string().datetime(),
   }),
   timestamp: z.string().datetime(),
@@ -112,3 +116,35 @@ export const cursorSchema = z
   .string()
   .regex(/^[A-Za-z0-9+/=]+$/, 'Invalid cursor format')
   .optional();
+
+/**
+ * Workspace slug validation
+ */
+export const workspaceSlugSchema = z
+  .string()
+  .min(1)
+  .max(100)
+  .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/, 'Slug must be lowercase alphanumeric with hyphens');
+
+/**
+ * Workspace creation
+ */
+export const createWorkspaceSchema = z.object({
+  name: z.string().min(1).max(255),
+  slug: workspaceSlugSchema,
+  quotaBytes: z.number().int().positive().optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+export type CreateWorkspaceSchema = z.infer<typeof createWorkspaceSchema>;
+
+/**
+ * Workspace update
+ */
+export const updateWorkspaceSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  quotaBytes: z.number().int().positive().nullable().optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+export type UpdateWorkspaceSchema = z.infer<typeof updateWorkspaceSchema>;

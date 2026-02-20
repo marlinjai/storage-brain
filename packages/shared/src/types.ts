@@ -19,11 +19,40 @@ export interface Tenant {
 }
 
 /**
+ * Workspace entity
+ */
+export interface Workspace {
+  id: string;
+  tenantId: string;
+  name: string;
+  slug: string;
+  quotaBytes: number | null;
+  usedBytes: number;
+  metadata: Record<string, unknown> | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * Workspace info (public-facing)
+ */
+export interface WorkspaceInfo {
+  id: string;
+  name: string;
+  slug: string;
+  quotaBytes: number | null;
+  usedBytes: number;
+  metadata: Record<string, unknown> | null;
+  createdAt: number;
+}
+
+/**
  * File entity
  */
 export interface StoredFile {
   id: string;
   tenantId: string;
+  workspaceId: string | null;
   originalName: string;
   storedPath: string;
   fileType: AllowedMimeType;
@@ -69,6 +98,7 @@ export interface RequestUploadInput {
   context?: string;
   tags?: Record<string, string>;
   webhookUrl?: string;
+  workspaceId?: string;
 }
 
 export interface RequestUploadResponse {
@@ -92,6 +122,7 @@ export interface FileResponse {
   tags: Record<string, string> | null;
   metadata: FileMetadata | null;
   processingStatus: ProcessingStatus;
+  workspaceId: string | null;
   createdAt: string;
 }
 
@@ -101,6 +132,7 @@ export interface ListFilesInput {
   cursor?: string;
   context?: string;
   fileType?: AllowedMimeType;
+  workspaceId?: string;
 }
 
 export interface ListFilesResponse {
@@ -135,6 +167,7 @@ export interface WebhookPayload {
   event: 'file.uploaded' | 'file.failed';
   fileId: string;
   tenantId: string;
+  workspaceId: string | null;
   file: FileResponse;
   timestamp: string;
 }

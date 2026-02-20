@@ -3,6 +3,7 @@ import type {
   Tenant,
   StoredFile,
   UploadSession,
+  Workspace,
   AllowedMimeType,
   UploadSessionStatus,
   ProcessingStatus,
@@ -99,18 +100,20 @@ interface CreateFileInput {
   context: string | null;
   tags: Record<string, string> | null;
   webhookUrl?: string;
+  workspaceId?: string;
 }
 
 export async function createFile(db: D1Database, input: CreateFileInput): Promise<void> {
   const now = Date.now();
   await db
     .prepare(
-      `INSERT INTO files (id, tenant_id, original_name, stored_path, file_type, size_bytes, context, tags, metadata, processing_status, webhook_url, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 'pending', ?, ?, ?)`
+      `INSERT INTO files (id, tenant_id, workspace_id, original_name, stored_path, file_type, size_bytes, context, tags, metadata, processing_status, webhook_url, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'pending', ?, ?, ?)`
     )
     .bind(
       input.id,
       input.tenantId,
+      input.workspaceId ?? null,
       input.originalName,
       input.storedPath,
       input.fileType,
@@ -148,11 +151,16 @@ export async function listFilesByTenant(
   tenantId: string,
   options: ListFilesInput
 ): Promise<ListFilesResult> {
-  const { limit = 20, cursor, context, fileType } = options;
+  const { limit = 20, cursor, context, fileType, workspaceId } = options;
 
   // Build WHERE clause
   const conditions: string[] = ['tenant_id = ?', 'deleted_at IS NULL'];
   const params: (string | number)[] = [tenantId];
+
+  if (workspaceId) {
+    conditions.push('workspace_id = ?');
+    params.push(workspaceId);
+  }
 
   if (context) {
     conditions.push('context = ?');
@@ -248,6 +256,7 @@ function mapFileRow(row: Record<string, unknown>): StoredFile {
   return {
     id: row.id as string,
     tenantId: row.tenant_id as string,
+    workspaceId: (row.workspace_id as string) ?? null,
     originalName: row.original_name as string,
     storedPath: row.stored_path as string,
     fileType: row.file_type as AllowedMimeType,
@@ -260,6 +269,184 @@ function mapFileRow(row: Record<string, unknown>): StoredFile {
     createdAt: row.created_at as number,
     updatedAt: row.updated_at as number,
     deletedAt: (row.deleted_at as number) ?? null,
+  };
+}
+
+// ============================================================================
+// Workspace Queries
+// ============================================================================
+
+interface CreateWorkspaceInput {
+  id: string;
+  tenantId: string;
+  name: string;
+  slug: string;
+  quotaBytes?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export async function createWorkspace(
+  db: D1Database,
+  input: CreateWorkspaceInput
+): Promise<Workspace> {
+  const now = Date.now();
+  await db
+    .prepare(
+      `INSERT INTO workspaces (id, tenant_id, name, slug, quota_bytes, used_bytes, metadata, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)`
+    )
+    .bind(
+      input.id,
+      input.tenantId,
+      input.name,
+      input.slug,
+      input.quotaBytes ?? null,
+      input.metadata ? JSON.stringify(input.metadata) : null,
+      now,
+      now
+    )
+    .run();
+
+  return {
+    id: input.id,
+    tenantId: input.tenantId,
+    name: input.name,
+    slug: input.slug,
+    quotaBytes: input.quotaBytes ?? null,
+    usedBytes: 0,
+    metadata: input.metadata ?? null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export async function getWorkspaceById(
+  db: D1Database,
+  workspaceId: string,
+  tenantId: string
+): Promise<Workspace | null> {
+  const result = await db
+    .prepare('SELECT * FROM workspaces WHERE id = ? AND tenant_id = ?')
+    .bind(workspaceId, tenantId)
+    .first();
+
+  return result ? mapWorkspaceRow(result) : null;
+}
+
+export async function listWorkspacesByTenant(
+  db: D1Database,
+  tenantId: string
+): Promise<Workspace[]> {
+  const result = await db
+    .prepare('SELECT * FROM workspaces WHERE tenant_id = ? ORDER BY created_at DESC')
+    .bind(tenantId)
+    .all();
+
+  return result.results.map(mapWorkspaceRow);
+}
+
+interface UpdateWorkspaceInput {
+  name?: string;
+  quotaBytes?: number | null;
+  metadata?: Record<string, unknown>;
+}
+
+export async function updateWorkspace(
+  db: D1Database,
+  workspaceId: string,
+  tenantId: string,
+  updates: UpdateWorkspaceInput
+): Promise<Workspace | null> {
+  const now = Date.now();
+  const setClauses: string[] = ['updated_at = ?'];
+  const params: (string | number | null)[] = [now];
+
+  if (updates.name !== undefined) {
+    setClauses.push('name = ?');
+    params.push(updates.name);
+  }
+
+  if (updates.quotaBytes !== undefined) {
+    setClauses.push('quota_bytes = ?');
+    params.push(updates.quotaBytes);
+  }
+
+  if (updates.metadata !== undefined) {
+    setClauses.push('metadata = ?');
+    params.push(JSON.stringify(updates.metadata));
+  }
+
+  params.push(workspaceId, tenantId);
+
+  await db
+    .prepare(
+      `UPDATE workspaces SET ${setClauses.join(', ')} WHERE id = ? AND tenant_id = ?`
+    )
+    .bind(...params)
+    .run();
+
+  return getWorkspaceById(db, workspaceId, tenantId);
+}
+
+export async function deleteWorkspace(
+  db: D1Database,
+  workspaceId: string,
+  tenantId: string
+): Promise<void> {
+  await db
+    .prepare('DELETE FROM workspaces WHERE id = ? AND tenant_id = ?')
+    .bind(workspaceId, tenantId)
+    .run();
+}
+
+/**
+ * Get all active files in a workspace (for soft-deletion and quota release)
+ */
+export async function getActiveFilesByWorkspace(
+  db: D1Database,
+  workspaceId: string,
+  tenantId: string
+): Promise<StoredFile[]> {
+  const result = await db
+    .prepare(
+      'SELECT * FROM files WHERE workspace_id = ? AND tenant_id = ? AND deleted_at IS NULL'
+    )
+    .bind(workspaceId, tenantId)
+    .all();
+
+  return result.results.map(mapFileRow);
+}
+
+/**
+ * Soft-delete all files in a workspace
+ */
+export async function softDeleteFilesByWorkspace(
+  db: D1Database,
+  workspaceId: string,
+  tenantId: string
+): Promise<void> {
+  const now = Date.now();
+  await db
+    .prepare(
+      'UPDATE files SET deleted_at = ?, updated_at = ? WHERE workspace_id = ? AND tenant_id = ? AND deleted_at IS NULL'
+    )
+    .bind(now, now, workspaceId, tenantId)
+    .run();
+}
+
+function mapWorkspaceRow(row: Record<string, unknown>): Workspace {
+  return {
+    id: row.id as string,
+    tenantId: row.tenant_id as string,
+    name: row.name as string,
+    slug: row.slug as string,
+    quotaBytes: (row.quota_bytes as number) ?? null,
+    usedBytes: row.used_bytes as number,
+    metadata: row.metadata
+      ? (JSON.parse(row.metadata as string) as Record<string, unknown>)
+      : null,
+    createdAt: row.created_at as number,
+    updatedAt: row.updated_at as number,
   };
 }
 
