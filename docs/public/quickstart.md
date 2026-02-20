@@ -17,13 +17,13 @@ Get up and running with Storage Brain in minutes.
 ## Install the SDK
 
 ```bash
-npm install @storage-brain/sdk
+npm install @marlinjai/storage-brain-sdk
 ```
 
 ## Upload Your First File
 
 ```typescript
-import { StorageBrain } from '@storage-brain/sdk';
+import { StorageBrain } from '@marlinjai/storage-brain-sdk';
 
 const storage = new StorageBrain({
   apiKey: 'sk_live_your_api_key_here',
