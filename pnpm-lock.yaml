@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@marlinjai/clearify':
-        specifier: ^1.7.0
-        version: 1.7.0(@types/node@20.19.33)(@types/react@19.2.14)(jiti@2.6.1)(lightningcss@1.31.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(rollup@4.57.1)(yaml@2.8.2)
+        specifier: ^1.7.3
+        version: 1.7.3(@types/node@20.19.33)(@types/react@19.2.14)(jiti@2.6.1)(lightningcss@1.31.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(rollup@4.57.1)(yaml@2.8.2)
       '@types/node':
         specifier: ^20.11.0
         version: 20.19.33
@@ -861,8 +861,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
-  '@marlinjai/clearify@1.7.0':
-    resolution: {integrity: sha512-I4Z2OPGt7kQfZCpRu3d+Oq+7H52h/V2U7/2Wj0QcfV0px3nmIawRJN8jIN93Tu/MQdXjqBMwh8tRVNQAxPYXdA==}
+  '@marlinjai/clearify@1.7.3':
+    resolution: {integrity: sha512-CabrfRSVF2px6wlCZpM+nYR5BWzlJrYDXqxrSY1qpNjKJdtKrMAXQwIgveeAq1kcobToksF8Ra3+og7TIFw6hw==}
     hasBin: true
     peerDependencies:
       puppeteer: '>=22.0.0'
@@ -3798,7 +3798,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@marlinjai/clearify@1.7.0(@types/node@20.19.33)(@types/react@19.2.14)(jiti@2.6.1)(lightningcss@1.31.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(rollup@4.57.1)(yaml@2.8.2)':
+  '@marlinjai/clearify@1.7.3(@types/node@20.19.33)(@types/react@19.2.14)(jiti@2.6.1)(lightningcss@1.31.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(rollup@4.57.1)(yaml@2.8.2)':
     dependencies:
       '@mdx-js/react': 3.1.1(@types/react@19.2.14)(react@19.2.4)
       '@mdx-js/rollup': 3.1.1(rollup@4.57.1)
