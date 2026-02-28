@@ -36,8 +36,16 @@ async function main() {
   await db.migrate();
   console.log('Migrations complete.');
 
-  // Create Hono app with injected adapters
-  const app = createApp({ storage, db });
+  // Create Hono app with injected adapters and env bindings
+  const app = createApp({
+    storage,
+    db,
+    env: {
+      ADMIN_API_KEY: required('ADMIN_API_KEY'),
+      URL_SIGNING_SECRET: required('URL_SIGNING_SECRET'),
+      ENVIRONMENT: (process.env.ENVIRONMENT as 'development' | 'staging' | 'production') ?? 'production',
+    },
+  });
 
   console.log(`Storage Brain API listening on http://0.0.0.0:${port}`);
 

@@ -4,7 +4,7 @@ import { logger } from 'hono/logger';
 import { secureHeaders } from 'hono/secure-headers';
 import { requestId } from 'hono/request-id';
 
-import type { AppEnv } from './env';
+import type { AppEnv, Env } from './env';
 import type { StorageAdapter, DatabaseAdapter } from '@storage-brain/shared';
 import { uploadRoutes } from './routes/upload';
 import { fileRoutes } from './routes/files';
@@ -19,10 +19,24 @@ import { publicDownloadHandler } from './routes/public-download';
 export interface AppConfig {
   storage: StorageAdapter;
   db: DatabaseAdapter;
+  /** Optional env overrides — used by Node.js entry point to inject process.env values into c.env */
+  env?: Partial<Env>;
 }
 
 export function createApp(config: AppConfig): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
+
+  // Inject env bindings (for Node.js mode where c.env isn't populated automatically)
+  if (config.env) {
+    app.use('*', async (c, next) => {
+      for (const [key, value] of Object.entries(config.env!)) {
+        if (value !== undefined) {
+          (c.env as unknown as Record<string, unknown>)[key] = value;
+        }
+      }
+      await next();
+    });
+  }
 
   // Inject adapters into Hono context
   app.use('*', async (c, next) => {

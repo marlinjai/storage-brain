@@ -33,7 +33,7 @@ npm install @marlinjai/storage-brain-sdk
 import { StorageBrain } from '@marlinjai/storage-brain-sdk';
 
 const client = new StorageBrain({
-  apiKey: 'sb_live_...',
+  apiKey: 'sk_live_...',
   baseUrl: 'http://localhost:3000',
 });
 
