@@ -1,15 +1,16 @@
 # @marlinjai/storage-brain-sdk
 
-TypeScript SDK for **Storage Brain** - an edge-native file storage service built on Cloudflare Workers, R2, and D1.
+TypeScript SDK for **Storage Brain** — a multi-tenant file storage service. Works with the managed Cloudflare Workers deployment and self-hosted (Docker + S3 + Postgres) instances.
 
 ## Features
 
-- **Simple API** - Upload, download, list, and delete files with ease
-- **Progress tracking** - Real-time upload progress callbacks
-- **Type-safe** - Full TypeScript support with comprehensive types
-- **Automatic retries** - Built-in retry logic with exponential backoff
-- **Flexible context** - Optional free-form context labels for organizing files
-- **Zero dependencies** - Uses only native browser/Node.js APIs
+- **Simple API** — Upload, download, list, and delete files with ease
+- **Workspaces** — Scope files to workspaces with per-workspace quotas
+- **Signed URLs** — Time-limited public download links without API key
+- **Progress tracking** — Real-time upload progress callbacks
+- **Type-safe** — Full TypeScript support with comprehensive types
+- **Automatic retries** — Built-in retry logic with exponential backoff
+- **Zero dependencies** — Uses only native browser/Node.js APIs
 
 ## Installation
 
@@ -22,14 +23,14 @@ npm install @marlinjai/storage-brain-sdk
 ```typescript
 import { StorageBrain } from '@marlinjai/storage-brain-sdk';
 
-// Initialize the client
 const storage = new StorageBrain({
   apiKey: 'sk_live_your_api_key_here',
+  // baseUrl: 'http://localhost:3000', // for self-hosted
 });
 
 // Upload a file
 const file = await storage.upload(fileBlob, {
-  context: 'my-app',  // Optional free-form context label
+  context: 'my-app',
   onProgress: (progress) => console.log(`${progress}%`),
 });
 
@@ -42,26 +43,28 @@ console.log('File uploaded:', file.url);
 
 ```typescript
 const storage = new StorageBrain({
-  apiKey: string;        // Required: Your API key
-  baseUrl?: string;      // Optional: API base URL
-  timeout?: number;      // Optional: Request timeout in ms (default: 30000)
-  maxRetries?: number;   // Optional: Max retry attempts (default: 3)
+  apiKey: string;          // Required: Your API key (sk_live_* or sk_test_*)
+  baseUrl?: string;        // Optional: API base URL (default: managed cloud)
+  timeout?: number;        // Optional: Request timeout in ms (default: 30000)
+  maxRetries?: number;     // Optional: Max retry attempts (default: 3)
+  workspaceId?: string;    // Optional: Default workspace for all operations
 });
 ```
 
-### Methods
+### File Operations
 
-#### `upload(file, options)`
+#### `upload(file, options?)`
 
 Upload a file to Storage Brain.
 
 ```typescript
 const result = await storage.upload(file, {
-  context: 'my-app',                // Optional free-form context label
-  tags: { orderId: '123' },         // Optional metadata tags
-  onProgress: (p) => {},            // Progress callback (0-100)
-  webhookUrl: 'https://...',        // Optional webhook for notifications
-  signal: abortController.signal    // Optional abort signal
+  context: 'invoices',                // Optional context label
+  tags: { orderId: '123' },           // Optional metadata tags
+  onProgress: (p) => {},              // Progress callback (0-100)
+  webhookUrl: 'https://...',          // Optional webhook notification
+  workspaceId: 'ws-uuid',            // Optional workspace override
+  signal: abortController.signal,     // Optional abort signal
 });
 ```
 
@@ -79,24 +82,86 @@ List files with optional filtering and pagination.
 
 ```typescript
 const { files, nextCursor, total } = await storage.listFiles({
-  limit: 20,              // Max results (default: 20)
-  cursor: 'abc...',       // Pagination cursor
-  context: 'my-app',     // Filter by context (free-form string)
-  fileType: 'image/png',  // Filter by MIME type
+  limit: 20,
+  cursor: 'abc...',
+  context: 'invoices',
+  fileType: 'image/png',
+  workspaceId: 'ws-uuid',
 });
 ```
 
 #### `deleteFile(fileId)`
 
-Soft delete a file.
+Soft-delete a file.
 
 ```typescript
 await storage.deleteFile('file-uuid');
 ```
 
-#### `getQuota()`
+#### `getSignedUrl(fileId, expiresIn?)`
 
-Get storage quota information.
+Get a time-limited signed URL for unauthenticated file download.
+
+```typescript
+const { url, expiresAt } = await storage.getSignedUrl('file-uuid', 3600);
+// url can be shared publicly — no API key needed to download
+```
+
+### Workspace Operations
+
+#### `withWorkspace(workspaceId)`
+
+Create a workspace-scoped client. All uploads and listings default to this workspace.
+
+```typescript
+const wsStorage = storage.withWorkspace('ws-uuid');
+await wsStorage.upload(fileBlob, { context: 'campaign-images' });
+const { files } = await wsStorage.listFiles();
+```
+
+#### `createWorkspace(input)`
+
+```typescript
+const ws = await storage.createWorkspace({
+  name: 'Marketing Assets',
+  slug: 'marketing-assets',
+  quotaBytes: 100 * 1024 * 1024,  // 100 MB
+  metadata: { team: 'marketing' },
+});
+```
+
+#### `listWorkspaces()`
+
+```typescript
+const workspaces = await storage.listWorkspaces();
+```
+
+#### `getWorkspace(workspaceId)`
+
+```typescript
+const ws = await storage.getWorkspace('ws-uuid');
+```
+
+#### `updateWorkspace(workspaceId, updates)`
+
+```typescript
+await storage.updateWorkspace('ws-uuid', {
+  name: 'Rebranded Assets',
+  quotaBytes: 200 * 1024 * 1024,
+});
+```
+
+#### `deleteWorkspace(workspaceId)`
+
+Deletes the workspace and soft-deletes all its files.
+
+```typescript
+await storage.deleteWorkspace('ws-uuid');
+```
+
+### Tenant Operations
+
+#### `getQuota()`
 
 ```typescript
 const quota = await storage.getQuota();
@@ -106,12 +171,23 @@ console.log(`Usage: ${quota.usagePercent}%`);
 
 #### `getTenantInfo()`
 
-Get tenant information.
-
 ```typescript
 const tenant = await storage.getTenantInfo();
 console.log(`Tenant: ${tenant.name}`);
 ```
+
+## Self-Hosting
+
+Storage Brain can be self-hosted with Docker (S3 + Postgres). Point the SDK at your instance:
+
+```typescript
+const storage = new StorageBrain({
+  apiKey: 'sk_live_...',
+  baseUrl: 'http://localhost:3000',
+});
+```
+
+See the [self-hosting docs](https://github.com/marlinjai/storage-brain/blob/main/docs/self-hosting.md) for setup instructions.
 
 ## Supported File Types
 
@@ -119,8 +195,6 @@ console.log(`Tenant: ${tenant.name}`);
 - **Documents:** PDF
 
 ## Error Handling
-
-The SDK throws typed errors for different scenarios:
 
 ```typescript
 import {
@@ -132,6 +206,7 @@ import {
   FileNotFoundError,
   NetworkError,
   UploadError,
+  ValidationError,
 } from '@marlinjai/storage-brain-sdk';
 
 try {
@@ -149,8 +224,6 @@ try {
 
 ## TypeScript Types
 
-All types are exported for your convenience:
-
 ```typescript
 import type {
   StorageBrainConfig,
@@ -160,8 +233,13 @@ import type {
   ListFilesResult,
   QuotaInfo,
   TenantInfo,
+  SignedUrlInfo,
   FileMetadata,
+  Workspace,
+  CreateWorkspaceInput,
+  UpdateWorkspaceInput,
   AllowedMimeType,
+  ProcessingStatus,
 } from '@marlinjai/storage-brain-sdk';
 ```
 

@@ -1,42 +1,67 @@
 # Storage Brain
 
-Multi-tenant file storage service built on Cloudflare Workers, D1, and R2. Provides a REST API for file upload/download with presigned URLs, tenant isolation, workspace management, quota enforcement, and webhook notifications. Ships with a TypeScript SDK published as `@marlinjai/storage-brain-sdk`.
+Multi-tenant file storage service with pluggable storage and database backends. Deploy on Cloudflare Workers (R2 + D1) or self-host with Docker (S3 + Postgres). Ships with a TypeScript SDK published as `@marlinjai/storage-brain-sdk`.
 
 ## Architecture
 
 ```
 storage-brain/
 ├── packages/
-│   ├── api/      # Cloudflare Workers API (Hono)       @storage-brain/api
-│   ├── sdk/      # TypeScript SDK (npm published)       @marlinjai/storage-brain-sdk
-│   └── shared/   # Internal types & Zod schemas         @storage-brain/shared
-├── docs/         # Clearify documentation
-└── package.json  # pnpm workspaces root
+│   ├── api/      # API server (Hono)                       @storage-brain/api
+│   │   └── src/
+│   │       ├── app.ts                # createApp() factory
+│   │       ├── index.ts              # Cloudflare Workers entry (R2 + D1)
+│   │       ├── node.ts               # Node.js entry (S3 + Postgres)
+│   │       ├── adapters/
+│   │       │   ├── storage/r2.ts     # Cloudflare R2 adapter
+│   │       │   ├── storage/s3.ts     # S3/MinIO/DO Spaces adapter
+│   │       │   ├── database/d1.ts    # Cloudflare D1 adapter
+│   │       │   └── database/postgres.ts  # Postgres adapter
+│   │       └── migrations/001_init.sql   # Postgres schema
+│   ├── sdk/      # TypeScript SDK (npm)                    @marlinjai/storage-brain-sdk
+│   └── shared/   # Internal types, schemas, adapter interfaces  @storage-brain/shared
+├── Dockerfile
+├── docker-compose.yml
+└── docs/self-hosting.md
 ```
 
-Upload flow:
+### Adapter Pattern
+
+Storage and database backends are abstracted via interfaces (`StorageAdapter`, `DatabaseAdapter`). The `createApp()` factory accepts any combination:
+
+| Adapter | Package | Use Case |
+|---------|---------|----------|
+| `R2StorageAdapter` | Built-in | Cloudflare Workers deployment |
+| `S3StorageAdapter` | Built-in | Self-hosted (AWS S3, MinIO, Backblaze, DO Spaces) |
+| `D1DatabaseAdapter` | Built-in | Cloudflare Workers deployment |
+| `PostgresDatabaseAdapter` | Built-in | Self-hosted (any Postgres) |
+
+### Upload Flow
 
 1. Client calls `POST /api/v1/upload/request` with file metadata.
-2. API validates quota, creates a file record, generates a presigned R2 URL, and returns it.
+2. API validates quota, creates a file record, generates a presigned URL, and returns it.
 3. Client PUTs the file bytes to the presigned URL (or to the internal `/_internal/upload/*` endpoint).
 4. On completion, the file record is marked `completed` and an optional webhook fires.
 
-### Infrastructure Bindings
+## Self-Hosting (Docker)
 
-| Binding | Type | Resource | Purpose |
-|---------|------|----------|---------|
-| `DB` | D1 Database | `storage-brain-db` (4ed90c66-738c-4199-893a-158f24b5c50b) | Metadata, tenants, files, workspaces |
-| `BUCKET` | R2 Bucket | `storage-brain-files` | Object storage for uploaded files |
+```bash
+git clone https://github.com/marlinjai/storage-brain.git
+cd storage-brain
+docker compose up
+```
+
+See [docs/self-hosting.md](docs/self-hosting.md) for full environment variable reference.
 
 ## API Endpoints
 
-Base URL: `https://storage-brain-api.marlin-pohl.workers.dev`
+Base URL: `https://storage-brain-api.marlin-pohl.workers.dev` (managed) or `http://localhost:3000` (self-hosted)
 
 ### Public
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/health` | None | Health check; returns `{ status, timestamp, environment }` |
+| `GET` | `/health` | None | Health check |
 
 ### Admin (Bearer token = ADMIN_API_KEY)
 
@@ -59,7 +84,8 @@ Base URL: `https://storage-brain-api.marlin-pohl.workers.dev`
 | `POST` | `/api/v1/upload/request` | Request a presigned upload URL |
 | `GET` | `/api/v1/files` | List files (supports `limit`, `cursor`, `context`, `fileType`, `workspaceId`) |
 | `GET` | `/api/v1/files/:fileId` | Get file metadata |
-| `GET` | `/api/v1/files/:fileId/download` | Download file bytes from R2 |
+| `GET` | `/api/v1/files/:fileId/download` | Download file (signed token auth) |
+| `GET` | `/api/v1/files/:fileId/signed-url` | Get a time-limited signed download URL |
 | `DELETE` | `/api/v1/files/:fileId` | Soft-delete a file |
 
 ### Workspaces
@@ -94,9 +120,7 @@ import { StorageBrain } from '@marlinjai/storage-brain-sdk';
 
 const storage = new StorageBrain({
   apiKey: 'sk_live_your_api_key_here',
-  // baseUrl: 'https://storage-brain-api.marlin-pohl.workers.dev', // default
-  // timeout: 30000,   // default
-  // maxRetries: 3,    // default
+  // baseUrl: 'http://localhost:3000', // for self-hosted
 });
 ```
 
@@ -119,8 +143,14 @@ console.log(file.id, file.url);
 const { files, nextCursor, total } = await storage.listFiles({
   limit: 20,
   context: 'invoices',
-  // cursor: nextCursor,  // for pagination
 });
+```
+
+### Signed URLs
+
+```typescript
+const { url, expiresAt } = await storage.getSignedUrl('file-uuid', 3600);
+// Share this URL publicly — no API key required to download
 ```
 
 ### Get and Delete a File
@@ -147,116 +177,79 @@ const ws = await storage.createWorkspace({
   quotaBytes: 100 * 1024 * 1024, // 100 MB
 });
 
-// Scope a client to a workspace (all uploads/listings use this workspace)
+// Scope a client to a workspace
 const wsStorage = storage.withWorkspace(ws.id);
 await wsStorage.upload(fileBlob, { context: 'campaign-images' });
 const { files } = await wsStorage.listFiles();
 
 // Or pass workspaceId per-call
 await storage.upload(fileBlob, { workspaceId: ws.id });
-await storage.listFiles({ workspaceId: ws.id });
 
 // List, update, delete workspaces
 const workspaces = await storage.listWorkspaces();
 await storage.updateWorkspace(ws.id, { name: 'Rebranded Assets' });
-await storage.deleteWorkspace(ws.id); // soft-deletes all files in it
+await storage.deleteWorkspace(ws.id);
 ```
 
 ## Deployment
 
-### Prerequisites
-
-- Node.js >= 18
-- pnpm
-- Wrangler CLI (`npm i -g wrangler`)
-- Cloudflare account with Workers, D1, and R2 enabled
-
-### Set Secrets
+### Cloudflare Workers
 
 ```bash
 cd packages/api
 wrangler secret put ADMIN_API_KEY
-# staging:
-wrangler secret put ADMIN_API_KEY --env staging
-```
-
-### Run Database Migrations
-
-```bash
-# Production
+wrangler secret put URL_SIGNING_SECRET
 wrangler d1 migrations apply storage-brain-db
-
-# Staging
-wrangler d1 migrations apply storage-brain-db --env staging
-
-# Local (for wrangler dev)
-wrangler d1 migrations apply storage-brain-db --local
+wrangler deploy
 ```
 
-### Deploy
+### Self-Hosted (Docker)
 
 ```bash
-# Production
-pnpm --filter @storage-brain/api deploy
-# or: cd packages/api && wrangler deploy
-
-# Staging
-pnpm --filter @storage-brain/api deploy:staging
-# or: cd packages/api && wrangler deploy --env staging
+docker compose up
 ```
 
 ### Publish the SDK
 
 ```bash
 pnpm publish:sdk
-# runs build + npm publish --access public for @marlinjai/storage-brain-sdk
 ```
 
 ## Development
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Start local dev server (packages/api)
-pnpm dev
-
-# Build all packages
-pnpm build
-
-# Build SDK only
-pnpm build:sdk
-
-# Type check all packages
-pnpm typecheck
-
-# Lint / format
-pnpm lint
-pnpm format
-
-# Open D1 Studio (browser-based SQL explorer)
-cd packages/api && wrangler d1 studio storage-brain-db
+pnpm install           # Install dependencies
+pnpm dev               # Start local dev server (Wrangler)
+pnpm build             # Build all packages
+pnpm typecheck         # Type check all packages
+pnpm lint              # Lint
+pnpm format            # Format
 ```
 
-Local dev uses `wrangler dev`, which creates a local D1 database and R2 bucket. Run `wrangler d1 migrations apply storage-brain-db --local` before first use.
+## Environment Variables
 
-## Environment Variables and Secrets
-
-| Name | Type | Where | Description |
-|------|------|-------|-------------|
-| `ENVIRONMENT` | Var | `wrangler.toml` | `production` or `staging` |
-| `ADMIN_API_KEY` | Secret | `wrangler secret put` | Admin bearer token for tenant management |
-| `DB` | Binding | `wrangler.toml` | D1 database binding |
-| `BUCKET` | Binding | `wrangler.toml` | R2 bucket binding |
+| Name | Where | Description |
+|------|-------|-------------|
+| `ENVIRONMENT` | `wrangler.toml` / env | `development`, `staging`, or `production` |
+| `ADMIN_API_KEY` | Secret / env | Admin bearer token for tenant management |
+| `URL_SIGNING_SECRET` | Secret / env | HMAC key for signed download URLs |
+| `DB` | Binding | D1 database (Workers only) |
+| `BUCKET` | Binding | R2 bucket (Workers only) |
+| `DATABASE_URL` | env | Postgres connection string (self-hosted) |
+| `S3_BUCKET` | env | S3 bucket name (self-hosted) |
+| `S3_REGION` | env | S3 region (self-hosted) |
+| `S3_ENDPOINT` | env | Custom S3 endpoint for MinIO/DO Spaces (self-hosted) |
+| `AWS_ACCESS_KEY_ID` | env | S3 access key (self-hosted) |
+| `AWS_SECRET_ACCESS_KEY` | env | S3 secret key (self-hosted) |
 
 ## Database Schema
 
 ### Tables
 
-- **tenants** -- id, name, api_key_hash, quota_bytes (default 500 MB), used_bytes, allowed_file_types (JSON), created_at, updated_at
-- **files** -- id, tenant_id, workspace_id (nullable), original_name, stored_path, file_type, size_bytes, context, tags (JSON), metadata (JSON), processing_status, webhook_url, created_at, updated_at, deleted_at (soft delete)
-- **upload_sessions** -- id, file_id, presigned_url, expires_at, status (pending/completed/expired/failed), created_at
-- **workspaces** -- id, tenant_id, name, slug (unique per tenant), quota_bytes (nullable), used_bytes, metadata (JSON), created_at, updated_at
+- **tenants** — id, name, api_key_hash, quota_bytes (default 500 MB), used_bytes, allowed_file_types (JSON), timestamps
+- **files** — id, tenant_id, workspace_id, original_name, stored_path, file_type, size_bytes, context, tags (JSON), metadata (JSON), processing_status, webhook_url, timestamps, deleted_at (soft delete)
+- **upload_sessions** — id, file_id, presigned_url, expires_at, status, created_at
+- **workspaces** — id, tenant_id, name, slug (unique per tenant), quota_bytes, used_bytes, metadata (JSON), timestamps
 
 ### Limits
 
@@ -272,11 +265,15 @@ Local dev uses `wrangler dev`, which creates a local D1 database and R2 bucket. 
 
 | Component | Technology |
 |-----------|------------|
-| Runtime | Cloudflare Workers |
+| Runtime | Cloudflare Workers / Node.js |
 | Framework | Hono |
 | Language | TypeScript |
-| Database | Cloudflare D1 |
-| Storage | Cloudflare R2 |
+| Database | Cloudflare D1 / Postgres |
+| Storage | Cloudflare R2 / S3 (MinIO, Backblaze, DO Spaces) |
 | Validation | Zod |
 | SDK Bundler | tsup |
 | Package Manager | pnpm (workspaces) |
+
+## License
+
+MIT
