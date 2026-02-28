@@ -1,14 +1,5 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../env';
-import {
-  getFileByStoredPath,
-  getFileById,
-  getUploadSessionByFileId,
-  updateUploadSessionStatus,
-  updateFileSizeBytes,
-  updateFileProcessingStatus,
-} from '../db/queries';
-import { uploadToR2 } from '../services/r2';
 import { sendWebhook } from '../services/webhook';
 import type { FileResponse } from '@storage-brain/shared';
 
@@ -16,10 +7,13 @@ export const internalUploadRoutes = new Hono<AppEnv>();
 
 /**
  * PUT /_internal/upload/:storedPath
- * Receives file data and uploads it to R2
+ * Receives file data and uploads it to storage
  * The storedPath is URL-encoded in the path parameter
  */
 internalUploadRoutes.put('/upload/*', async (c) => {
+  const db = c.get('db');
+  const storage = c.get('storage');
+
   // Extract the stored path from the URL (everything after /upload/)
   const fullPath = c.req.path;
   const storedPathEncoded = fullPath.replace('/_internal/upload/', '');
@@ -30,20 +24,20 @@ internalUploadRoutes.put('/upload/*', async (c) => {
   }
 
   // Get the file record by stored path
-  const file = await getFileByStoredPath(c.env.DB, storedPath);
+  const file = await db.getFileByStoredPath(storedPath);
   if (!file) {
     return c.json({ error: 'File record not found' }, 404);
   }
 
   // Get the upload session
-  const session = await getUploadSessionByFileId(c.env.DB, file.id);
+  const session = await db.getUploadSessionByFileId(file.id);
   if (!session) {
     return c.json({ error: 'Upload session not found' }, 404);
   }
 
   // Check if session is expired
   if (Date.now() > session.expiresAt) {
-    await updateUploadSessionStatus(c.env.DB, session.id, 'expired');
+    await db.updateUploadSessionStatus(session.id, 'expired');
     return c.json({ error: 'Upload session expired' }, 410);
   }
 
@@ -63,21 +57,21 @@ internalUploadRoutes.put('/upload/*', async (c) => {
     return c.json({ error: 'Empty file body' }, 400);
   }
 
-  // Upload to R2
-  await uploadToR2(c.env.BUCKET, storedPath, body, contentType);
+  // Upload to storage
+  await storage.put(storedPath, body, { contentType });
 
   // Update file size in database (use actual uploaded size)
-  await updateFileSizeBytes(c.env.DB, file.id, actualSize);
+  await db.updateFileSizeBytes(file.id, actualSize);
 
   // Update upload session status
-  await updateUploadSessionStatus(c.env.DB, session.id, 'completed');
+  await db.updateUploadSessionStatus(session.id, 'completed');
 
   // Mark file as completed (no processing)
-  await updateFileProcessingStatus(c.env.DB, file.id, 'completed');
+  await db.updateFileProcessingStatus(file.id, 'completed');
 
   // Fire webhook if configured (non-blocking via waitUntil)
   if (file.webhookUrl) {
-    const updatedFile = await getFileById(c.env.DB, file.id, file.tenantId);
+    const updatedFile = await db.getFileById(file.id, file.tenantId);
     if (updatedFile) {
       const fileResponse: FileResponse = {
         id: updatedFile.id,

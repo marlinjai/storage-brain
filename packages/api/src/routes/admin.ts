@@ -7,7 +7,6 @@ import {
   ALLOWED_MIME_TYPES,
   type AllowedMimeType,
 } from '@storage-brain/shared';
-import { createTenant, getTenantByName } from '../db/queries';
 import { generateApiKey, hashApiKey } from '../utils/crypto';
 
 export const adminRoutes = new Hono<AppEnv>();
@@ -41,13 +40,14 @@ adminRoutes.use('*', async (c, next) => {
  * Create a new tenant
  */
 adminRoutes.post('/tenants', async (c) => {
+  const db = c.get('db');
   const body = await c.req.json();
 
   // Validate request body
   const validatedBody = createTenantSchema.parse(body);
 
   // Check if tenant name already exists
-  const existingTenant = await getTenantByName(c.env.DB, validatedBody.name);
+  const existingTenant = await db.getTenantByName(validatedBody.name);
   if (existingTenant) {
     throw ApiError.conflict(`Tenant with name '${validatedBody.name}' already exists`);
   }
@@ -61,7 +61,7 @@ adminRoutes.post('/tenants', async (c) => {
   const allowedFileTypes = (validatedBody.allowedFileTypes as AllowedMimeType[] | undefined) ?? [...ALLOWED_MIME_TYPES];
   const quotaBytes = validatedBody.quotaBytes ?? DEFAULT_QUOTA_BYTES;
 
-  await createTenant(c.env.DB, {
+  await db.createTenant({
     id: tenantId,
     name: validatedBody.name,
     apiKeyHash,
@@ -86,6 +86,7 @@ adminRoutes.post('/tenants', async (c) => {
  * Regenerate API key for a tenant
  */
 adminRoutes.post('/tenants/:tenantId/regenerate-key', async (c) => {
+  const db = c.get('db');
   const tenantId = c.req.param('tenantId');
 
   // Generate new API key
@@ -93,13 +94,9 @@ adminRoutes.post('/tenants/:tenantId/regenerate-key', async (c) => {
   const apiKeyHash = await hashApiKey(apiKey);
 
   // Update tenant
-  const result = await c.env.DB.prepare(
-    'UPDATE tenants SET api_key_hash = ?, updated_at = ? WHERE id = ?'
-  )
-    .bind(apiKeyHash, Date.now(), tenantId)
-    .run();
+  const updated = await db.updateTenantApiKeyHash(tenantId, apiKeyHash);
 
-  if (result.meta.changes === 0) {
+  if (!updated) {
     throw ApiError.notFound('Tenant not found');
   }
 

@@ -135,6 +135,16 @@ export interface TenantInfo {
 }
 
 /**
+ * Signed URL information returned from the API
+ */
+export interface SignedUrlInfo {
+  fileId: string;
+  url: string;
+  expiresAt: string;
+  expiresIn: number;
+}
+
+/**
  * Upload handshake response
  */
 export interface UploadHandshake {

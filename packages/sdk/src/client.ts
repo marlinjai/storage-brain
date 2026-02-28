@@ -9,6 +9,7 @@ import type {
   QuotaInfo,
   TenantInfo,
   UploadHandshake,
+  SignedUrlInfo,
   Workspace,
   CreateWorkspaceInput,
   UpdateWorkspaceInput,
@@ -338,6 +339,13 @@ export class StorageBrain {
    */
   async deleteFile(fileId: string): Promise<void> {
     await this.request<{ success: boolean }>('DELETE', `/api/v1/files/${fileId}`);
+  }
+
+  /**
+   * Get a time-limited signed URL for unauthenticated file download
+   */
+  async getSignedUrl(fileId: string, expiresIn = 3600): Promise<SignedUrlInfo> {
+    return this.request<SignedUrlInfo>('GET', `/api/v1/files/${fileId}/signed-url?expiresIn=${expiresIn}`);
   }
 
   /**

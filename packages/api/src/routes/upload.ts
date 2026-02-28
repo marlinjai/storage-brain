@@ -1,11 +1,8 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../env';
 import { authMiddleware } from '../middleware/auth';
-import { requestUploadSchema, type AllowedMimeType } from '@storage-brain/shared';
+import { requestUploadSchema, type AllowedMimeType, PRESIGNED_URL_EXPIRATION_SECONDS } from '@storage-brain/shared';
 import { ApiError } from '../middleware/error-handler';
-import { checkQuota, reserveQuota, checkWorkspaceQuota, reserveWorkspaceQuota } from '../services/quota';
-import { generatePresignedUrl } from '../services/r2';
-import { createUploadSession, createFile, getWorkspaceById } from '../db/queries';
 import { MAX_FILE_SIZE_BYTES, ALLOWED_MIME_TYPES } from '@storage-brain/shared';
 
 export const uploadRoutes = new Hono<AppEnv>();
@@ -19,6 +16,7 @@ uploadRoutes.use('*', authMiddleware);
  */
 uploadRoutes.post('/request', async (c) => {
   const tenant = c.get('tenant');
+  const db = c.get('db');
   const body = await c.req.json();
 
   // Validate request body
@@ -42,7 +40,7 @@ uploadRoutes.post('/request', async (c) => {
   }
 
   // Check tenant quota
-  const quotaCheck = await checkQuota(c.env.DB, tenant.id, fileSize);
+  const quotaCheck = await db.checkQuota(tenant.id, fileSize);
   if (!quotaCheck.hasCapacity) {
     throw ApiError.quotaExceeded(
       `Quota exceeded. Used: ${quotaCheck.usedBytes}/${quotaCheck.quotaBytes} bytes`
@@ -52,12 +50,12 @@ uploadRoutes.post('/request', async (c) => {
   // If workspaceId provided, verify workspace and check workspace quota
   const workspaceId = validatedBody.workspaceId;
   if (workspaceId) {
-    const workspace = await getWorkspaceById(c.env.DB, workspaceId, tenant.id);
+    const workspace = await db.getWorkspaceById(workspaceId, tenant.id);
     if (!workspace) {
       throw ApiError.notFound('Workspace not found');
     }
 
-    const wsQuota = await checkWorkspaceQuota(c.env.DB, workspaceId, fileSize);
+    const wsQuota = await db.checkWorkspaceQuota(workspaceId, fileSize);
     if (wsQuota && !wsQuota.hasCapacity) {
       throw ApiError.quotaExceeded(
         `Workspace quota exceeded. Used: ${wsQuota.usedBytes}/${wsQuota.quotaBytes} bytes`
@@ -70,7 +68,7 @@ uploadRoutes.post('/request', async (c) => {
   const storedPath = `tenants/${tenant.id}/files/${fileId}/${validatedBody.fileName}`;
 
   // Create file record in database
-  await createFile(c.env.DB, {
+  await db.createFile({
     id: fileId,
     tenantId: tenant.id,
     originalName: validatedBody.fileName,
@@ -83,11 +81,13 @@ uploadRoutes.post('/request', async (c) => {
     workspaceId,
   });
 
-  // Generate presigned URL for R2 upload
-  const { presignedUrl, expiresAt } = await generatePresignedUrl(c.env.BUCKET, storedPath);
+  // Generate presigned URL for upload
+  // MVP: uses internal worker endpoint, not true R2 presigned URLs
+  const expiresAt = Date.now() + PRESIGNED_URL_EXPIRATION_SECONDS * 1000;
+  const presignedUrl = `/_internal/upload/${encodeURIComponent(storedPath)}`;
 
   // Create upload session
-  await createUploadSession(c.env.DB, {
+  await db.createUploadSession({
     fileId,
     presignedUrl,
     expiresAt,
@@ -95,9 +95,9 @@ uploadRoutes.post('/request', async (c) => {
 
   // Reserve quota (will be confirmed after upload completes)
   if (fileSize > 0) {
-    await reserveQuota(c.env.DB, tenant.id, fileSize);
+    await db.reserveQuota(tenant.id, fileSize);
     if (workspaceId) {
-      await reserveWorkspaceQuota(c.env.DB, workspaceId, fileSize);
+      await db.reserveWorkspaceQuota(workspaceId, fileSize);
     }
   }
 

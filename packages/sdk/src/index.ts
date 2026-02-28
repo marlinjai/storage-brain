@@ -11,6 +11,7 @@ export type {
   QuotaInfo,
   TenantInfo,
   UploadHandshake,
+  SignedUrlInfo,
   FileMetadata,
   Workspace,
   CreateWorkspaceInput,

@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../env';
 import { authMiddleware } from '../middleware/auth';
-import { getQuotaUsage } from '../services/quota';
 
 export const tenantRoutes = new Hono<AppEnv>();
 
@@ -14,8 +13,9 @@ tenantRoutes.use('*', authMiddleware);
  */
 tenantRoutes.get('/quota', async (c) => {
   const tenant = c.get('tenant');
+  const db = c.get('db');
 
-  const usage = await getQuotaUsage(c.env.DB, tenant.id);
+  const usage = await db.getQuotaUsage(tenant.id);
 
   return c.json({
     quotaBytes: usage.quotaBytes,

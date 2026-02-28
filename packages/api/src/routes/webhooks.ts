@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../env';
-import { getUploadSessionByFileId, updateUploadSessionStatus, getFileById, updateFileProcessingStatus } from '../db/queries';
 import { sendWebhook } from '../services/webhook';
 import type { FileResponse } from '@storage-brain/shared';
 
@@ -12,6 +11,7 @@ export const webhookRoutes = new Hono<AppEnv>();
  * Note: R2 event notifications must be configured to call this endpoint
  */
 webhookRoutes.post('/r2-upload-complete', async (c) => {
+  const db = c.get('db');
   const body = await c.req.json();
 
   // R2 event notification payload structure
@@ -40,24 +40,24 @@ webhookRoutes.post('/r2-upload-complete', async (c) => {
   }
 
   // Get upload session
-  const session = await getUploadSessionByFileId(c.env.DB, fileId);
+  const session = await db.getUploadSessionByFileId(fileId);
   if (!session) {
     console.warn(`No upload session found for file: ${fileId}`);
     return c.json({ status: 'ignored' });
   }
 
   // Update session status
-  await updateUploadSessionStatus(c.env.DB, session.id, 'completed');
+  await db.updateUploadSessionStatus(session.id, 'completed');
 
   // Get file record
-  const file = await getFileById(c.env.DB, fileId, tenantId);
+  const file = await db.getFileById(fileId, tenantId);
   if (!file) {
     console.error(`File record not found: ${fileId}`);
     return c.json({ error: 'File record not found' }, 404);
   }
 
   // Mark file as completed immediately
-  await updateFileProcessingStatus(c.env.DB, file.id, 'completed');
+  await db.updateFileProcessingStatus(file.id, 'completed');
   console.log(`File marked as completed: ${fileId}`);
 
   // Fire webhook if configured (non-blocking via waitUntil)

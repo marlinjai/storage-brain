@@ -1,6 +1,5 @@
 import { createAuthMiddleware } from '@marlinjai/brain-core';
 import { apiKeySchema } from '@storage-brain/shared';
-import { getTenantByApiKey } from '../db/queries';
 import type { Tenant } from '@storage-brain/shared';
 
 /**
@@ -9,5 +8,5 @@ import type { Tenant } from '@storage-brain/shared';
  */
 export const authMiddleware = createAuthMiddleware<Tenant>({
   apiKeySchema,
-  lookupTenant: (c, apiKey) => getTenantByApiKey(c.env.DB, apiKey),
+  lookupTenant: (c, apiKey) => c.get('db').getTenantByApiKey(apiKey),
 });

@@ -3,17 +3,6 @@ import type { AppEnv } from '../env';
 import { authMiddleware } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import { createWorkspaceSchema, updateWorkspaceSchema, uuidSchema } from '@storage-brain/shared';
-import {
-  createWorkspace,
-  getWorkspaceById,
-  listWorkspacesByTenant,
-  updateWorkspace,
-  deleteWorkspace,
-  getActiveFilesByWorkspace,
-  softDeleteFilesByWorkspace,
-} from '../db/queries';
-import { releaseQuota } from '../services/quota';
-import { releaseWorkspaceQuota } from '../services/quota';
 
 export const workspaceRoutes = new Hono<AppEnv>();
 
@@ -26,7 +15,8 @@ workspaceRoutes.use('*', authMiddleware);
  */
 workspaceRoutes.get('/', async (c) => {
   const tenant = c.get('tenant');
-  const workspaces = await listWorkspacesByTenant(c.env.DB, tenant.id);
+  const db = c.get('db');
+  const workspaces = await db.listWorkspacesByTenant(tenant.id);
 
   return c.json({
     workspaces: workspaces.map((ws) => ({
@@ -48,11 +38,12 @@ workspaceRoutes.get('/', async (c) => {
  */
 workspaceRoutes.post('/', async (c) => {
   const tenant = c.get('tenant');
+  const db = c.get('db');
   const body = await c.req.json();
 
   const validated = createWorkspaceSchema.parse(body);
 
-  const workspace = await createWorkspace(c.env.DB, {
+  const workspace = await db.createWorkspace({
     id: crypto.randomUUID(),
     tenantId: tenant.id,
     name: validated.name,
@@ -82,11 +73,12 @@ workspaceRoutes.post('/', async (c) => {
  */
 workspaceRoutes.get('/:workspaceId', async (c) => {
   const tenant = c.get('tenant');
+  const db = c.get('db');
   const workspaceId = c.req.param('workspaceId');
 
   uuidSchema.parse(workspaceId);
 
-  const workspace = await getWorkspaceById(c.env.DB, workspaceId, tenant.id);
+  const workspace = await db.getWorkspaceById(workspaceId, tenant.id);
   if (!workspace) {
     throw ApiError.notFound('Workspace not found');
   }
@@ -109,12 +101,13 @@ workspaceRoutes.get('/:workspaceId', async (c) => {
  */
 workspaceRoutes.patch('/:workspaceId', async (c) => {
   const tenant = c.get('tenant');
+  const db = c.get('db');
   const workspaceId = c.req.param('workspaceId');
 
   uuidSchema.parse(workspaceId);
 
   // Verify workspace exists and belongs to tenant
-  const existing = await getWorkspaceById(c.env.DB, workspaceId, tenant.id);
+  const existing = await db.getWorkspaceById(workspaceId, tenant.id);
   if (!existing) {
     throw ApiError.notFound('Workspace not found');
   }
@@ -122,7 +115,7 @@ workspaceRoutes.patch('/:workspaceId', async (c) => {
   const body = await c.req.json();
   const validated = updateWorkspaceSchema.parse(body);
 
-  const updated = await updateWorkspace(c.env.DB, workspaceId, tenant.id, validated);
+  const updated = await db.updateWorkspace(workspaceId, tenant.id, validated);
   if (!updated) {
     throw ApiError.notFound('Workspace not found');
   }
@@ -145,31 +138,32 @@ workspaceRoutes.patch('/:workspaceId', async (c) => {
  */
 workspaceRoutes.delete('/:workspaceId', async (c) => {
   const tenant = c.get('tenant');
+  const db = c.get('db');
   const workspaceId = c.req.param('workspaceId');
 
   uuidSchema.parse(workspaceId);
 
   // Verify workspace exists and belongs to tenant
-  const workspace = await getWorkspaceById(c.env.DB, workspaceId, tenant.id);
+  const workspace = await db.getWorkspaceById(workspaceId, tenant.id);
   if (!workspace) {
     throw ApiError.notFound('Workspace not found');
   }
 
   // Get active files to calculate total bytes to release
-  const activeFiles = await getActiveFilesByWorkspace(c.env.DB, workspaceId, tenant.id);
+  const activeFiles = await db.getActiveFilesByWorkspace(workspaceId, tenant.id);
   const totalBytes = activeFiles.reduce((sum, f) => sum + f.sizeBytes, 0);
 
   // Soft-delete all files in the workspace
-  await softDeleteFilesByWorkspace(c.env.DB, workspaceId, tenant.id);
+  await db.softDeleteFilesByWorkspace(workspaceId, tenant.id);
 
   // Release quota from both workspace and tenant levels
   if (totalBytes > 0) {
-    await releaseWorkspaceQuota(c.env.DB, workspaceId, totalBytes);
-    await releaseQuota(c.env.DB, tenant.id, totalBytes);
+    await db.releaseWorkspaceQuota(workspaceId, totalBytes);
+    await db.releaseQuota(tenant.id, totalBytes);
   }
 
   // Delete the workspace itself
-  await deleteWorkspace(c.env.DB, workspaceId, tenant.id);
+  await db.deleteWorkspace(workspaceId, tenant.id);
 
   return c.json({ success: true });
 });

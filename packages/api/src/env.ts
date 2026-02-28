@@ -1,5 +1,5 @@
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
-import type { TenantContext } from '@storage-brain/shared';
+import type { TenantContext, StorageAdapter, DatabaseAdapter } from '@storage-brain/shared';
 
 /**
  * Cloudflare Workers environment bindings
@@ -16,6 +16,7 @@ export interface Env {
 
   // Secrets (set via wrangler secret put)
   ADMIN_API_KEY?: string;
+  URL_SIGNING_SECRET: string;
 }
 
 /**
@@ -23,6 +24,8 @@ export interface Env {
  */
 export interface Variables extends TenantContext {
   requestId: string;
+  storage: StorageAdapter;
+  db: DatabaseAdapter;
 }
 
 /**
