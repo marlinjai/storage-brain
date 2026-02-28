@@ -7,9 +7,9 @@ icon: code
 
 # API Reference
 
-Base URL: `https://storage-brain-api.workers.dev`
+Base URL: `https://your-storage-brain-instance.example.com`
 
-All endpoints (except admin and health) require tenant authentication via Bearer token.
+All endpoints (except admin, health, and signed-URL downloads) require tenant authentication via Bearer token.
 
 ## Authentication
 
@@ -58,20 +58,22 @@ POST /api/v1/upload/request
 | `fileType` | string | Yes | MIME type. One of: `image/jpeg`, `image/png`, `image/webp`, `image/gif`, `image/avif`, `application/pdf` |
 | `fileName` | string | Yes | Original filename (1-255 chars, no special characters) |
 | `fileSizeBytes` | number | No | File size in bytes (max: 104857600) |
-| `context` | string | Yes | Processing context: `newsletter`, `invoice`, `framer-site`, or `default` |
+| `context` | string | No | Optional free-form string for categorization (max 100 chars) |
 | `tags` | object | No | Key-value string pairs for categorization |
-| `webhookUrl` | string | No | URL to notify after processing completes |
+| `webhookUrl` | string | No | URL to notify after upload completes |
+| `workspaceId` | string (UUID) | No | Workspace to upload into |
 
 **Example Request:**
 
 ```json
 {
   "fileType": "image/jpeg",
-  "fileName": "receipt-2024.jpg",
+  "fileName": "receipt-2026.jpg",
   "fileSizeBytes": 245000,
-  "context": "invoice",
+  "context": "expense-receipts",
   "tags": { "department": "finance" },
-  "webhookUrl": "https://your-app.com/webhooks/file-processed"
+  "webhookUrl": "https://your-app.com/webhooks/file-uploaded",
+  "workspaceId": "workspace-uuid-here"
 }
 ```
 
@@ -80,8 +82,8 @@ POST /api/v1/upload/request
 ```json
 {
   "fileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "presignedUrl": "/_internal/upload/tenants/tenant-id/files/file-id/receipt-2024.jpg",
-  "expiresAt": "2026-02-19T12:15:00.000Z",
+  "presignedUrl": "/_internal/upload/tenants/tenant-id/files/file-id/receipt-2026.jpg",
+  "expiresAt": "2026-02-28T12:15:00.000Z",
   "uploadMetadata": {
     "maxSizeBytes": 104857600,
     "allowedTypes": ["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif", "application/pdf"]
@@ -111,8 +113,9 @@ GET /api/v1/files
 |-----------|------|---------|-------------|
 | `limit` | number | 20 | Results per page (1-100) |
 | `cursor` | string | -- | Pagination cursor from previous response |
-| `context` | string | -- | Filter by processing context |
+| `context` | string | -- | Filter by context string |
 | `fileType` | string | -- | Filter by MIME type |
+| `workspaceId` | string | -- | Filter by workspace |
 
 **Example Response (200):**
 
@@ -121,21 +124,16 @@ GET /api/v1/files
   "files": [
     {
       "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      "url": "https://r2-bucket.example.com/tenants/.../file.jpg",
-      "originalName": "receipt-2024.jpg",
+      "url": "/api/v1/files/a1b2c3d4-e5f6-7890-abcd-ef1234567890/download",
+      "originalName": "receipt-2026.jpg",
       "fileType": "image/jpeg",
       "sizeBytes": 245000,
-      "context": "invoice",
+      "context": "expense-receipts",
       "tags": { "department": "finance" },
-      "metadata": {
-        "ocrData": {
-          "fullText": "Invoice #1234...",
-          "confidence": 0.95,
-          "blocks": []
-        }
-      },
+      "metadata": null,
       "processingStatus": "completed",
-      "createdAt": "2026-02-19T10:30:00.000Z"
+      "workspaceId": "workspace-uuid-here",
+      "createdAt": "2026-02-28T10:30:00.000Z"
     }
   ],
   "nextCursor": "eyJpZCI6Imxhc3QtaWQifQ==",
@@ -164,15 +162,16 @@ GET /api/v1/files/:fileId
 ```json
 {
   "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "url": "https://r2-bucket.example.com/tenants/.../file.jpg",
-  "originalName": "receipt-2024.jpg",
+  "url": "/api/v1/files/a1b2c3d4-e5f6-7890-abcd-ef1234567890/download",
+  "originalName": "receipt-2026.jpg",
   "fileType": "image/jpeg",
   "sizeBytes": 245000,
-  "context": "invoice",
+  "context": "expense-receipts",
   "tags": { "department": "finance" },
   "metadata": null,
-  "processingStatus": "pending",
-  "createdAt": "2026-02-19T10:30:00.000Z"
+  "processingStatus": "completed",
+  "workspaceId": null,
+  "createdAt": "2026-02-28T10:30:00.000Z"
 }
 ```
 
@@ -208,13 +207,13 @@ DELETE /api/v1/files/:fileId
 
 ### Download File
 
-Download the raw file content from R2 storage.
+Download the raw file content from storage. Supports both authenticated and signed-URL access.
 
 ```
 GET /api/v1/files/:fileId/download
 ```
 
-**Auth:** Tenant API key (Bearer token)
+**Auth:** Tenant API key (Bearer token) OR signed URL query parameters (`token` + `expires`)
 
 **Path Parameters:**
 
@@ -225,7 +224,194 @@ GET /api/v1/files/:fileId/download
 **Response:** Binary file content with appropriate `Content-Type` and `Content-Disposition` headers.
 
 **Error Responses:**
+- `401` -- Missing or invalid authentication
 - `404` -- File not found or not in storage
+
+### Get Signed URL
+
+Generate a time-limited signed URL for unauthenticated file download.
+
+```
+GET /api/v1/files/:fileId/signed-url
+```
+
+**Auth:** Tenant API key (Bearer token)
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `fileId` | UUID | File identifier |
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `expiresIn` | number | 3600 | URL lifetime in seconds (60-86400) |
+
+**Example Response (200):**
+
+```json
+{
+  "fileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "url": "https://your-instance.com/api/v1/files/a1b2c3d4-.../download?token=abc123&expires=1740750000000",
+  "expiresAt": "2026-02-28T11:30:00.000Z",
+  "expiresIn": 3600
+}
+```
+
+The returned `url` can be shared publicly. It does not require an `Authorization` header and will expire after the specified duration.
+
+**Error Responses:**
+- `404` -- File not found or belongs to another tenant
+
+---
+
+## Workspaces
+
+Workspaces partition files within a tenant. Each workspace has its own slug (unique per tenant) and optional quota.
+
+### List Workspaces
+
+```
+GET /api/v1/workspaces
+```
+
+**Auth:** Tenant API key (Bearer token)
+
+**Example Response (200):**
+
+```json
+{
+  "workspaces": [
+    {
+      "id": "ws-uuid-1",
+      "name": "Marketing",
+      "slug": "marketing",
+      "quotaBytes": 104857600,
+      "usedBytes": 5242880,
+      "metadata": null,
+      "createdAt": 1740700000,
+      "updatedAt": 1740700000
+    }
+  ]
+}
+```
+
+### Create Workspace
+
+```
+POST /api/v1/workspaces
+```
+
+**Auth:** Tenant API key (Bearer token)
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Workspace name (1-255 chars) |
+| `slug` | string | Yes | URL-safe identifier (lowercase alphanumeric + hyphens) |
+| `quotaBytes` | number | No | Optional storage quota in bytes |
+| `metadata` | object | No | Arbitrary key-value metadata |
+
+**Example Request:**
+
+```json
+{
+  "name": "Marketing",
+  "slug": "marketing",
+  "quotaBytes": 104857600
+}
+```
+
+**Example Response (201):**
+
+```json
+{
+  "id": "ws-uuid-1",
+  "name": "Marketing",
+  "slug": "marketing",
+  "quotaBytes": 104857600,
+  "usedBytes": 0,
+  "metadata": null,
+  "createdAt": 1740700000,
+  "updatedAt": 1740700000
+}
+```
+
+### Get Workspace
+
+```
+GET /api/v1/workspaces/:workspaceId
+```
+
+**Auth:** Tenant API key (Bearer token)
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `workspaceId` | UUID | Workspace identifier |
+
+**Example Response (200):** Same shape as create response.
+
+**Error Responses:**
+- `404` -- Workspace not found or belongs to another tenant
+
+### Update Workspace
+
+```
+PATCH /api/v1/workspaces/:workspaceId
+```
+
+**Auth:** Tenant API key (Bearer token)
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `workspaceId` | UUID | Workspace identifier |
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | No | New workspace name |
+| `quotaBytes` | number or null | No | New quota (null to remove limit) |
+| `metadata` | object | No | New metadata (replaces existing) |
+
+**Example Response (200):** Updated workspace object.
+
+**Error Responses:**
+- `404` -- Workspace not found or belongs to another tenant
+
+### Delete Workspace
+
+Deletes the workspace and soft-deletes all files within it. Releases quota at both workspace and tenant levels.
+
+```
+DELETE /api/v1/workspaces/:workspaceId
+```
+
+**Auth:** Tenant API key (Bearer token)
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `workspaceId` | UUID | Workspace identifier |
+
+**Example Response (200):**
+
+```json
+{
+  "success": true
+}
+```
+
+**Error Responses:**
+- `404` -- Workspace not found or belongs to another tenant
 
 ---
 
@@ -379,33 +565,35 @@ GET /health
 
 ## Webhooks
 
-When a file has a `webhookUrl` set, Storage Brain sends a POST request to that URL after processing completes or fails.
+When a file has a `webhookUrl` set, Storage Brain sends a POST request to that URL after the upload completes.
 
 **Webhook Payload:**
 
 ```json
 {
-  "event": "file.processed",
+  "event": "file.uploaded",
   "fileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "tenantId": "tenant-uuid",
+  "workspaceId": "workspace-uuid-or-null",
   "file": {
     "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-    "url": "https://r2-bucket.example.com/tenants/.../file.jpg",
-    "originalName": "receipt-2024.jpg",
+    "url": "/api/v1/files/a1b2c3d4-.../download",
+    "originalName": "receipt-2026.jpg",
     "fileType": "image/jpeg",
     "sizeBytes": 245000,
-    "context": "invoice",
+    "context": "expense-receipts",
     "tags": { "department": "finance" },
-    "metadata": { "ocrData": { "fullText": "...", "confidence": 0.95, "blocks": [] } },
+    "metadata": null,
     "processingStatus": "completed",
-    "createdAt": "2026-02-19T10:30:00.000Z"
+    "workspaceId": "workspace-uuid-or-null",
+    "createdAt": "2026-02-28T10:30:00.000Z"
   },
-  "timestamp": "2026-02-19T10:30:45.000Z"
+  "timestamp": "2026-02-28T10:30:05.000Z"
 }
 ```
 
 **Events:**
-- `file.processed` -- Processing completed successfully
-- `file.failed` -- Processing failed
+- `file.uploaded` -- Upload completed successfully
+- `file.failed` -- Upload failed
 
 **Retry policy:** Up to 3 attempts with exponential backoff (1s, 2s, 4s).

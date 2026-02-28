@@ -23,7 +23,7 @@
     "docs:build": "npx clearify build"
   },
   "devDependencies": {
-    "@marlinjai/clearify": "^1.7.3",
+    "@marlinjai/clearify": "^1.8.0",
     "@types/node": "^20.11.0",
     "@typescript-eslint/eslint-plugin": "^6.19.0",
     "@typescript-eslint/parser": "^6.19.0",

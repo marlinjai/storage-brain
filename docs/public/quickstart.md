@@ -31,12 +31,12 @@ const storage = new StorageBrain({
 
 // Upload a file with progress tracking
 const file = await storage.upload(myFile, {
-  context: 'default',
+  context: 'receipts',
   onProgress: (percent) => console.log(`${percent}%`),
 });
 
 console.log(file.id);  // UUID of the uploaded file
-console.log(file.url);  // Public URL to access the file
+console.log(file.url); // Download URL for the file
 ```
 
 ## Key Concepts
@@ -51,16 +51,28 @@ Authorization: Bearer sk_live_...
 
 API keys use the `sk_live_` prefix for production and `sk_test_` for testing environments. Keys are hashed with bcrypt before storage -- the plaintext key is only returned once at creation time.
 
-### Processing Contexts
+### Context
 
-Every uploaded file is assigned a processing context that determines how it gets processed:
+Every uploaded file can optionally be assigned a `context` -- a free-form string (max 100 characters) for your own categorization. Use it however you like, for example `"invoices"`, `"profile-photos"`, or `"project-alpha-assets"`.
 
-| Context | Processing |
-|---------|-----------|
-| `invoice` | OCR text extraction, structured data parsing |
-| `newsletter` | Image optimization, thumbnail generation |
-| `framer-site` | Image optimization, thumbnail generation |
-| `default` | Basic metadata extraction |
+### Workspaces
+
+Workspaces let you partition files within a tenant. Each workspace has its own optional quota and slug. Scope the SDK client to a workspace using `withWorkspace()`:
+
+```typescript
+const workspace = await storage.createWorkspace({
+  name: 'Marketing',
+  slug: 'marketing',
+  quotaBytes: 100 * 1024 * 1024, // 100 MB
+});
+
+// All operations on this client are scoped to the workspace
+const marketingStorage = storage.withWorkspace(workspace.id);
+
+const file = await marketingStorage.upload(myFile, {
+  context: 'campaign-assets',
+});
+```
 
 ### Supported File Types
 
@@ -72,7 +84,7 @@ Maximum file size: 100 MB per file.
 
 ### Quota Management
 
-Each tenant has a storage quota (default: 500 MB). Uploads that would exceed the quota are rejected. Check your usage at any time:
+Each tenant has a storage quota (default: 500 MB). Workspaces can have their own quotas. Uploads that would exceed either quota are rejected. Check your usage at any time:
 
 ```typescript
 const quota = await storage.getQuota();
@@ -80,28 +92,27 @@ console.log(`${quota.usagePercent}% used`);
 // { quotaBytes: 524288000, usedBytes: 10485760, availableBytes: 513802240, usagePercent: 2 }
 ```
 
-### Thumbnails
+### Signed Download URLs
 
-Images are automatically processed into three thumbnail sizes in WebP format:
+Generate time-limited URLs that allow unauthenticated downloads -- useful for sharing files with external users or embedding in emails:
 
-| Size | Dimensions |
-|------|-----------|
-| `thumb` | 200 x 200 px |
-| `medium` | 400 x 400 px |
-| `large` | 800 x 800 px |
+```typescript
+const signed = await storage.getSignedUrl(file.id, 3600); // expires in 1 hour
+console.log(signed.url); // Public URL, no auth required
+```
 
 ### Webhooks
 
-Optionally receive a notification when file processing completes:
+Optionally receive a notification when a file upload completes:
 
 ```typescript
 const file = await storage.upload(myFile, {
-  context: 'invoice',
+  context: 'documents',
   webhookUrl: 'https://your-app.com/webhooks/storage-brain',
 });
 ```
 
-The webhook payload includes the full file object with processing results. Failed deliveries are retried up to 3 times with exponential backoff.
+The webhook payload includes the full file object. The event type is `file.uploaded`. Failed deliveries are retried up to 3 times with exponential backoff.
 
 ## Next Steps
 

@@ -7,7 +7,7 @@ icon: package
 
 # SDK Guide
 
-The Storage Brain TypeScript SDK provides a type-safe client for uploading files, managing storage, and querying file metadata.
+The Storage Brain TypeScript SDK provides a type-safe client for uploading files, managing workspaces, and querying file metadata.
 
 ## Installation
 
@@ -32,15 +32,16 @@ const storage = new StorageBrain({
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `apiKey` | string | (required) | Tenant API key (`sk_live_...` or `sk_test_...`) |
-| `baseUrl` | string | `https://storage-brain-api.workers.dev` | API base URL |
+| `baseUrl` | string | Production URL | API base URL |
 | `timeout` | number | `30000` | Request timeout in milliseconds |
 | `maxRetries` | number | `3` | Number of retry attempts for failed requests |
+| `workspaceId` | string | -- | Default workspace ID for all operations |
 
 ## Uploading Files
 
 ```typescript
 const file = await storage.upload(myFile, {
-  context: 'invoice',
+  context: 'expense-receipts',
   tags: { department: 'finance', year: '2026' },
   onProgress: (percent) => {
     console.log(`Upload progress: ${percent}%`);
@@ -48,14 +49,14 @@ const file = await storage.upload(myFile, {
 });
 
 console.log(file.id);       // "a1b2c3d4-..."
-console.log(file.url);      // Public URL
-console.log(file.metadata); // { [key: string]: unknown }
+console.log(file.url);      // Download URL
+console.log(file.metadata); // { [key: string]: unknown } | null
 ```
 
 The `upload` method handles the full upload flow:
 
 1. Requests a presigned URL from the API (handshake)
-2. Uploads the file content directly to R2
+2. Uploads the file content directly to storage
 3. Returns the final file metadata
 
 ### Upload Options
@@ -67,6 +68,7 @@ The `upload` method handles the full upload flow:
 | `onProgress` | `(percent: number) => void` | No | Progress callback (0-100) |
 | `webhookUrl` | string | No | URL to notify after upload completes |
 | `signal` | `AbortSignal` | No | Signal for cancelling the upload |
+| `workspaceId` | string | No | Workspace to upload into (overrides client default) |
 
 ### Cancelling an Upload
 
@@ -75,7 +77,7 @@ const controller = new AbortController();
 
 // Start upload
 const uploadPromise = storage.upload(file, {
-  context: 'my-app-receipts',
+  context: 'documents',
   signal: controller.signal,
 });
 
@@ -91,6 +93,78 @@ try {
 }
 ```
 
+## Workspace Management
+
+Workspaces partition files within a tenant. Each workspace has a name, slug, and optional quota.
+
+### Create a Workspace
+
+```typescript
+const workspace = await storage.createWorkspace({
+  name: 'Marketing',
+  slug: 'marketing',
+  quotaBytes: 100 * 1024 * 1024, // 100 MB
+  metadata: { team: 'growth' },
+});
+
+console.log(workspace.id);   // "ws-uuid-..."
+console.log(workspace.slug); // "marketing"
+```
+
+### List Workspaces
+
+```typescript
+const workspaces = await storage.listWorkspaces();
+// Workspace[]
+```
+
+### Get a Workspace
+
+```typescript
+const workspace = await storage.getWorkspace('ws-uuid-...');
+```
+
+### Update a Workspace
+
+```typescript
+const updated = await storage.updateWorkspace('ws-uuid-...', {
+  name: 'Marketing Team',
+  quotaBytes: 200 * 1024 * 1024,
+});
+```
+
+### Delete a Workspace
+
+Deleting a workspace soft-deletes all files within it and releases quota.
+
+```typescript
+await storage.deleteWorkspace('ws-uuid-...');
+```
+
+### Scoping a Client to a Workspace
+
+Use `withWorkspace()` to create a new client instance that automatically scopes all uploads and file listings to a specific workspace. The workspace ID is sent as an `X-Workspace-Id` header on every request.
+
+```typescript
+const marketingStorage = storage.withWorkspace(workspace.id);
+
+// Upload goes into the marketing workspace
+const file = await marketingStorage.upload(myFile, {
+  context: 'campaign-assets',
+});
+
+// List only returns files in the marketing workspace
+const result = await marketingStorage.listFiles();
+```
+
+You can also pass `workspaceId` per-call to override the client default:
+
+```typescript
+const file = await storage.upload(myFile, {
+  workspaceId: 'specific-workspace-id',
+});
+```
+
 ## Retrieving Files
 
 ### Get a Single File
@@ -98,9 +172,10 @@ try {
 ```typescript
 const file = await storage.getFile('a1b2c3d4-e5f6-7890-abcd-ef1234567890');
 
-console.log(file.originalName); // "receipt.jpg"
-console.log(file.sizeBytes);   // 245000
-console.log(file.metadata);    // { [key: string]: unknown }
+console.log(file.originalName);  // "receipt.jpg"
+console.log(file.sizeBytes);     // 245000
+console.log(file.workspaceId);   // "ws-uuid" or null
+console.log(file.metadata);      // { [key: string]: unknown } | null
 ```
 
 ### List Files
@@ -108,8 +183,9 @@ console.log(file.metadata);    // { [key: string]: unknown }
 ```typescript
 const result = await storage.listFiles({
   limit: 50,
-  context: 'invoice',
+  context: 'expense-receipts',
   fileType: 'application/pdf',
+  workspaceId: 'ws-uuid-...',
 });
 
 console.log(result.files);      // FileInfo[]
@@ -141,6 +217,21 @@ do {
 | `cursor` | string | -- | Pagination cursor from previous response |
 | `context` | string | -- | Filter by context string |
 | `fileType` | string | -- | Filter by MIME type |
+| `workspaceId` | string | -- | Filter by workspace |
+
+## Signed Download URLs
+
+Generate time-limited URLs for unauthenticated file downloads. Useful for sharing files externally or embedding in emails.
+
+```typescript
+const signed = await storage.getSignedUrl('file-uuid', 3600); // 1 hour
+
+console.log(signed.url);       // Full URL with HMAC token
+console.log(signed.expiresAt); // ISO 8601 expiration
+console.log(signed.expiresIn); // Seconds until expiry
+```
+
+The `expiresIn` parameter defaults to 3600 seconds (1 hour) and accepts values from 60 to 86400 seconds.
 
 ## Deleting Files
 
@@ -192,7 +283,7 @@ import {
 } from '@marlinjai/storage-brain-sdk';
 
 try {
-  await storage.upload(file, { context: 'invoice' });
+  await storage.upload(file, { context: 'documents' });
 } catch (error) {
   if (error instanceof AuthenticationError) {
     // Invalid or expired API key (HTTP 401)
@@ -247,6 +338,10 @@ import type {
   QuotaInfo,
   TenantInfo,
   UploadHandshake,
+  SignedUrlInfo,
+  Workspace,
+  CreateWorkspaceInput,
+  UpdateWorkspaceInput,
   AllowedMimeType,
   FileMetadata,
 } from '@marlinjai/storage-brain-sdk';

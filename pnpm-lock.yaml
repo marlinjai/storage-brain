@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@marlinjai/clearify':
-        specifier: ^1.7.3
-        version: 1.7.3(@types/node@20.19.33)(@types/react@19.2.14)(jiti@2.6.1)(lightningcss@1.31.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(rollup@4.57.1)(tsx@4.21.0)(yaml@2.8.2)
+        specifier: ^1.8.0
+        version: 1.8.0(@types/node@20.19.33)(@types/react@19.2.14)(jiti@2.6.1)(lightningcss@1.31.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(rollup@4.57.1)(tsx@4.21.0)(yaml@2.8.2)
       '@types/node':
         specifier: ^20.11.0
         version: 20.19.33
@@ -1073,8 +1073,8 @@ packages:
       zod:
         optional: true
 
-  '@marlinjai/clearify@1.7.3':
-    resolution: {integrity: sha512-CabrfRSVF2px6wlCZpM+nYR5BWzlJrYDXqxrSY1qpNjKJdtKrMAXQwIgveeAq1kcobToksF8Ra3+og7TIFw6hw==}
+  '@marlinjai/clearify@1.8.0':
+    resolution: {integrity: sha512-uGDlr0HNyTcI+zmY6t414qeTKQzNbjQCjeWaYDt4oUFMVv+kp3ioocp2D9Td6jFl17gX4f9Y8RlRjOkYxkgOAw==}
     hasBin: true
     peerDependencies:
       puppeteer: '>=22.0.0'
@@ -4720,7 +4720,7 @@ snapshots:
       hono: 4.12.0
       zod: 3.25.76
 
-  '@marlinjai/clearify@1.7.3(@types/node@20.19.33)(@types/react@19.2.14)(jiti@2.6.1)(lightningcss@1.31.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(rollup@4.57.1)(tsx@4.21.0)(yaml@2.8.2)':
+  '@marlinjai/clearify@1.8.0(@types/node@20.19.33)(@types/react@19.2.14)(jiti@2.6.1)(lightningcss@1.31.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(rollup@4.57.1)(tsx@4.21.0)(yaml@2.8.2)':
     dependencies:
       '@mdx-js/react': 3.1.1(@types/react@19.2.14)(react@19.2.4)
       '@mdx-js/rollup': 3.1.1(rollup@4.57.1)
