@@ -1,0 +1,26 @@
+{
+  "s3-adapter": {
+    "description": "Creates S3StorageAdapter implementing StorageAdapter interface",
+    "prompt": "Create packages/api/src/adapters/storage/s3.ts implementing StorageAdapter from @storage-brain/shared. Read packages/shared/src/storage-adapter.ts (interface) and packages/api/src/adapters/storage/r2.ts (reference) first. Use @aws-sdk/client-s3 + @aws-sdk/s3-request-presigner. Constructor takes { bucket, region, endpoint?, credentials, forcePathStyle? }. forcePathStyle defaults true when endpoint is set (MinIO). Implement put, get, delete, exists, head, getPresignedUploadUrl, getPresignedDownloadUrl. put() converts ReadableStream to Buffer if needed. get() returns { body, contentType, size, etag }. Add @aws-sdk/client-s3 and @aws-sdk/s3-request-presigner to packages/api/package.json deps. Run pnpm install then pnpm typecheck."
+  },
+  "postgres-adapter": {
+    "description": "Creates PostgresDatabaseAdapter + migration SQL",
+    "prompt": "Create packages/api/src/adapters/database/postgres.ts implementing DatabaseAdapter from @storage-brain/shared. Read packages/shared/src/database-adapter.ts (interface), packages/shared/src/types.ts, packages/api/src/adapters/database/d1.ts (reference - copy all SQL and row mapping). Use postgres package (porsager). Constructor takes { connectionString }. Port every D1 method: db.prepare().bind().first() becomes sql tagged templates. Row mappers stay snake_case (no transform). getTenantByApiKey uses same verify loop - import verifyApiKey from ../../utils/crypto. Add close() method. migrate() reads and runs SQL from migrations. Also create packages/api/src/migrations/001_init.sql combining migrations/0001_initial_schema.sql + 0002_workspaces.sql into one Postgres-compatible file (BIGINT for bytes/timestamps, workspace_id inline in CREATE TABLE, all IF NOT EXISTS). Add postgres to package.json deps. Run pnpm install then pnpm typecheck."
+  },
+  "node-entry": {
+    "description": "Creates Node.js entry point with @hono/node-server",
+    "prompt": "Create packages/api/src/node.ts. Read packages/api/src/index.ts (createApp factory). Import serve from @hono/node-server, S3StorageAdapter from ./adapters/storage/s3, PostgresDatabaseAdapter from ./adapters/database/postgres. Read env vars: S3_BUCKET, S3_REGION, S3_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, DATABASE_URL, ADMIN_API_KEY, URL_SIGNING_SECRET, PORT (default 3000). Validate required vars. Create adapters, call db.migrate(), createApp({ storage, db }), serve. Add SIGTERM/SIGINT shutdown calling db.close(). Add @hono/node-server and tsx to packages/api/package.json. Add script start:node as tsx src/node.ts. Run pnpm install then pnpm typecheck."
+  },
+  "docker": {
+    "description": "Creates Dockerfile + docker-compose.yml + self-hosting docs",
+    "prompt": "Create Docker setup at the storage-brain repo root. 1) Dockerfile: FROM node:20-alpine, RUN npm i -g pnpm, WORKDIR /app, COPY package.json pnpm-lock.yaml pnpm-workspace.yaml, COPY packages/, RUN pnpm install --frozen-lockfile, RUN pnpm --filter @storage-brain/shared build, EXPOSE 3000, CMD pnpm --filter @storage-brain/api start:node. 2) docker-compose.yml with services: api (build context ., ports 3000, env vars for S3 pointing at MinIO + Postgres, depends_on postgres and minio-setup), postgres (postgres:16-alpine with healthcheck), minio (minio/minio with console on 9001), minio-setup (minio/mc creating the bucket). 3) docs/self-hosting.md with quick start guide, curl example to create tenant, env var reference table."
+  },
+  "landing-scaffold": {
+    "description": "Scaffolds Lumitra Cloud Next.js project",
+    "prompt": "Create projects/lumitra-cloud/ as a Next.js app. Read projects/receipt-ocr-app/package.json and wrangler.jsonc for patterns. Create: package.json (next 16, react 19, @opennextjs/cloudflare, tailwindcss v4, typescript), tsconfig.json (target ES2017, moduleResolution bundler, paths @/* to ./src/*), next.config.ts (minimal), open-next.config.ts (defineCloudflareConfig), postcss.config.mjs (@tailwindcss/postcss), wrangler.jsonc (name lumitra-cloud, main .open-next/worker.js, route cloud.lumitra.co custom_domain), .gitignore. Run pnpm install."
+  },
+  "landing-page": {
+    "description": "Creates Lumitra Cloud landing page with glass-morphism design",
+    "prompt": "Create the landing page at projects/lumitra-cloud/. Wait for package.json to exist first. Read projects/receipt-ocr-app/src/app/globals.css and page.tsx for design reference. Create: 1) src/app/globals.css - dark theme bg #0a0a0f, fg #e8e6e3, indigo accent #6366f1 instead of gold, cyan secondary #06b6d4, glass-panel and glass-nav classes with backdrop-blur, aurora bg with indigo/cyan gradients. 2) src/app/layout.tsx - Geist fonts via next/font/google, metadata title Lumitra Cloud. 3) src/app/page.tsx with sections: sticky glass nav, hero (Your Backend for Files and Data + SDK code snippet), two product cards (Storage Brain indigo + Data Brain cyan with feature lists), 3x2 feature grid (TypeScript SDKs, Self-Hostable, Edge-Native, Multi-Provider, Multi-Tenant, Open Source), pricing table (Self-Hosted free, Cloud Pro $9/mo, Cloud Team $29/mo), self-host CTA with docker compose snippet, footer. Use Tailwind utilities + CSS custom properties + glass-panel class."
+  }
+}
