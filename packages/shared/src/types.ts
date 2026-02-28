@@ -1,34 +1,28 @@
+import type { BaseTenant, BaseWorkspace, BaseTenantContext } from '@marlinjai/brain-core';
 import type {
   AllowedMimeType,
   UploadSessionStatus,
   ProcessingStatus,
 } from './constants';
 
+// Re-export base types for convenience
+export type { ApiErrorResponse as ApiError } from '@marlinjai/brain-core';
+
 /**
- * Tenant entity
+ * Tenant entity — extends BaseTenant with storage-specific quota fields
  */
-export interface Tenant {
-  id: string;
-  name: string;
-  apiKeyHash: string;
+export interface Tenant extends BaseTenant {
   quotaBytes: number;
   usedBytes: number;
   allowedFileTypes: AllowedMimeType[] | null;
-  createdAt: number;
-  updatedAt: number;
 }
 
 /**
- * Workspace entity
+ * Workspace entity — extends BaseWorkspace with storage-specific quota fields
  */
-export interface Workspace {
-  id: string;
-  tenantId: string;
-  name: string;
-  slug: string;
+export interface Workspace extends BaseWorkspace {
   quotaBytes: number | null;
   usedBytes: number;
-  metadata: Record<string, unknown> | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -150,17 +144,6 @@ export interface QuotaResponse {
 }
 
 /**
- * API Error response
- */
-export interface ApiError {
-  error: {
-    code: string;
-    message: string;
-    details?: Record<string, unknown>;
-  };
-}
-
-/**
  * Webhook payload sent after upload
  */
 export interface WebhookPayload {
@@ -175,6 +158,4 @@ export interface WebhookPayload {
 /**
  * Tenant context attached to authenticated requests
  */
-export interface TenantContext {
-  tenant: Tenant;
-}
+export type TenantContext = BaseTenantContext<Tenant>;

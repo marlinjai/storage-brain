@@ -1,6 +1,6 @@
 {
   "name": "@marlinjai/storage-brain-sdk",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "TypeScript SDK for Storage Brain - edge-native file storage service",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -49,6 +49,9 @@
   ],
   "author": "marlinjai",
   "license": "MIT",
+  "dependencies": {
+    "@marlinjai/brain-core": "file:../../../brain-core"
+  },
   "devDependencies": {
     "tsup": "^8.0.1",
     "typescript": "^5.3.3"

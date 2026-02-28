@@ -1,3 +1,6 @@
+// Re-export shared retry config from brain-core
+export { RETRY_CONFIG } from '@marlinjai/brain-core/sdk';
+
 /**
  * Allowed MIME types for file uploads
  */
@@ -34,13 +37,3 @@ export const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100MB per file
  */
 export const PROCESSING_STATUSES = ['pending', 'processing', 'completed', 'failed'] as const;
 export type ProcessingStatus = (typeof PROCESSING_STATUSES)[number];
-
-/**
- * Retry configuration
- */
-export const RETRY_CONFIG = {
-  maxAttempts: 3,
-  initialDelayMs: 1000,
-  maxDelayMs: 10000,
-  backoffMultiplier: 2,
-} as const;

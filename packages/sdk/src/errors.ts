@@ -1,14 +1,23 @@
+import {
+  BrainSdkError,
+  AuthenticationError as BaseAuthenticationError,
+  NotFoundError as BaseNotFoundError,
+  ValidationError as BaseValidationError,
+  QuotaExceededError as BaseQuotaExceededError,
+  NetworkError as BaseNetworkError,
+} from '@marlinjai/brain-core/sdk';
+
 /**
- * Base error class for Storage Brain SDK
+ * Base error class for Storage Brain SDK — extends BrainSdkError
  */
-export class StorageBrainError extends Error {
+export class StorageBrainError extends BrainSdkError {
   constructor(
     message: string,
-    public code: string,
-    public statusCode?: number,
-    public details?: Record<string, unknown>
+    code: string,
+    statusCode?: number,
+    details?: Record<string, unknown>
   ) {
-    super(message);
+    super(message, code, statusCode, details);
     this.name = 'StorageBrainError';
   }
 }
@@ -16,23 +25,19 @@ export class StorageBrainError extends Error {
 /**
  * Authentication error - invalid or missing API key
  */
-export class AuthenticationError extends StorageBrainError {
-  constructor(message = 'Authentication failed') {
-    super(message, 'AUTHENTICATION_ERROR', 401);
-    this.name = 'AuthenticationError';
-  }
-}
+export class AuthenticationError extends BaseAuthenticationError {}
 
 /**
  * Quota exceeded error
  */
-export class QuotaExceededError extends StorageBrainError {
+export class QuotaExceededError extends BaseQuotaExceededError {
   constructor(
     message = 'Storage quota exceeded',
     public quotaBytes?: number,
     public usedBytes?: number
   ) {
-    super(message, 'QUOTA_EXCEEDED', 403, { quotaBytes, usedBytes });
+    super(message);
+    this.details = { quotaBytes, usedBytes };
     this.name = 'QuotaExceededError';
   }
 }
@@ -76,9 +81,10 @@ export class FileTooLargeError extends StorageBrainError {
 /**
  * File not found error
  */
-export class FileNotFoundError extends StorageBrainError {
+export class FileNotFoundError extends BaseNotFoundError {
   constructor(fileId: string) {
-    super(`File not found: ${fileId}`, 'FILE_NOT_FOUND', 404, { fileId });
+    super(`File not found: ${fileId}`);
+    this.details = { fileId };
     this.name = 'FileNotFoundError';
   }
 }
@@ -86,12 +92,7 @@ export class FileNotFoundError extends StorageBrainError {
 /**
  * Network error - connection issues
  */
-export class NetworkError extends StorageBrainError {
-  constructor(message = 'Network error occurred', public originalError?: Error) {
-    super(message, 'NETWORK_ERROR', undefined, { originalError: originalError?.message });
-    this.name = 'NetworkError';
-  }
-}
+export class NetworkError extends BaseNetworkError {}
 
 /**
  * Upload error - file upload failed
@@ -106,15 +107,7 @@ export class UploadError extends StorageBrainError {
 /**
  * Validation error - request validation failed
  */
-export class ValidationError extends StorageBrainError {
-  constructor(
-    message: string,
-    public errors?: Array<{ path: string; message: string }>
-  ) {
-    super(message, 'VALIDATION_ERROR', 400, { errors });
-    this.name = 'ValidationError';
-  }
-}
+export class ValidationError extends BaseValidationError {}
 
 /**
  * Parse API error response into appropriate error class
@@ -127,7 +120,7 @@ export function parseApiError(
 
   switch (code) {
     case 'UNAUTHORIZED':
-      return new AuthenticationError(message);
+      return new AuthenticationError(message) as unknown as StorageBrainError;
     case 'QUOTA_EXCEEDED':
       return new QuotaExceededError(
         message,
@@ -146,12 +139,12 @@ export function parseApiError(
       );
     case 'FILE_NOT_FOUND':
     case 'NOT_FOUND':
-      return new FileNotFoundError(details?.fileId as string ?? 'unknown');
+      return new FileNotFoundError(details?.fileId as string ?? 'unknown') as unknown as StorageBrainError;
     case 'VALIDATION_ERROR':
       return new ValidationError(
         message ?? 'Validation failed',
         details?.errors as Array<{ path: string; message: string }>
-      );
+      ) as unknown as StorageBrainError;
     default:
       return new StorageBrainError(
         message ?? 'An error occurred',

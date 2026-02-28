@@ -1,3 +1,6 @@
+// Re-export shared constants from brain-core
+export { API_KEY_PREFIX_LIVE, API_KEY_PREFIX_TEST, RETRY_CONFIG } from '@marlinjai/brain-core';
+
 /**
  * Allowed MIME types for file uploads
  */
@@ -36,12 +39,6 @@ export const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100MB per file
 export const PRESIGNED_URL_EXPIRATION_SECONDS = 15 * 60; // 15 minutes
 
 /**
- * API key prefixes
- */
-export const API_KEY_PREFIX_LIVE = 'sk_live_';
-export const API_KEY_PREFIX_TEST = 'sk_test_';
-
-/**
  * Upload session statuses
  */
 export const UPLOAD_SESSION_STATUSES = ['pending', 'completed', 'expired', 'failed'] as const;
@@ -57,13 +54,3 @@ export type ProcessingStatus = (typeof PROCESSING_STATUSES)[number];
  * Rate limiting
  */
 export const DEFAULT_RATE_LIMIT_PER_MINUTE = 100;
-
-/**
- * Retry configuration
- */
-export const RETRY_CONFIG = {
-  maxAttempts: 3,
-  initialDelayMs: 1000,
-  maxDelayMs: 10000,
-  backoffMultiplier: 2,
-} as const;
