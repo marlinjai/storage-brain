@@ -2,7 +2,7 @@
 title: Storage Brain
 description: Edge-native file storage service with multi-tenant workspaces
 order: 0
-icon: hard-drive
+icon: "💾"
 ---
 
 # Storage Brain

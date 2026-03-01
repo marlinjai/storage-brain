@@ -2,7 +2,7 @@
 title: API Reference
 description: Complete REST API endpoint documentation
 order: 3
-icon: code
+icon: "💻"
 ---
 
 # API Reference

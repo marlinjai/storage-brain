@@ -2,7 +2,7 @@
 title: Architecture
 description: System architecture and design overview
 order: 2
-icon: layers
+icon: "🏗️"
 ---
 
 # Architecture

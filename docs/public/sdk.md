@@ -2,7 +2,7 @@
 title: SDK Guide
 description: TypeScript SDK usage and reference
 order: 4
-icon: package
+icon: "📦"
 ---
 
 # SDK Guide
