@@ -176,3 +176,72 @@ docker-compose.yml
 ```
 
 Environment variables configure the S3 endpoint, credentials, database URL, and admin API key.
+
+## BYOS -- Bring Your Own Storage
+
+Enterprise customers on the **Cloud Team** tier can connect their own storage bucket while still using the Lumitra Cloud-hosted Storage Brain API. Files never touch Lumitra infrastructure -- presigned URLs route uploads and downloads directly to the customer's bucket.
+
+### How It Works
+
+```
+Client App → Storage Brain Cloud API → Auth middleware → Resolve tenant
+                                                             |
+                                             ┌───────────────┴───────────────┐
+                                             |                               |
+                                       tenant.storageConfig            No custom config
+                                       is set                          (default)
+                                             |                               |
+                                       Decrypt credentials             Use managed R2
+                                             |
+                                       S3StorageAdapter / GCSStorageAdapter
+                                             |
+                                       Customer's S3/GCS/MinIO Bucket
+```
+
+### Per-Tenant Storage Adapter Resolution
+
+The adapter resolution pattern checks each tenant's configuration at request time:
+
+```typescript
+async function getStorageAdapter(tenant: Tenant): Promise<StorageAdapter> {
+  if (tenant.storageConfig) {
+    // BYOS tenant -- decrypt their credentials, instantiate provider adapter
+    const config = await decrypt(tenant.storageConfig, env.ENCRYPTION_KEY);
+    switch (config.provider) {
+      case 's3': return new S3StorageAdapter(config);
+      case 'gcs': return new GCSStorageAdapter(config);
+      case 'r2': return new R2StorageAdapter(config);
+    }
+  }
+  // Default: use managed R2
+  return new R2StorageAdapter(env.BUCKET);
+}
+```
+
+### Supported Storage Providers
+
+| Provider | Config Required |
+|----------|----------------|
+| **AWS S3** | bucket, region, accessKeyId, secretAccessKey |
+| **Cloudflare R2** | bucket, accountId, accessKeyId, secretAccessKey |
+| **MinIO** | bucket, endpoint, accessKeyId, secretAccessKey |
+| **Google Cloud Storage** | bucket, credentials (service account JSON) |
+| **DigitalOcean Spaces** | bucket, region, endpoint, accessKeyId, secretAccessKey |
+
+### Key Properties
+
+- **Presigned URLs** -- Upload and download URLs point directly to the customer's bucket; file bytes never pass through Lumitra servers
+- **Metadata stays managed** -- File records (name, size, type, tags) are stored in Lumitra's D1 database; only the binary objects live on the customer's storage
+- **Same SDK, same API** -- BYOS is transparent to client applications; only the storage backend changes
+- **Encrypted credentials** -- Customer credentials are encrypted at rest using Workers KMS, decrypted only at request time
+- **Connection validation** -- A HEAD request against the bucket verifies access before credentials are saved
+
+### Relationship to Data Brain BYOS
+
+Storage Brain BYOS and Data Brain BYOS share the same architectural patterns:
+- Per-tenant adapter resolution at request time
+- Encrypted credential storage with the same KMS infrastructure
+- Dashboard UI for configuration and credential rotation
+- Both included in the Cloud Team tier ($29/mo)
+
+Together, they form the complete BYOS platform: enterprise customers can keep both files and structured data on their own infrastructure while using the managed Lumitra Cloud APIs.
