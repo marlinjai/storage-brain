@@ -15,7 +15,7 @@ TypeScript SDK for **Storage Brain** — a multi-tenant file storage service. Wo
 ## Installation
 
 ```bash
-npm install @marlinjai/storage-brain-sdk
+pnpm add @marlinjai/storage-brain-sdk
 ```
 
 ## Quick Start

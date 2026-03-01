@@ -26,7 +26,7 @@ Save the `apiKey` from the response — you'll use it with the SDK.
 ## Use the SDK
 
 ```bash
-npm install @marlinjai/storage-brain-sdk
+pnpm add @marlinjai/storage-brain-sdk
 ```
 
 ```typescript

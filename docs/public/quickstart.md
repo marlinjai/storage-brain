@@ -17,7 +17,7 @@ Get up and running with Storage Brain in minutes.
 ## Install the SDK
 
 ```bash
-npm install @marlinjai/storage-brain-sdk
+pnpm add @marlinjai/storage-brain-sdk
 ```
 
 ## Upload Your First File

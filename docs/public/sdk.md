@@ -12,7 +12,7 @@ The Storage Brain TypeScript SDK provides a type-safe client for uploading files
 ## Installation
 
 ```bash
-npm install @marlinjai/storage-brain-sdk
+pnpm add @marlinjai/storage-brain-sdk
 ```
 
 The SDK ships ESM and CommonJS builds with full TypeScript type definitions.
