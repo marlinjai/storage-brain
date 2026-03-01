@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- S3-compatible storage adapter and PostgreSQL adapter for self-hosting
+- Node.js self-hosting support with Docker
+
+### Changed
+- Migrated shared infrastructure (auth, crypto, errors, types) to `@marlinjai/brain-core`
+
+### Fixed
+- Inject env bindings in Node.js mode for self-hosting compatibility
+
 ## [0.5.0] - 2026-02-20
 
 ### Added
@@ -20,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 - Admin routes reordered before tenant-auth routes to prevent auth interception
+- Include `workspaceId` in webhook payloads
 
 ## [0.4.0] - 2026-02-19
 

@@ -4,6 +4,8 @@ export default defineConfig({
   name: 'Storage Brain',
   siteUrl: 'https://storage-brain-docs.lumitra.co',
   hubProject: {
+    hubUrl: 'https://docs.lumitra.co',
+    hubName: 'ERP Suite',
     name: 'Storage Brain',
     description: 'File storage & processing with multi-tenant workspaces',
     status: 'active',
