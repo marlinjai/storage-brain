@@ -3,9 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "description": "Edge-native file storage micro-product built on Cloudflare Workers",
-  "workspaces": [
-    "packages/*"
-  ],
   "scripts": {
     "dev": "pnpm --filter @storage-brain/api dev",
     "dev:sdk": "pnpm --filter @marlinjai/storage-brain-sdk dev",
@@ -19,8 +16,8 @@
     "test": "pnpm -r --if-present run test",
     "clean": "rm -rf packages/*/dist packages/*/.wrangler",
     "publish:sdk": "pnpm --filter @marlinjai/storage-brain-sdk build && pnpm --filter @marlinjai/storage-brain-sdk publish --access public",
-    "docs:dev": "npx clearify dev",
-    "docs:build": "npx clearify build"
+    "docs:dev": "clearify dev",
+    "docs:build": "clearify build"
   },
   "devDependencies": {
     "@marlinjai/clearify": "^1.8.0",
@@ -33,5 +30,6 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "packageManager": "pnpm@9.15.0"
 }

@@ -110,7 +110,7 @@ Base URL: `https://storage-brain-api.marlin-pohl.workers.dev` (managed) or `http
 ### Install
 
 ```bash
-npm install @marlinjai/storage-brain-sdk
+pnpm add @marlinjai/storage-brain-sdk
 ```
 
 ### Create a Client

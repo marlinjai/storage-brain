@@ -19,7 +19,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@marlinjai/brain-core": "file:../../../brain-core",
+    "@marlinjai/brain-core": "^0.1.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {

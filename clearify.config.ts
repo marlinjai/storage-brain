@@ -9,6 +9,7 @@ export default defineConfig({
     status: 'active',
     icon: '📦',
     tags: ['api', 'storage', 'cloudflare'],
+    group: 'Lumitra Infrastructure',
   },
   sections: [
     { label: 'Documentation', docsDir: './docs/public' },
