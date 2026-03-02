@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 - Migrated shared infrastructure (auth, crypto, errors, types) to `@marlinjai/brain-core`
+- Docs hub backlink now points to Lumitra Cloud (`docs.cloud.lumitra.co`) instead of ERP Suite root
 
 ### Fixed
 - Inject env bindings in Node.js mode for self-hosting compatibility
