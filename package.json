@@ -13,7 +13,8 @@
     "format": "prettier --write \"packages/*/src/**/*.ts\"",
     "format:check": "prettier --check \"packages/*/src/**/*.ts\"",
     "typecheck": "pnpm -r --if-present run typecheck",
-    "test": "pnpm -r --if-present run test",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "clean": "rm -rf packages/*/dist packages/*/.wrangler",
     "publish:sdk": "pnpm --filter @marlinjai/storage-brain-sdk build && pnpm --filter @marlinjai/storage-brain-sdk publish --access public",
     "docs:dev": "clearify dev",
@@ -26,7 +27,8 @@
     "@typescript-eslint/parser": "^6.19.0",
     "eslint": "^8.56.0",
     "prettier": "^3.2.4",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=18.0.0"

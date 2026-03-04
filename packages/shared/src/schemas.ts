@@ -68,6 +68,25 @@ export const createTenantSchema = z.object({
 export type CreateTenantSchema = z.infer<typeof createTenantSchema>;
 
 /**
+ * Tenant update (admin)
+ */
+export const updateTenantSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  quotaBytes: z.number().int().positive().optional(),
+  allowedFileTypes: z.array(fileTypeSchema).nullable().optional(),
+});
+
+export type UpdateTenantSchema = z.infer<typeof updateTenantSchema>;
+
+/**
+ * List tenants query (admin)
+ */
+export const listTenantsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  cursor: z.string().optional(),
+});
+
+/**
  * Webhook payload validation
  */
 export const webhookPayloadSchema = z.object({

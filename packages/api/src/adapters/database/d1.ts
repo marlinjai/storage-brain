@@ -13,12 +13,15 @@ import type {
   UploadSession,
   Workspace,
   ListFilesInput,
+  ListTenantsInput,
+  ListTenantsResult,
+  UpdateTenantInput,
   QuotaResponse,
   AllowedMimeType,
   UploadSessionStatus,
   ProcessingStatus,
 } from '@storage-brain/shared';
-import { verifyApiKey } from '../../utils/crypto';
+import { hashApiKey, verifyApiKey } from '../../utils/crypto';
 
 export class D1DatabaseAdapter implements DatabaseAdapter {
   constructor(private db: D1Database) {}
@@ -47,17 +50,17 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
   }
 
   async getTenantByApiKey(apiKey: string): Promise<Tenant | null> {
-    const results = await this.db.prepare('SELECT * FROM tenants').all();
+    const apiKeyHash = await hashApiKey(apiKey);
+    const result = await this.db
+      .prepare('SELECT * FROM tenants WHERE api_key_hash = ?')
+      .bind(apiKeyHash)
+      .first();
 
-    for (const row of results.results) {
-      const tenant = this.mapTenantRow(row);
-      const isValid = await verifyApiKey(apiKey, tenant.apiKeyHash);
-      if (isValid) {
-        return tenant;
-      }
-    }
+    if (!result) return null;
 
-    return null;
+    const tenant = this.mapTenantRow(result);
+    const isValid = await verifyApiKey(apiKey, tenant.apiKeyHash);
+    return isValid ? tenant : null;
   }
 
   async getTenantByName(name: string): Promise<Tenant | null> {
@@ -74,6 +77,102 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     const result = await this.db
       .prepare('UPDATE tenants SET api_key_hash = ?, updated_at = ? WHERE id = ?')
       .bind(newHash, Date.now(), tenantId)
+      .run();
+
+    return (result.meta.changes ?? 0) > 0;
+  }
+
+  async listTenants(input: ListTenantsInput): Promise<ListTenantsResult> {
+    const { limit = 20, cursor } = input;
+
+    const conditions: string[] = [];
+    const params: (string | number)[] = [];
+
+    if (cursor) {
+      try {
+        const cursorTimestamp = parseInt(atob(cursor), 10);
+        conditions.push('created_at < ?');
+        params.push(cursorTimestamp);
+      } catch {
+        // Invalid cursor, ignore
+      }
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countResult = await this.db
+      .prepare(`SELECT COUNT(*) as count FROM tenants ${whereClause}`)
+      .bind(...params)
+      .first<{ count: number }>();
+    const total = countResult?.count ?? 0;
+
+    const tenantsResult = await this.db
+      .prepare(`SELECT * FROM tenants ${whereClause} ORDER BY created_at DESC LIMIT ?`)
+      .bind(...params, limit + 1)
+      .all();
+
+    const tenants = tenantsResult.results.map((row) => this.mapTenantRow(row));
+    const hasMore = tenants.length > limit;
+    if (hasMore) tenants.pop();
+
+    const lastTenant = tenants[tenants.length - 1];
+    const nextCursor = hasMore && lastTenant ? btoa(lastTenant.createdAt.toString()) : null;
+
+    return { tenants, nextCursor, total };
+  }
+
+  async updateTenant(tenantId: string, updates: UpdateTenantInput): Promise<Tenant | null> {
+    const now = Date.now();
+    const setClauses: string[] = ['updated_at = ?'];
+    const params: (string | number | null)[] = [now];
+
+    if (updates.name !== undefined) {
+      setClauses.push('name = ?');
+      params.push(updates.name);
+    }
+
+    if (updates.quotaBytes !== undefined) {
+      setClauses.push('quota_bytes = ?');
+      params.push(updates.quotaBytes);
+    }
+
+    if (updates.allowedFileTypes !== undefined) {
+      setClauses.push('allowed_file_types = ?');
+      params.push(updates.allowedFileTypes ? JSON.stringify(updates.allowedFileTypes) : null);
+    }
+
+    params.push(tenantId);
+
+    await this.db
+      .prepare(`UPDATE tenants SET ${setClauses.join(', ')} WHERE id = ?`)
+      .bind(...params)
+      .run();
+
+    return this.getTenantById(tenantId);
+  }
+
+  async deleteTenant(tenantId: string): Promise<boolean> {
+    // Delete in order: upload_sessions → files → workspaces → tenant
+    await this.db
+      .prepare(
+        'DELETE FROM upload_sessions WHERE file_id IN (SELECT id FROM files WHERE tenant_id = ?)'
+      )
+      .bind(tenantId)
+      .run();
+
+    await this.db
+      .prepare('DELETE FROM files WHERE tenant_id = ?')
+      .bind(tenantId)
+      .run();
+
+    await this.db
+      .prepare('DELETE FROM workspaces WHERE tenant_id = ?')
+      .bind(tenantId)
+      .run();
+
+    const result = await this.db
+      .prepare('DELETE FROM tenants WHERE id = ?')
+      .bind(tenantId)
       .run();
 
     return (result.meta.changes ?? 0) > 0;

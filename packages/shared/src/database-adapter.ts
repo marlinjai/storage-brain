@@ -67,6 +67,23 @@ export interface CreateUploadSessionInput {
   expiresAt: number;
 }
 
+export interface ListTenantsInput {
+  cursor?: string;
+  limit?: number;
+}
+
+export interface ListTenantsResult {
+  tenants: Tenant[];
+  nextCursor: string | null;
+  total: number;
+}
+
+export interface UpdateTenantInput {
+  name?: string;
+  quotaBytes?: number;
+  allowedFileTypes?: AllowedMimeType[] | null;
+}
+
 export interface DatabaseAdapter {
   // Tenant
   createTenant(input: CreateTenantInput): Promise<void>;
@@ -74,6 +91,9 @@ export interface DatabaseAdapter {
   getTenantByName(name: string): Promise<Tenant | null>;
   getTenantById(id: string): Promise<Tenant | null>;
   updateTenantApiKeyHash(tenantId: string, newHash: string): Promise<boolean>;
+  listTenants(input: ListTenantsInput): Promise<ListTenantsResult>;
+  updateTenant(tenantId: string, updates: UpdateTenantInput): Promise<Tenant | null>;
+  deleteTenant(tenantId: string): Promise<boolean>;
 
   // Files
   createFile(input: CreateFileInput): Promise<void>;

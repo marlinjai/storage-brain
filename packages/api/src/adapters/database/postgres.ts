@@ -16,12 +16,15 @@ import type {
   UploadSession,
   Workspace,
   ListFilesInput,
+  ListTenantsInput,
+  ListTenantsResult,
+  UpdateTenantInput,
   QuotaResponse,
   AllowedMimeType,
   UploadSessionStatus,
   ProcessingStatus,
 } from '@storage-brain/shared';
-import { verifyApiKey } from '../../utils/crypto';
+import { hashApiKey, verifyApiKey } from '../../utils/crypto';
 
 export interface PostgresAdapterConfig {
   connectionString: string;
@@ -56,15 +59,15 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
   }
 
   async getTenantByApiKey(apiKey: string): Promise<Tenant | null> {
-    const rows = await this.sql`SELECT * FROM tenants`;
+    const apiKeyHash = await hashApiKey(apiKey);
+    const rows = await this.sql`SELECT * FROM tenants WHERE api_key_hash = ${apiKeyHash}`;
 
-    for (const row of rows) {
-      const tenant = this.mapTenantRow(row);
-      const isValid = await verifyApiKey(apiKey, tenant.apiKeyHash);
-      if (isValid) return tenant;
-    }
+    const row = rows[0];
+    if (!row) return null;
 
-    return null;
+    const tenant = this.mapTenantRow(row);
+    const isValid = await verifyApiKey(apiKey, tenant.apiKeyHash);
+    return isValid ? tenant : null;
   }
 
   async getTenantByName(name: string): Promise<Tenant | null> {
@@ -84,6 +87,86 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     const result = await this.sql`
       UPDATE tenants SET api_key_hash = ${newHash}, updated_at = ${now} WHERE id = ${tenantId}
     `;
+    return result.count > 0;
+  }
+
+  async listTenants(input: ListTenantsInput): Promise<ListTenantsResult> {
+    const { limit = 20, cursor } = input;
+
+    if (cursor) {
+      let cursorTimestamp: number;
+      try {
+        cursorTimestamp = parseInt(atob(cursor), 10);
+      } catch {
+        // Invalid cursor — fall through without filter
+        cursorTimestamp = 0;
+      }
+
+      if (cursorTimestamp > 0) {
+        const countRows = await this.sql`SELECT COUNT(*)::int as count FROM tenants WHERE created_at < ${cursorTimestamp}`;
+        const total = (countRows[0]?.count as number) ?? 0;
+
+        const tenantRows = await this.sql`
+          SELECT * FROM tenants WHERE created_at < ${cursorTimestamp} ORDER BY created_at DESC LIMIT ${limit + 1}
+        `;
+
+        const tenants = tenantRows.map((row) => this.mapTenantRow(row));
+        const hasMore = tenants.length > limit;
+        if (hasMore) tenants.pop();
+
+        const lastTenant = tenants[tenants.length - 1];
+        const nextCursor = hasMore && lastTenant ? btoa(lastTenant.createdAt.toString()) : null;
+
+        return { tenants, nextCursor, total };
+      }
+    }
+
+    const countRows = await this.sql`SELECT COUNT(*)::int as count FROM tenants`;
+    const total = (countRows[0]?.count as number) ?? 0;
+
+    const tenantRows = await this.sql`
+      SELECT * FROM tenants ORDER BY created_at DESC LIMIT ${limit + 1}
+    `;
+
+    const tenants = tenantRows.map((row) => this.mapTenantRow(row));
+    const hasMore = tenants.length > limit;
+    if (hasMore) tenants.pop();
+
+    const lastTenant = tenants[tenants.length - 1];
+    const nextCursor = hasMore && lastTenant ? btoa(lastTenant.createdAt.toString()) : null;
+
+    return { tenants, nextCursor, total };
+  }
+
+  async updateTenant(tenantId: string, updates: UpdateTenantInput): Promise<Tenant | null> {
+    const now = Date.now();
+    const sets: postgres.PendingQuery<postgres.Row[]>[] = [
+      this.sql`updated_at = ${now}`,
+    ];
+
+    if (updates.name !== undefined) sets.push(this.sql`name = ${updates.name}`);
+    if (updates.quotaBytes !== undefined) sets.push(this.sql`quota_bytes = ${updates.quotaBytes}`);
+    if (updates.allowedFileTypes !== undefined) {
+      sets.push(this.sql`allowed_file_types = ${updates.allowedFileTypes ? JSON.stringify(updates.allowedFileTypes) : null}`);
+    }
+
+    const setClause = sets.reduce((acc, s) => this.sql`${acc}, ${s}`);
+
+    await this.sql`UPDATE tenants SET ${setClause} WHERE id = ${tenantId}`;
+
+    return this.getTenantById(tenantId);
+  }
+
+  async deleteTenant(tenantId: string): Promise<boolean> {
+    // Delete in order: upload_sessions → files → workspaces → tenant
+    await this.sql`
+      DELETE FROM upload_sessions WHERE file_id IN (SELECT id FROM files WHERE tenant_id = ${tenantId})
+    `;
+
+    await this.sql`DELETE FROM files WHERE tenant_id = ${tenantId}`;
+    await this.sql`DELETE FROM workspaces WHERE tenant_id = ${tenantId}`;
+
+    const result = await this.sql`DELETE FROM tenants WHERE id = ${tenantId}`;
     return result.count > 0;
   }
 

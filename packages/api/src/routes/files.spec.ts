@@ -1,0 +1,198 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createApp } from '../app';
+import type { StorageAdapter, DatabaseAdapter, Tenant, StoredFile } from '@storage-brain/shared';
+
+const TENANT_ID = '550e8400-e29b-41d4-a716-446655440000';
+const FILE_ID = '660e8400-e29b-41d4-a716-446655440001';
+
+const ENV = {
+  ENVIRONMENT: 'development' as const,
+  URL_SIGNING_SECRET: 'test-secret',
+  DB: {} as never,
+  BUCKET: {} as never,
+};
+
+const mockTenant: Tenant = {
+  id: TENANT_ID,
+  name: 'test-tenant',
+  apiKeyHash: 'hashed',
+  quotaBytes: 500 * 1024 * 1024,
+  usedBytes: 1000,
+  allowedFileTypes: null,
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+};
+
+const mockFile: StoredFile = {
+  id: FILE_ID,
+  tenantId: TENANT_ID,
+  workspaceId: null,
+  originalName: 'photo.png',
+  storedPath: `tenants/${TENANT_ID}/files/${FILE_ID}/photo.png`,
+  fileType: 'image/png',
+  sizeBytes: 2048,
+  context: 'uploads',
+  tags: { category: 'photo' },
+  metadata: null,
+  processingStatus: 'completed',
+  webhookUrl: null,
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+  deletedAt: null,
+};
+
+function createMockDb() {
+  return {
+    createTenant: vi.fn(),
+    getTenantByApiKey: vi.fn().mockResolvedValue(mockTenant),
+    getTenantByName: vi.fn(),
+    getTenantById: vi.fn(),
+    updateTenantApiKeyHash: vi.fn(),
+    createFile: vi.fn(),
+    getFileById: vi.fn().mockResolvedValue(mockFile),
+    getFileByIdUnscoped: vi.fn().mockResolvedValue(mockFile),
+    getFileByStoredPath: vi.fn(),
+    listFilesByTenant: vi.fn().mockResolvedValue({ files: [mockFile], nextCursor: null, total: 1 }),
+    softDeleteFile: vi.fn(),
+    updateFileMetadata: vi.fn(),
+    updateFileProcessingStatus: vi.fn(),
+    updateFileSizeBytes: vi.fn(),
+    createWorkspace: vi.fn(),
+    getWorkspaceById: vi.fn(),
+    listWorkspacesByTenant: vi.fn(),
+    updateWorkspace: vi.fn(),
+    deleteWorkspace: vi.fn(),
+    getActiveFilesByWorkspace: vi.fn(),
+    softDeleteFilesByWorkspace: vi.fn(),
+    createUploadSession: vi.fn(),
+    getUploadSessionByFileId: vi.fn(),
+    updateUploadSessionStatus: vi.fn(),
+    checkQuota: vi.fn().mockResolvedValue({ hasCapacity: true, quotaBytes: 500 * 1024 * 1024, usedBytes: 0, availableBytes: 500 * 1024 * 1024 }),
+    reserveQuota: vi.fn(),
+    releaseQuota: vi.fn(),
+    getQuotaUsage: vi.fn().mockResolvedValue({ quotaBytes: 500 * 1024 * 1024, usedBytes: 0, availableBytes: 500 * 1024 * 1024, usagePercent: 0 }),
+    recalculateQuota: vi.fn(),
+    checkWorkspaceQuota: vi.fn(),
+    reserveWorkspaceQuota: vi.fn(),
+    releaseWorkspaceQuota: vi.fn(),
+    migrate: vi.fn(),
+  };
+}
+
+function createMockStorage(): StorageAdapter {
+  return {
+    put: vi.fn(),
+    get: vi.fn().mockResolvedValue({
+      body: new ReadableStream(),
+      contentType: 'image/png',
+      size: 2048,
+    }),
+    delete: vi.fn(),
+    exists: vi.fn(),
+    head: vi.fn(),
+  };
+}
+
+describe('file routes', () => {
+  let db: ReturnType<typeof createMockDb>;
+  let storage: ReturnType<typeof createMockStorage>;
+  let app: ReturnType<typeof createApp>;
+
+  beforeEach(() => {
+    db = createMockDb();
+    storage = createMockStorage();
+    app = createApp({
+      db: db as unknown as DatabaseAdapter,
+      storage: storage as unknown as StorageAdapter,
+    });
+  });
+
+  describe('GET /api/v1/files', () => {
+    it('returns file list for authenticated tenant', async () => {
+      const res = await app.request('/api/v1/files', {
+        headers: { Authorization: 'Bearer sk_live_test123' },
+      }, ENV);
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.files).toHaveLength(1);
+      expect(body.files[0].id).toBe(FILE_ID);
+      expect(body.total).toBe(1);
+    });
+
+    it('returns 401 without auth header', async () => {
+      const res = await app.request('/api/v1/files', {}, ENV);
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 401 with invalid auth format', async () => {
+      const res = await app.request('/api/v1/files', {
+        headers: { Authorization: 'Basic invalid' },
+      }, ENV);
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 401 when tenant not found', async () => {
+      db.getTenantByApiKey.mockResolvedValueOnce(null);
+
+      const res = await app.request('/api/v1/files', {
+        headers: { Authorization: 'Bearer sk_live_test123' },
+      }, ENV);
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('GET /api/v1/files/:fileId', () => {
+    it('returns file info', async () => {
+      const res = await app.request(`/api/v1/files/${FILE_ID}`, {
+        headers: { Authorization: 'Bearer sk_live_test123' },
+      }, ENV);
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.id).toBe(FILE_ID);
+      expect(body.originalName).toBe('photo.png');
+    });
+
+    it('returns 404 when file not found', async () => {
+      db.getFileById.mockResolvedValueOnce(null);
+
+      const res = await app.request(`/api/v1/files/${FILE_ID}`, {
+        headers: { Authorization: 'Bearer sk_live_test123' },
+      }, ENV);
+      expect(res.status).toBe(404);
+    });
+
+    it('scopes file lookup to tenant', async () => {
+      await app.request(`/api/v1/files/${FILE_ID}`, {
+        headers: { Authorization: 'Bearer sk_live_test123' },
+      }, ENV);
+
+      expect(db.getFileById).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
+    });
+  });
+
+  describe('DELETE /api/v1/files/:fileId', () => {
+    it('soft deletes a file', async () => {
+      const res = await app.request(`/api/v1/files/${FILE_ID}`, {
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer sk_live_test123' },
+      }, ENV);
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+      expect(db.softDeleteFile).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
+    });
+
+    it('returns 404 if file not found', async () => {
+      db.getFileById.mockResolvedValueOnce(null);
+
+      const res = await app.request(`/api/v1/files/${FILE_ID}`, {
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer sk_live_test123' },
+      }, ENV);
+      expect(res.status).toBe(404);
+    });
+  });
+});
