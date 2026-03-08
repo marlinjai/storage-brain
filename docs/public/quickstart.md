@@ -3,6 +3,11 @@ title: Quick Start
 description: Get started with Storage Brain
 order: 1
 icon: "🚀"
+summary: Quick start guide for getting up and running with Storage Brain in minutes, covering SDK installation, API key setup, and first file upload.
+category: documentation
+tags: [storage-brain, quickstart, getting-started, sdk]
+projects: [storage-brain]
+status: active
 ---
 
 # Quick Start

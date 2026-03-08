@@ -3,6 +3,11 @@ title: Storage Brain
 description: Edge-native file storage service with multi-tenant workspaces
 order: 0
 icon: "💾"
+summary: Landing page for Storage Brain documentation, an edge-native file storage service built on Cloudflare Workers, R2, and D1 with multi-tenant workspaces and a self-hosting path via Docker.
+category: documentation
+tags: [storage-brain, index, file-storage, cloudflare]
+projects: [storage-brain]
+status: active
 ---
 
 # Storage Brain

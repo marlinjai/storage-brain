@@ -3,6 +3,11 @@ title: API Reference
 description: Complete REST API endpoint documentation
 order: 3
 icon: "💻"
+summary: Complete REST API endpoint documentation for Storage Brain, covering file upload, download, signed URLs, workspace management, and admin tenant operations.
+category: documentation
+tags: [storage-brain, api-reference, rest, endpoints]
+projects: [storage-brain]
+status: active
 ---
 
 # API Reference

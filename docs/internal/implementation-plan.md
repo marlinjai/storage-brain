@@ -2,6 +2,11 @@
 title: Implementation Plan
 description: Phase-by-phase execution guide
 order: 3
+summary: Phase-by-phase execution guide for implementing Storage Brain, with all decisions finalized and ready for execution.
+category: internal
+tags: [storage-brain, implementation, phases, execution]
+projects: [storage-brain]
+status: active
 ---
 
 # Implementation Plan: Storage Brain

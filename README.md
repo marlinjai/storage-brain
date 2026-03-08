@@ -1,3 +1,12 @@
+---
+title: Storage Brain
+summary: README for Storage Brain, a multi-tenant file storage service with pluggable storage (R2/S3) and database (D1/Postgres) backends, presigned URL uploads, workspace isolation, and a TypeScript SDK published on npm.
+category: documentation
+tags: [storage-brain, file-storage, cloudflare, multi-tenant, sdk]
+status: active
+date: 2026-01-11
+---
+
 # Storage Brain
 
 Multi-tenant file storage service with pluggable storage and database backends. Deploy on Cloudflare Workers (R2 + D1) or self-host with Docker (S3 + Postgres). Ships with a TypeScript SDK published as `@marlinjai/storage-brain-sdk`.

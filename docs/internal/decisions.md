@@ -2,6 +2,11 @@
 title: Decisions
 description: Architectural rationale for key design choices
 order: 4
+summary: Record of key architectural decisions made during Storage Brain planning, with rationale for technology choices, API design, and storage patterns.
+category: decision
+tags: [storage-brain, architecture-decisions, adr, rationale]
+projects: [storage-brain]
+status: active
 ---
 
 # Architecture Decisions & Rationale

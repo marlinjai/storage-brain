@@ -1,3 +1,12 @@
+---
+title: Storage Brain SDK
+summary: README for the Storage Brain TypeScript SDK providing file upload, download, listing, signed URLs, workspace management, progress tracking, and automatic retries with zero dependencies.
+category: documentation
+tags: [storage-brain, sdk, typescript, file-storage, npm]
+status: active
+date: 2026-02-20
+---
+
 # @marlinjai/storage-brain-sdk
 
 TypeScript SDK for **Storage Brain** — a multi-tenant file storage service. Works with the managed Cloudflare Workers deployment and self-hosted (Docker + S3 + Postgres) instances.
