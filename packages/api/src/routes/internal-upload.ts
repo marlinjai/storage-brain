@@ -75,7 +75,7 @@ internalUploadRoutes.put('/upload/*', async (c) => {
     if (updatedFile) {
       const fileResponse: FileResponse = {
         id: updatedFile.id,
-        url: `/api/v1/files/download/${encodeURIComponent(updatedFile.storedPath)}`,
+        url: `/api/v1/files/${updatedFile.id}/download`,
         originalName: updatedFile.originalName,
         fileType: updatedFile.fileType,
         sizeBytes: updatedFile.sizeBytes,

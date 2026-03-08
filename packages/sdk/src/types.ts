@@ -175,8 +175,8 @@ export interface Workspace {
   quotaBytes: number | null;
   usedBytes: number;
   metadata: Record<string, unknown> | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 /**

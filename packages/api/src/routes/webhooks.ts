@@ -64,7 +64,7 @@ webhookRoutes.post('/r2-upload-complete', async (c) => {
   if (file.webhookUrl) {
     const fileResponse: FileResponse = {
       id: file.id,
-      url: `/api/v1/files/download/${encodeURIComponent(file.storedPath)}`,
+      url: `/api/v1/files/${file.id}/download`,
       originalName: file.originalName,
       fileType: file.fileType,
       sizeBytes: file.sizeBytes,
