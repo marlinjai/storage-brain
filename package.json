@@ -18,14 +18,18 @@
     "clean": "rm -rf packages/*/dist packages/*/.wrangler",
     "publish:sdk": "pnpm --filter @marlinjai/storage-brain-sdk build && pnpm --filter @marlinjai/storage-brain-sdk publish --access public",
     "docs:dev": "clearify dev",
-    "docs:build": "clearify build"
+    "docs:build": "clearify build",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.4.3",
+    "@commitlint/config-conventional": "^20.4.3",
     "@marlinjai/clearify": "^1.11.0",
     "@types/node": "^20.11.0",
     "@typescript-eslint/eslint-plugin": "^6.19.0",
     "@typescript-eslint/parser": "^6.19.0",
     "eslint": "^8.56.0",
+    "husky": "^9.1.7",
     "prettier": "^3.2.4",
     "typescript": "^5.3.3",
     "vitest": "^4.0.18"
