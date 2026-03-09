@@ -515,6 +515,151 @@ POST /api/v1/admin/tenants
 **Error Responses:**
 - `409` -- Tenant with that name already exists
 
+### List Tenants
+
+List all tenants with pagination.
+
+```
+GET /api/v1/admin/tenants
+```
+
+**Auth:** Admin API key (Bearer token)
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | number | 20 | Results per page |
+| `cursor` | string | -- | Pagination cursor from previous response |
+
+**Example Response (200):**
+
+```json
+{
+  "tenants": [
+    {
+      "id": "tenant-uuid",
+      "name": "My Application",
+      "quotaBytes": 524288000,
+      "usedBytes": 10485760,
+      "allowedFileTypes": ["image/jpeg", "image/png", "application/pdf"],
+      "createdAt": 1740700000,
+      "updatedAt": 1740700000
+    }
+  ],
+  "nextCursor": null,
+  "total": 1
+}
+```
+
+### Get Tenant
+
+Retrieve details for a specific tenant, including quota usage.
+
+```
+GET /api/v1/admin/tenants/:tenantId
+```
+
+**Auth:** Admin API key (Bearer token)
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `tenantId` | UUID | Tenant identifier |
+
+**Example Response (200):**
+
+```json
+{
+  "id": "tenant-uuid",
+  "name": "My Application",
+  "quotaBytes": 524288000,
+  "usedBytes": 10485760,
+  "allowedFileTypes": ["image/jpeg", "image/png", "application/pdf"],
+  "createdAt": 1740700000,
+  "updatedAt": 1740700000,
+  "quota": {
+    "quotaBytes": 524288000,
+    "usedBytes": 10485760,
+    "availableBytes": 513802240,
+    "usagePercent": 2
+  }
+}
+```
+
+**Error Responses:**
+- `404` -- Tenant not found
+
+### Update Tenant
+
+Update tenant properties (name, quota, allowed file types).
+
+```
+PATCH /api/v1/admin/tenants/:tenantId
+```
+
+**Auth:** Admin API key (Bearer token)
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `tenantId` | UUID | Tenant identifier |
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | No | New tenant name |
+| `quotaBytes` | number | No | New storage quota in bytes |
+| `allowedFileTypes` | string[] or null | No | New allowed MIME types |
+
+**Example Response (200):**
+
+```json
+{
+  "id": "tenant-uuid",
+  "name": "Updated Name",
+  "quotaBytes": 1073741824,
+  "usedBytes": 10485760,
+  "allowedFileTypes": ["image/jpeg", "image/png", "application/pdf"],
+  "createdAt": 1740700000,
+  "updatedAt": 1740800000
+}
+```
+
+**Error Responses:**
+- `404` -- Tenant not found
+- `409` -- Tenant with that name already exists
+
+### Delete Tenant
+
+Delete a tenant and all associated data (files, workspaces, upload sessions). Files are removed from storage on a best-effort basis.
+
+```
+DELETE /api/v1/admin/tenants/:tenantId
+```
+
+**Auth:** Admin API key (Bearer token)
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `tenantId` | UUID | Tenant identifier |
+
+**Example Response (200):**
+
+```json
+{
+  "success": true
+}
+```
+
+**Error Responses:**
+- `404` -- Tenant not found
+
 ### Regenerate API Key
 
 Generate a new API key for an existing tenant. The old key is immediately invalidated.
@@ -562,7 +707,9 @@ GET /health
 
 ```json
 {
-  "status": "ok"
+  "status": "ok",
+  "timestamp": "2026-02-28T10:30:00.000Z",
+  "environment": "production"
 }
 ```
 

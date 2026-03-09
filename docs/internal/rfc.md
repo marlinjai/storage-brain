@@ -6,7 +6,7 @@ summary: Full architecture specification RFC for Storage Brain as an edge-native
 category: internal
 tags: [storage-brain, rfc, specification, architecture]
 projects: [storage-brain]
-status: active
+status: superseded
 ---
 
 # RFC: Storage Brain - Edge-Native File Storage Micro-Product
@@ -311,7 +311,7 @@ CREATE INDEX idx_upload_sessions_expires_at ON upload_sessions(expires_at);
 
 ### 4.1 Authentication
 
-- **API Keys**: Per-tenant API keys (hashed with bcrypt)
+- **API Keys**: Per-tenant API keys (secured via cryptographic hashing (via brain-core))
 - **Key Format**: `sk_live_` or `sk_test_` prefix + random 32 chars
 - **Storage**: Hashed in database, never returned in responses
 
@@ -553,7 +553,7 @@ All clarifying questions have been answered. See [Clarifying Questions](./clarif
 
 **Key Decisions**:
 - **Database**: D1 (edge-native, free tier sufficient)
-- **Authentication**: Simple API keys per tenant (hashed with bcrypt)
+- **Authentication**: Simple API keys per tenant (secured via cryptographic hashing (via brain-core))
 - **File Types**: Images (JPEG, PNG, WebP, GIF, AVIF) + PDFs
 - **Quotas**: Hard limits, per-tenant configurable (default 500MB)
 - **Thumbnails**: 3 sizes (200x200, 400x400, 800x800) in WebP format

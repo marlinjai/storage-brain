@@ -77,6 +77,10 @@ Base URL: `https://storage-brain-api.marlin-pohl.workers.dev` (managed) or `http
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/v1/admin/tenants` | Create a new tenant (returns API key once) |
+| `GET` | `/api/v1/admin/tenants` | List all tenants (paginated) |
+| `GET` | `/api/v1/admin/tenants/:tenantId` | Get tenant details |
+| `PATCH` | `/api/v1/admin/tenants/:tenantId` | Update tenant properties |
+| `DELETE` | `/api/v1/admin/tenants/:tenantId` | Delete tenant and all associated data |
 | `POST` | `/api/v1/admin/tenants/:tenantId/regenerate-key` | Regenerate tenant API key |
 
 ### Tenant (Bearer token = tenant API key `sk_live_*` / `sk_test_*`)

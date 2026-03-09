@@ -6,7 +6,7 @@ summary: Record of key architectural decisions made during Storage Brain plannin
 category: decision
 tags: [storage-brain, architecture-decisions, adr, rationale]
 projects: [storage-brain]
-status: active
+status: superseded
 ---
 
 # Architecture Decisions & Rationale
@@ -36,7 +36,7 @@ This document captures key architectural decisions made during the planning phas
 
 **Rationale**:
 - **Simplicity**: Easiest to implement for MVP
-- **Security**: API keys hashed with bcrypt, never returned in responses
+- **Security**: API keys secured via cryptographic hashing (via brain-core), never returned in responses
 - **Flexibility**: Easy to revoke, regenerate, or rotate
 - **Future**: Can upgrade to JWT tokens later if needed
 

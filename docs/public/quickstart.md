@@ -54,7 +54,7 @@ All API requests require a Bearer token in the `Authorization` header:
 Authorization: Bearer sk_live_...
 ```
 
-API keys use the `sk_live_` prefix for production and `sk_test_` for testing environments. Keys are hashed with bcrypt before storage -- the plaintext key is only returned once at creation time.
+API keys use the `sk_live_` prefix for production and `sk_test_` for testing environments. Keys are secured via cryptographic hashing (via brain-core) before storage -- the plaintext key is only returned once at creation time.
 
 ### Context
 

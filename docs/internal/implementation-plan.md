@@ -6,7 +6,7 @@ summary: Phase-by-phase execution guide for implementing Storage Brain, with all
 category: internal
 tags: [storage-brain, implementation, phases, execution]
 projects: [storage-brain]
-status: active
+status: superseded
 ---
 
 # Implementation Plan: Storage Brain
@@ -108,7 +108,7 @@ npx wrangler init packages/api
 
 **Deliverables**:
 - [ ] Authentication middleware
-- [ ] API key hashing utility (bcrypt)
+- [ ] API key hashing utility (cryptographic hashing (via brain-core))
 - [ ] Error handling for invalid keys
 
 ### Step 2.2: Handshake Endpoint

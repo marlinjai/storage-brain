@@ -352,12 +352,89 @@ import type {
 } from '@marlinjai/storage-brain-sdk';
 ```
 
+## Admin SDK
+
+The SDK ships a separate admin client for tenant management, available via the `/admin` export path.
+
+```typescript
+import { StorageBrainAdmin } from '@marlinjai/storage-brain-sdk/admin';
+
+const admin = new StorageBrainAdmin({
+  adminApiKey: 'your-admin-api-key',
+  // baseUrl: 'http://localhost:3000', // for self-hosted
+});
+```
+
+### Admin Methods
+
+| Method | Description |
+|--------|-------------|
+| `createTenant(input)` | Create a new tenant (returns API key once) |
+| `listTenants(options?)` | List all tenants with pagination |
+| `getTenant(tenantId)` | Get tenant details including quota usage |
+| `updateTenant(tenantId, updates)` | Update tenant name, quota, or allowed file types |
+| `deleteTenant(tenantId)` | Delete a tenant and all associated data |
+| `regenerateKey(tenantId)` | Regenerate a tenant's API key (invalidates the old one) |
+
+### Example: Create and Manage a Tenant
+
+```typescript
+// Create a tenant
+const result = await admin.createTenant({
+  name: 'My App',
+  quotaBytes: 1024 * 1024 * 1024, // 1 GB
+  allowedFileTypes: ['image/jpeg', 'image/png', 'application/pdf'],
+});
+console.log(result.apiKey); // Store this securely — only returned once
+
+// List tenants
+const { tenants, total } = await admin.listTenants({ limit: 50 });
+
+// Get tenant details
+const tenant = await admin.getTenant(result.id);
+console.log(tenant.quota.usagePercent);
+
+// Update tenant
+await admin.updateTenant(result.id, { name: 'Renamed App' });
+
+// Regenerate API key
+const { apiKey } = await admin.regenerateKey(result.id);
+
+// Delete tenant
+await admin.deleteTenant(result.id);
+```
+
+### Admin Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `adminApiKey` | string | (required) | Admin API key (`ADMIN_API_KEY` env var value) |
+| `baseUrl` | string | Production URL | API base URL |
+| `timeout` | number | `30000` | Request timeout in milliseconds |
+| `maxRetries` | number | `3` | Number of retry attempts for failed requests |
+
 ## Constants
 
 Useful constants are also exported:
 
 ```typescript
 import {
-  ALLOWED_MIME_TYPES,    // ['image/jpeg', 'image/png', ...]
+  ALLOWED_FILE_TYPES,    // Record mapping MIME types to { category, extensions }
+  ALLOWED_MIME_TYPES,    // ['image/jpeg', 'image/png', ...] (derived from ALLOWED_FILE_TYPES)
+  IMAGE_MIME_TYPES,      // MIME types where category is 'image'
+  DOCUMENT_MIME_TYPES,   // MIME types where category is 'document'
+  MAX_FILE_SIZE_BYTES,   // 104857600 (100 MB)
+  PROCESSING_STATUSES,   // ['pending', 'completed', 'failed']
+} from '@marlinjai/storage-brain-sdk';
+```
+
+### Exported Types
+
+The following utility types are also available:
+
+```typescript
+import type {
+  AllowedMimeType,   // Union of all supported MIME type strings
+  ProcessingStatus,  // 'pending' | 'completed' | 'failed'
 } from '@marlinjai/storage-brain-sdk';
 ```

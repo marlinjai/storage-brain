@@ -48,8 +48,7 @@ const client = new StorageBrain({
 
 // Upload a file
 const file = await client.upload(buffer, {
-  fileName: 'photo.jpg',
-  fileType: 'image/jpeg',
+  context: 'photos',
 });
 ```
 
