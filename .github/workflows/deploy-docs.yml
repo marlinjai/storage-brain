@@ -12,6 +12,15 @@ jobs:
       deployments: write
     steps:
       - uses: actions/checkout@v4
+      - name: Load Cloudflare credentials from 1Password
+        uses: 1password/load-secrets-action@v2
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          CLOUDFLARE_API_KEY: op://Dev Secrets/Cloudflare Global API Key/credential
+          CLOUDFLARE_EMAIL: op://Dev Secrets/Cloudflare Global API Key/email
+          CLOUDFLARE_ACCOUNT_ID: op://Dev Secrets/Cloudflare Global API Key/account-id
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -19,8 +28,4 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec clearify build
-      - uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy docs-dist --project-name=storage-brain-docs
+      - run: npx wrangler pages deploy docs-dist --project-name=storage-brain-docs
