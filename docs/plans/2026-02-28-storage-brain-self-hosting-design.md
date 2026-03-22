@@ -1,14 +1,16 @@
 ---
 title: "BYOS Platform: Self-Hosting, Adapters & Cloud Tiers"
 summary: Design plan to transform Storage Brain and Data Brain from single-provider hosted services into provider-agnostic, self-hostable platforms with free self-hosted and paid cloud tiers including BYOS (Bring Your Own Storage/Database).
-category: plan
-tags: [self-hosting, byos, storage-brain, data-brain, docker, adapters]
-projects: [storage-brain, data-brain, self-hosted]
-status: active
+type: plan
+tags: [self-hosting, byos, storage-brain, docker, adapters]
+projects: [storage-brain, self-hosted]
+status: archived
 date: 2026-02-28
 ---
 
 # BYOS Platform: Self-Hosting, Adapters & Cloud Tiers for Storage Brain & Data Brain
+
+> **Note (2026-03-22):** Data Brain has been archived. The Data Brain half of this plan is moot — all consumers now use adapter-d1 or adapter-prisma directly. This document is preserved as a historical design reference for the Storage Brain self-hosting path only.
 
 ## Overview
 
