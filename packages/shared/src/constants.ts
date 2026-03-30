@@ -13,6 +13,8 @@ export const ALLOWED_FILE_TYPES = {
   'image/avif': { extension: 'avif', category: 'image' },
   // Documents
   'application/pdf': { extension: 'pdf', category: 'document' },
+  // Audio
+  'audio/mpeg': { extension: 'mp3', category: 'audio' },
 } as const;
 
 export type AllowedMimeType = keyof typeof ALLOWED_FILE_TYPES;
@@ -25,6 +27,10 @@ export const IMAGE_MIME_TYPES = ALLOWED_MIME_TYPES.filter(
 
 export const DOCUMENT_MIME_TYPES = ALLOWED_MIME_TYPES.filter(
   (type) => ALLOWED_FILE_TYPES[type].category === 'document'
+);
+
+export const AUDIO_MIME_TYPES = ALLOWED_MIME_TYPES.filter(
+  (type) => ALLOWED_FILE_TYPES[type].category === 'audio'
 );
 
 /**
