@@ -1,0 +1,19 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/api/auth/login/route": "/api/auth/login",
+  "/api/tenants/[id]/files/[fileId]/route": "/api/tenants/[id]/files/[fileId]",
+  "/api/tenants/[id]/files/[fileId]/signed-url/route": "/api/tenants/[id]/files/[fileId]/signed-url",
+  "/api/auth/logout/route": "/api/auth/logout",
+  "/api/tenants/[id]/regenerate-key/route": "/api/tenants/[id]/regenerate-key",
+  "/api/tenants/[id]/files/route": "/api/tenants/[id]/files",
+  "/api/tenants/[id]/route": "/api/tenants/[id]",
+  "/api/tenants/route": "/api/tenants",
+  "/api/tenants/[id]/workspaces/route": "/api/tenants/[id]/workspaces",
+  "/login/page": "/login",
+  "/(dashboard)/tenants/[tenantId]/settings/page": "/tenants/[tenantId]/settings",
+  "/(dashboard)/page": "/",
+  "/(dashboard)/tenants/[tenantId]/files/page": "/tenants/[tenantId]/files",
+  "/(dashboard)/tenants/[tenantId]/workspaces/page": "/tenants/[tenantId]/workspaces",
+  "/(dashboard)/tenants/[tenantId]/page": "/tenants/[tenantId]",
+  "/(dashboard)/tenants/page": "/tenants"
+}

@@ -1,0 +1,19 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/auth/login/route": "app/api/auth/login/route.js",
+  "/api/tenants/[id]/files/[fileId]/route": "app/api/tenants/[id]/files/[fileId]/route.js",
+  "/api/tenants/[id]/files/[fileId]/signed-url/route": "app/api/tenants/[id]/files/[fileId]/signed-url/route.js",
+  "/api/auth/logout/route": "app/api/auth/logout/route.js",
+  "/api/tenants/[id]/regenerate-key/route": "app/api/tenants/[id]/regenerate-key/route.js",
+  "/api/tenants/[id]/files/route": "app/api/tenants/[id]/files/route.js",
+  "/api/tenants/[id]/route": "app/api/tenants/[id]/route.js",
+  "/api/tenants/route": "app/api/tenants/route.js",
+  "/api/tenants/[id]/workspaces/route": "app/api/tenants/[id]/workspaces/route.js",
+  "/login/page": "app/login/page.js",
+  "/(dashboard)/tenants/[tenantId]/settings/page": "app/(dashboard)/tenants/[tenantId]/settings/page.js",
+  "/(dashboard)/page": "app/(dashboard)/page.js",
+  "/(dashboard)/tenants/[tenantId]/files/page": "app/(dashboard)/tenants/[tenantId]/files/page.js",
+  "/(dashboard)/tenants/[tenantId]/workspaces/page": "app/(dashboard)/tenants/[tenantId]/workspaces/page.js",
+  "/(dashboard)/tenants/[tenantId]/page": "app/(dashboard)/tenants/[tenantId]/page.js",
+  "/(dashboard)/tenants/page": "app/(dashboard)/tenants/page.js"
+}

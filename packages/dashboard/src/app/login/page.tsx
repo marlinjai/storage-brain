@@ -1,0 +1,104 @@
+'use client';
+
+import { useState, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [baseUrl, setBaseUrl] = useState(
+    'https://storage-brain-api.marlin-pohl.workers.dev'
+  );
+  const [adminApiKey, setAdminApiKey] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminApiKey, baseUrl }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || 'Login failed');
+        return;
+      }
+
+      router.push('/');
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="w-full max-w-md rounded-xl border border-gray-800 bg-gray-900 p-8">
+        <h1 className="mb-6 text-2xl font-bold text-gray-100">
+          Storage Brain
+        </h1>
+        <p className="mb-8 text-sm text-gray-400">
+          Sign in with your admin credentials
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label
+              htmlFor="baseUrl"
+              className="mb-1.5 block text-sm font-medium text-gray-300"
+            >
+              API Base URL
+            </label>
+            <input
+              id="baseUrl"
+              type="text"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              placeholder="https://storage-brain-api.marlin-pohl.workers.dev"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="adminApiKey"
+              className="mb-1.5 block text-sm font-medium text-gray-300"
+            >
+              Admin API Key
+            </label>
+            <input
+              id="adminApiKey"
+              type="password"
+              value={adminApiKey}
+              onChange={(e) => setAdminApiKey(e.target.value)}
+              className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              placeholder="Enter your admin API key"
+              required
+            />
+          </div>
+
+          {error && (
+            <div className="rounded-lg border border-red-800 bg-red-900/30 px-3 py-2 text-sm text-red-400">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? 'Signing in...' : 'Sign in'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
