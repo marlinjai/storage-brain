@@ -77,6 +77,59 @@ export interface RegenerateKeyResult {
   message: string;
 }
 
+export interface AdminFileInfo {
+  id: string;
+  url: string;
+  originalName: string;
+  fileType: string;
+  sizeBytes: number;
+  context: string | null;
+  tags: Record<string, string> | null;
+  metadata: Record<string, unknown> | null;
+  processingStatus: string;
+  workspaceId: string | null;
+  createdAt: string;
+}
+
+export interface ListTenantFilesOptions {
+  limit?: number;
+  cursor?: string;
+  context?: string;
+  fileType?: string;
+  workspaceId?: string;
+}
+
+export interface ListTenantFilesResult {
+  files: AdminFileInfo[];
+  nextCursor: string | null;
+  total: number;
+}
+
+export interface SignedUrlResult {
+  fileId: string;
+  url: string;
+  expiresAt: string;
+  expiresIn: number;
+}
+
+export interface AdminWorkspace {
+  id: string;
+  name: string;
+  slug: string;
+  quotaBytes: number | null;
+  usedBytes: number;
+  metadata: Record<string, unknown> | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface QuotaInfo {
+  quotaBytes: number;
+  usedBytes: number;
+  availableBytes: number;
+  usagePercent: number;
+}
+
 // ============================================================================
 // Admin Client
 // ============================================================================
@@ -129,6 +182,71 @@ export class StorageBrainAdmin {
     return this.request<RegenerateKeyResult>(
       'POST',
       `/api/v1/admin/tenants/${tenantId}/regenerate-key`
+    );
+  }
+
+  async listTenantFiles(
+    tenantId: string,
+    options?: ListTenantFilesOptions
+  ): Promise<ListTenantFilesResult> {
+    const params = new URLSearchParams();
+    if (options?.limit) params.set('limit', options.limit.toString());
+    if (options?.cursor) params.set('cursor', options.cursor);
+    if (options?.context) params.set('context', options.context);
+    if (options?.fileType) params.set('fileType', options.fileType);
+    if (options?.workspaceId) params.set('workspaceId', options.workspaceId);
+
+    const query = params.toString();
+    const path = query
+      ? `/api/v1/admin/tenants/${tenantId}/files?${query}`
+      : `/api/v1/admin/tenants/${tenantId}/files`;
+
+    return this.request<ListTenantFilesResult>('GET', path);
+  }
+
+  async getTenantFile(tenantId: string, fileId: string): Promise<AdminFileInfo> {
+    return this.request<AdminFileInfo>(
+      'GET',
+      `/api/v1/admin/tenants/${tenantId}/files/${fileId}`
+    );
+  }
+
+  async getTenantFileSignedUrl(
+    tenantId: string,
+    fileId: string,
+    expiresIn?: number
+  ): Promise<SignedUrlResult> {
+    const params = new URLSearchParams();
+    if (expiresIn !== undefined) params.set('expiresIn', expiresIn.toString());
+
+    const query = params.toString();
+    const path = query
+      ? `/api/v1/admin/tenants/${tenantId}/files/${fileId}/signed-url?${query}`
+      : `/api/v1/admin/tenants/${tenantId}/files/${fileId}/signed-url`;
+
+    return this.request<SignedUrlResult>('GET', path);
+  }
+
+  async deleteTenantFile(tenantId: string, fileId: string): Promise<void> {
+    await this.request<{ success: boolean }>(
+      'DELETE',
+      `/api/v1/admin/tenants/${tenantId}/files/${fileId}`
+    );
+  }
+
+  async listTenantWorkspaces(
+    tenantId: string
+  ): Promise<{ workspaces: AdminWorkspace[] }> {
+    return this.request<{ workspaces: AdminWorkspace[] }>(
+      'GET',
+      `/api/v1/admin/tenants/${tenantId}/workspaces`
+    );
+  }
+
+  async getTenantQuota(tenantId: string): Promise<QuotaInfo> {
+    return this.request<QuotaInfo>(
+      'GET',
+      `/api/v1/admin/tenants/${tenantId}/quota`
     );
   }
 

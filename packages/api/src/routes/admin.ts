@@ -6,11 +6,15 @@ import {
   createTenantSchema,
   updateTenantSchema,
   listTenantsQuerySchema,
+  listFilesQuerySchema,
+  fileIdSchema,
   DEFAULT_QUOTA_BYTES,
   ALLOWED_MIME_TYPES,
   type AllowedMimeType,
+  type ListFilesInput,
 } from '@storage-brain/shared';
 import { generateApiKey, hashApiKey } from '../utils/crypto';
+import { generateSignedToken } from '../services/signed-url';
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -211,4 +215,162 @@ adminRoutes.delete('/tenants/:tenantId', async (c) => {
   await db.deleteTenant(tenantId);
 
   return c.json({ success: true });
+});
+
+// ─── File & Workspace Browsing ───────────────────────────────────────────────
+
+/**
+ * GET /api/v1/admin/tenants/:tenantId/files
+ * List files for a specific tenant
+ */
+adminRoutes.get('/tenants/:tenantId/files', async (c) => {
+  const db = c.get('db');
+  const tenantId = c.req.param('tenantId');
+  const query = c.req.query();
+
+  const validatedQuery = listFilesQuerySchema.parse(query) as ListFilesInput;
+
+  const result = await db.listFilesByTenant(tenantId, validatedQuery);
+
+  const files = result.files.map((file) => ({
+    id: file.id,
+    url: `/api/v1/files/${file.id}/download`,
+    originalName: file.originalName,
+    fileType: file.fileType,
+    sizeBytes: file.sizeBytes,
+    context: file.context,
+    tags: file.tags,
+    metadata: file.metadata,
+    processingStatus: file.processingStatus,
+    workspaceId: file.workspaceId,
+    createdAt: new Date(file.createdAt).toISOString(),
+  }));
+
+  return c.json({
+    files,
+    nextCursor: result.nextCursor,
+    total: result.total,
+  });
+});
+
+/**
+ * GET /api/v1/admin/tenants/:tenantId/files/:fileId
+ * Get a single file detail for a tenant
+ */
+adminRoutes.get('/tenants/:tenantId/files/:fileId', async (c) => {
+  const db = c.get('db');
+  const tenantId = c.req.param('tenantId');
+  const fileId = c.req.param('fileId');
+
+  fileIdSchema.parse(fileId);
+
+  const file = await db.getFileById(fileId, tenantId);
+  if (!file) {
+    throw ApiError.notFound('File not found');
+  }
+
+  return c.json({
+    id: file.id,
+    url: `/api/v1/files/${file.id}/download`,
+    originalName: file.originalName,
+    fileType: file.fileType,
+    sizeBytes: file.sizeBytes,
+    context: file.context,
+    tags: file.tags,
+    metadata: file.metadata,
+    processingStatus: file.processingStatus,
+    workspaceId: file.workspaceId,
+    createdAt: new Date(file.createdAt).toISOString(),
+  });
+});
+
+/**
+ * GET /api/v1/admin/tenants/:tenantId/files/:fileId/signed-url
+ * Generate a signed download URL for a tenant's file
+ */
+adminRoutes.get('/tenants/:tenantId/files/:fileId/signed-url', async (c) => {
+  const db = c.get('db');
+  const tenantId = c.req.param('tenantId');
+  const fileId = c.req.param('fileId');
+
+  fileIdSchema.parse(fileId);
+
+  const file = await db.getFileById(fileId, tenantId);
+  if (!file) {
+    throw ApiError.notFound('File not found');
+  }
+
+  const expiresInParam = c.req.query('expiresIn');
+  const expiresIn = expiresInParam ? Math.min(Math.max(parseInt(expiresInParam, 10), 60), 86400) : 3600;
+  const expiresAt = Date.now() + expiresIn * 1000;
+
+  const token = await generateSignedToken(fileId, expiresAt, c.env.URL_SIGNING_SECRET);
+
+  const url = new URL(c.req.url);
+  const baseUrl = `${url.protocol}//${url.host}`;
+
+  return c.json({
+    fileId,
+    url: `${baseUrl}/api/v1/files/${fileId}/download?token=${token}&expires=${expiresAt}`,
+    expiresAt: new Date(expiresAt).toISOString(),
+    expiresIn,
+  });
+});
+
+/**
+ * DELETE /api/v1/admin/tenants/:tenantId/files/:fileId
+ * Soft-delete a file for a tenant
+ */
+adminRoutes.delete('/tenants/:tenantId/files/:fileId', async (c) => {
+  const db = c.get('db');
+  const tenantId = c.req.param('tenantId');
+  const fileId = c.req.param('fileId');
+
+  fileIdSchema.parse(fileId);
+
+  const file = await db.getFileById(fileId, tenantId);
+  if (!file) {
+    throw ApiError.notFound('File not found');
+  }
+
+  await db.softDeleteFile(fileId, tenantId);
+
+  return c.json({ success: true });
+});
+
+/**
+ * GET /api/v1/admin/tenants/:tenantId/workspaces
+ * List workspaces for a tenant
+ */
+adminRoutes.get('/tenants/:tenantId/workspaces', async (c) => {
+  const db = c.get('db');
+  const tenantId = c.req.param('tenantId');
+
+  const workspaces = await db.listWorkspacesByTenant(tenantId);
+
+  return c.json({
+    workspaces: workspaces.map((ws) => ({
+      id: ws.id,
+      name: ws.name,
+      slug: ws.slug,
+      quotaBytes: ws.quotaBytes,
+      usedBytes: ws.usedBytes,
+      metadata: ws.metadata,
+      createdAt: ws.createdAt,
+      updatedAt: ws.updatedAt,
+    })),
+  });
+});
+
+/**
+ * GET /api/v1/admin/tenants/:tenantId/quota
+ * Get quota usage for a tenant
+ */
+adminRoutes.get('/tenants/:tenantId/quota', async (c) => {
+  const db = c.get('db');
+  const tenantId = c.req.param('tenantId');
+
+  const quota = await db.getQuotaUsage(tenantId);
+
+  return c.json(quota);
 });
