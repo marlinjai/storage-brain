@@ -1,9 +1,8 @@
 ---
 title: Storage Brain Changelog
 summary: Version history for Storage Brain file storage service, covering releases from v0.1.0 through v0.5.0 including multi-tenant workspaces, presigned URL uploads, processing removal, monorepo consolidation, and self-hosting adapters.
-category: changelog
+type: changelog
 tags: [storage-brain, changelog, releases, file-storage]
-status: active
 date: 2026-02-28
 ---
 

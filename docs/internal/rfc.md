@@ -3,7 +3,7 @@ title: RFC
 description: Full architecture specification for Storage Brain
 order: 1
 summary: Full architecture specification RFC for Storage Brain as an edge-native file storage micro-product, covering API design, tenant model, R2/D1 storage, and signed URL patterns.
-category: internal
+type: documentation
 tags: [storage-brain, rfc, specification, architecture]
 projects: [storage-brain]
 status: superseded

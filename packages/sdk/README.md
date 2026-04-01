@@ -1,9 +1,8 @@
 ---
 title: Storage Brain SDK
 summary: README for the Storage Brain TypeScript SDK providing file upload, download, listing, signed URLs, workspace management, progress tracking, and automatic retries with zero dependencies.
-category: documentation
+type: readme
 tags: [storage-brain, sdk, typescript, file-storage, npm]
-status: active
 date: 2026-02-20
 ---
 

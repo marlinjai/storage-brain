@@ -4,10 +4,9 @@ description: Planning documents, RFCs, and architecture decisions
 order: 0
 icon: "🔒"
 summary: Index page for Storage Brain internal documentation including planning documents, RFCs, and architecture decisions.
-category: internal
+type: documentation
 tags: [storage-brain, internal, index, planning]
 projects: [storage-brain]
-status: active
 ---
 
 # Internal Documentation

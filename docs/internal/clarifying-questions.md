@@ -3,10 +3,9 @@ title: Clarifying Questions
 description: Q&A on Storage Brain design choices
 order: 5
 summary: Q&A document capturing clarifying questions and answers about Storage Brain design choices before proceeding with the RFC and implementation.
-category: internal
+type: documentation
 tags: [storage-brain, design, questions, planning]
 projects: [storage-brain]
-status: active
 ---
 
 # Clarifying Questions for Storage Brain Implementation

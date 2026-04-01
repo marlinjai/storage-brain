@@ -4,10 +4,9 @@ description: System architecture and design overview
 order: 2
 icon: "🏗️"
 summary: System architecture documentation for Storage Brain covering edge-native design, Cloudflare Workers/R2/D1 tech stack, multi-tenant workspace isolation, and deployment patterns.
-category: documentation
+type: documentation
 tags: [storage-brain, architecture, edge-native, cloudflare]
 projects: [storage-brain]
-status: active
 ---
 
 # Architecture

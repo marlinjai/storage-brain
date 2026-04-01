@@ -1,10 +1,9 @@
 ---
 title: Self-Hosting Storage Brain
 summary: Guide for running Storage Brain on your own infrastructure with Docker, including quick start, tenant creation, and configuration.
-category: documentation
+type: documentation
 tags: [storage-brain, self-hosting, docker, deployment]
 projects: [storage-brain, self-hosted]
-status: active
 ---
 
 # Self-Hosting Storage Brain

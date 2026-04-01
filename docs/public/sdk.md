@@ -4,10 +4,9 @@ description: TypeScript SDK usage and reference
 order: 4
 icon: "📦"
 summary: Usage guide and reference for the Storage Brain TypeScript SDK, providing a type-safe client for uploading files, managing workspaces, and querying file metadata.
-category: documentation
+type: documentation
 tags: [storage-brain, sdk, typescript, client]
 projects: [storage-brain]
-status: active
 ---
 
 # SDK Guide
