@@ -36,4 +36,8 @@ RUN mkdir -p packages/dashboard/public
 USER app
 EXPOSE 3030
 ENV PORT=3030
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=3 \
+  CMD node -e "fetch('http://localhost:3030/').then(r=>{if(!r.ok)throw r.status}).catch(()=>process.exit(1))"
+
 CMD ["node", "packages/dashboard/server.js"]

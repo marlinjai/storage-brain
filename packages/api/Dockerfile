@@ -33,4 +33,8 @@ COPY --from=builder /app ./
 USER app
 
 EXPOSE 3000
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=3 \
+  CMD node -e "fetch('http://localhost:3000/health').then(r=>{if(!r.ok)throw r.status}).catch(()=>process.exit(1))"
+
 CMD ["pnpm", "--filter", "@storage-brain/api", "start:node"]
