@@ -4,7 +4,9 @@
   "private": true,
   "description": "Edge-native file storage micro-product built on Cloudflare Workers",
   "scripts": {
-    "dev": "pnpm --filter @storage-brain/api dev",
+    "dev": "infisical run --env=dev --projectId=86dcae14-6cb2-473b-8b2d-43b37977f04e -- pnpm --filter @storage-brain/api start:node",
+    "dev:workers": "pnpm --filter @storage-brain/api dev",
+    "dev:dashboard": "pnpm --filter @storage-brain/dashboard dev",
     "dev:sdk": "pnpm --filter @marlinjai/storage-brain-sdk dev",
     "build": "pnpm -r --if-present run build",
     "build:sdk": "pnpm --filter @marlinjai/storage-brain-sdk build",
