@@ -54,8 +54,8 @@ importers:
         specifier: ^1.13.0
         version: 1.19.9(hono@4.12.0)
       '@marlinjai/brain-core':
-        specifier: ^0.1.0
-        version: 0.1.0(hono@4.12.0)(zod@3.25.76)
+        specifier: ^0.2.1
+        version: 0.2.1(hono@4.12.0)(zod@3.25.76)
       '@storage-brain/shared':
         specifier: workspace:*
         version: link:../shared
@@ -1317,6 +1317,17 @@ packages:
 
   '@marlinjai/brain-core@0.1.0':
     resolution: {integrity: sha512-1Ot/3uDM4Ewf18dlzgkAterIa2H5o8+V7IaknR5L4odI+zgMlPPtQ8CbjxU8Z/JnhwF3R+dqIxW+k/o0ithZPg==}
+    peerDependencies:
+      hono: ^4.0.0
+      zod: ^3.22.4
+    peerDependenciesMeta:
+      hono:
+        optional: true
+      zod:
+        optional: true
+
+  '@marlinjai/brain-core@0.2.1':
+    resolution: {integrity: sha512-lWLkn+X0ovN8RqIhz64BO86ECGWXs7wmc5youCb0PFJbvpWPTgELB9S+vTs/TLDPTShXc7KYoHr7UyCBYHBGVw==}
     peerDependencies:
       hono: ^4.0.0
       zod: ^3.22.4
@@ -5714,6 +5725,11 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   '@marlinjai/brain-core@0.1.0(hono@4.12.0)(zod@3.25.76)':
+    optionalDependencies:
+      hono: 4.12.0
+      zod: 3.25.76
+
+  '@marlinjai/brain-core@0.2.1(hono@4.12.0)(zod@3.25.76)':
     optionalDependencies:
       hono: 4.12.0
       zod: 3.25.76
