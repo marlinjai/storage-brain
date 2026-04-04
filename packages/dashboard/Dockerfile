@@ -1,3 +1,5 @@
+FROM infisical/cli:0.43.69 AS infisical
+
 FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
@@ -25,10 +27,8 @@ RUN pnpm --filter @storage-brain/dashboard build
 FROM base AS runner
 ENV NODE_ENV=production
 
-# Install Infisical CLI for runtime secret injection
-RUN apk add --no-cache bash curl && \
-    curl -1sLf 'https://dl.cloudsmith.io/public/infisical/infisical-cli/setup.alpine.sh' | bash && \
-    apk add --no-cache infisical
+# Copy Infisical CLI binary from official image (pinned version, no curl|bash)
+COPY --from=infisical /bin/infisical /usr/local/bin/infisical
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 app
