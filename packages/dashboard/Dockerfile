@@ -27,8 +27,10 @@ RUN pnpm --filter @storage-brain/dashboard build
 FROM base AS runner
 ENV NODE_ENV=production
 
-# Copy Infisical CLI binary from official image (pinned version, no curl|bash)
+# Infisical CLI from official image (pinned version, no curl|bash)
 COPY --from=infisical /bin/infisical /usr/local/bin/infisical
+# curl needed for Coolify healthcheck probe
+RUN apk add --no-cache curl
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 app
@@ -44,7 +46,7 @@ EXPOSE 3030
 ENV PORT=3030
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=3 \
-  CMD node -e "fetch('http://localhost:3030/').then(r=>{if(!r.ok)throw r.status}).catch(()=>process.exit(1))"
+  CMD curl -f http://localhost:3030/ || exit 1
 
 COPY packages/dashboard/entrypoint.sh ./entrypoint.sh
 CMD ["sh", "entrypoint.sh"]
