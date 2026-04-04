@@ -24,6 +24,12 @@ RUN pnpm --filter @storage-brain/dashboard build
 # --- Runner ---
 FROM base AS runner
 ENV NODE_ENV=production
+
+# Install Infisical CLI for runtime secret injection
+RUN apk add --no-cache bash curl && \
+    curl -1sLf 'https://dl.cloudsmith.io/public/infisical/infisical-cli/setup.alpine.sh' | bash && \
+    apk add --no-cache infisical
+
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 app
 WORKDIR /app
@@ -40,4 +46,5 @@ ENV PORT=3030
 HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=3 \
   CMD node -e "fetch('http://localhost:3030/').then(r=>{if(!r.ok)throw r.status}).catch(()=>process.exit(1))"
 
-CMD ["node", "packages/dashboard/server.js"]
+COPY packages/dashboard/entrypoint.sh ./entrypoint.sh
+CMD ["sh", "entrypoint.sh"]
