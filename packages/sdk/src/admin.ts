@@ -6,7 +6,7 @@ import {
 } from './errors';
 import type { AllowedMimeType } from './constants';
 
-const DEFAULT_BASE_URL = 'https://storage-brain-api.marlin-pohl.workers.dev';
+const DEFAULT_BASE_URL = 'https://api.storage-brain.lumitra.co';
 const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_MAX_RETRIES = 3;
 
