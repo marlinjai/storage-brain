@@ -7,8 +7,8 @@ DOMAIN="https://infisical.lumitra.co"
 # Authenticate with Infisical via machine identity (Universal Auth)
 INFISICAL_TOKEN=$(infisical login \
   --method=universal-auth \
-  --client-id="$INFISICAL_CLIENT_ID" \
-  --client-secret="$INFISICAL_CLIENT_SECRET" \
+  --client-id="$INFISICAL_UNIVERSAL_AUTH_CLIENT_ID" \
+  --client-secret="$INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET" \
   --domain "$DOMAIN" \
   --silent --plain)
 
