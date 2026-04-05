@@ -30,8 +30,6 @@ ENV NODE_ENV=production
 
 # Infisical CLI from official image (pinned version, no curl|bash)
 COPY --from=infisical /bin/infisical /usr/local/bin/infisical
-# curl needed for Coolify healthcheck probe
-RUN apk add --no-cache curl
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 app
@@ -43,7 +41,7 @@ USER app
 EXPOSE 3000
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=3 \
-  CMD curl -f http://localhost:3000/health || exit 1
+  CMD node -e "require('http').get('http://localhost:3000/health', r => process.exit(r.statusCode < 400 ? 0 : 1)).on('error', () => process.exit(1))"
 
 # Secrets injected from Infisical at runtime via machine identity (Universal Auth).
 # Coolify only provides INFISICAL_CLIENT_ID + INFISICAL_CLIENT_SECRET.
