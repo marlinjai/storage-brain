@@ -12,6 +12,7 @@ export type { ApiErrorResponse as ApiError } from '@marlinjai/brain-core';
  * Tenant entity — extends BaseTenant with storage-specific quota fields
  */
 export interface Tenant extends BaseTenant {
+  keyPrefix: string | null;
   quotaBytes: number;
   usedBytes: number;
   allowedFileTypes: AllowedMimeType[] | null;

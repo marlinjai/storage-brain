@@ -16,6 +16,7 @@ export interface CreateTenantInput {
   id: string;
   name: string;
   apiKeyHash: string;
+  keyPrefix: string;
   quotaBytes: number;
   allowedFileTypes: AllowedMimeType[];
 }
@@ -90,7 +91,7 @@ export interface DatabaseAdapter {
   getTenantByApiKey(apiKey: string): Promise<Tenant | null>;
   getTenantByName(name: string): Promise<Tenant | null>;
   getTenantById(id: string): Promise<Tenant | null>;
-  updateTenantApiKeyHash(tenantId: string, newHash: string): Promise<boolean>;
+  updateTenantApiKeyHash(tenantId: string, newHash: string, keyPrefix: string): Promise<boolean>;
   listTenants(input: ListTenantsInput): Promise<ListTenantsResult>;
   updateTenant(tenantId: string, updates: UpdateTenantInput): Promise<Tenant | null>;
   deleteTenant(tenantId: string): Promise<boolean>;

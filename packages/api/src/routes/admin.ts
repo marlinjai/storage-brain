@@ -13,7 +13,7 @@ import {
   type AllowedMimeType,
   type ListFilesInput,
 } from '@storage-brain/shared';
-import { generateApiKey, hashApiKey } from '../utils/crypto';
+import { generateApiKey, hashApiKey, getKeyPrefix } from '../utils/crypto';
 import { generateSignedToken } from '../services/signed-url';
 
 export const adminRoutes = new Hono<AppEnv>();
@@ -44,6 +44,7 @@ adminRoutes.post('/tenants', async (c) => {
   // Generate API key
   const apiKey = generateApiKey();
   const apiKeyHash = await hashApiKey(apiKey);
+  const keyPrefix = getKeyPrefix(apiKey);
 
   // Create tenant
   const tenantId = crypto.randomUUID();
@@ -54,6 +55,7 @@ adminRoutes.post('/tenants', async (c) => {
     id: tenantId,
     name: validatedBody.name,
     apiKeyHash,
+    keyPrefix,
     quotaBytes,
     allowedFileTypes,
   });
@@ -81,9 +83,10 @@ adminRoutes.post('/tenants/:tenantId/regenerate-key', async (c) => {
   // Generate new API key
   const apiKey = generateApiKey();
   const apiKeyHash = await hashApiKey(apiKey);
+  const keyPrefix = getKeyPrefix(apiKey);
 
   // Update tenant
-  const updated = await db.updateTenantApiKeyHash(tenantId, apiKeyHash);
+  const updated = await db.updateTenantApiKeyHash(tenantId, apiKeyHash, keyPrefix);
 
   if (!updated) {
     throw ApiError.notFound('Tenant not found');
@@ -113,6 +116,7 @@ adminRoutes.get('/tenants', async (c) => {
     tenants: result.tenants.map((t) => ({
       id: t.id,
       name: t.name,
+      keyPrefix: t.keyPrefix,
       quotaBytes: t.quotaBytes,
       usedBytes: t.usedBytes,
       allowedFileTypes: t.allowedFileTypes,
@@ -142,6 +146,7 @@ adminRoutes.get('/tenants/:tenantId', async (c) => {
   return c.json({
     id: tenant.id,
     name: tenant.name,
+    keyPrefix: tenant.keyPrefix,
     quotaBytes: tenant.quotaBytes,
     usedBytes: tenant.usedBytes,
     allowedFileTypes: tenant.allowedFileTypes,
@@ -178,6 +183,7 @@ adminRoutes.patch('/tenants/:tenantId', async (c) => {
   return c.json({
     id: tenant.id,
     name: tenant.name,
+    keyPrefix: tenant.keyPrefix,
     quotaBytes: tenant.quotaBytes,
     usedBytes: tenant.usedBytes,
     allowedFileTypes: tenant.allowedFileTypes,
