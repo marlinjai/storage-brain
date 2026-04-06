@@ -18,11 +18,53 @@ import { generateSignedToken } from '../services/signed-url';
 
 export const adminRoutes = new Hono<AppEnv>();
 
+// Runtime-only admin key override (not persisted across restarts)
+let runtimeAdminKey: string | null = null;
+
+/**
+ * Injection middleware — overrides ADMIN_API_KEY with runtime key when set.
+ * Must run BEFORE admin auth middleware.
+ */
+adminRoutes.use('*', async (c, next) => {
+  if (runtimeAdminKey) {
+    c.env.ADMIN_API_KEY = runtimeAdminKey;
+  }
+  await next();
+});
+
 /**
  * Admin authentication middleware
  * Uses timing-safe comparison from brain-core
  */
 adminRoutes.use('*', createAdminAuthMiddleware());
+
+/**
+ * POST /api/v1/admin/rotate-key
+ * Rotate the admin API key at runtime
+ */
+adminRoutes.post('/rotate-key', async (c) => {
+  const body = await c.req.json();
+  const { newKey } = body as { newKey?: string };
+
+  if (!newKey || typeof newKey !== 'string' || newKey.length < 32) {
+    throw ApiError.badRequest('newKey must be a string of at least 32 characters');
+  }
+
+  const currentKey = c.env.ADMIN_API_KEY as string;
+  const oldKeyPrefix = currentKey.substring(0, 8);
+
+  runtimeAdminKey = newKey;
+
+  console.warn(
+    `[admin] Admin API key rotated at runtime (old prefix: ${oldKeyPrefix}). Update ADMIN_API_KEY env var to persist across restarts.`
+  );
+
+  return c.json({
+    success: true,
+    oldKeyPrefix,
+    message: 'Key rotated. Update ADMIN_API_KEY env var to persist across restarts.',
+  });
+});
 
 /**
  * POST /api/v1/admin/tenants
