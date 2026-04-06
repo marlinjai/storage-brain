@@ -1,7 +1,7 @@
 ---
 title: Automated Key Rotation with Tenant Isolation
 type: plan
-status: draft
+status: in-progress
 summary: End-to-end automated key rotation — separate tenants per project, dual-key grace period, Infisical push, Coolify auto-redeploy.
 tags: [security, infrastructure, infisical, coolify, automation]
 date: 2026-04-06

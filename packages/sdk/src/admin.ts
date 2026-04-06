@@ -33,6 +33,7 @@ export interface AdminTenant {
 }
 
 export interface AdminTenantDetail extends AdminTenant {
+  rotationConfig: RotationConfig | null;
   quota: {
     quotaBytes: number;
     usedBytes: number;
@@ -72,10 +73,40 @@ export interface ListTenantsResult {
   total: number;
 }
 
+export interface RegenerateKeyOptions {
+  gracePeriodSeconds?: number;
+}
+
+export interface RotationStatus {
+  keyRotated: boolean;
+  gracePeriodSeconds: number;
+  infisicalPush: 'success' | 'failed' | null;
+  infisicalError?: string;
+  deployTrigger: 'success' | 'failed' | null;
+  deployError?: string;
+}
+
 export interface RegenerateKeyResult {
   tenantId: string;
   apiKey: string;
+  keyPrefix: string;
+  rotation: RotationStatus;
   message: string;
+}
+
+export interface RotationConfig {
+  infisical?: {
+    projectId: string;
+    environment: string;
+    secretPath: string;
+    secretName: string;
+  };
+  deploy?: {
+    type: 'coolify' | 'vercel';
+    appUuid?: string;
+    projectId?: string;
+    deployHookUrl?: string;
+  };
 }
 
 export interface AdminFileInfo {
@@ -179,11 +210,20 @@ export class StorageBrainAdmin {
     await this.request<{ success: boolean }>('DELETE', `/api/v1/admin/tenants/${tenantId}`);
   }
 
-  async regenerateKey(tenantId: string): Promise<RegenerateKeyResult> {
+  async regenerateKey(tenantId: string, options?: RegenerateKeyOptions): Promise<RegenerateKeyResult> {
     return this.request<RegenerateKeyResult>(
       'POST',
-      `/api/v1/admin/tenants/${tenantId}/regenerate-key`
+      `/api/v1/admin/tenants/${tenantId}/regenerate-key`,
+      options ?? {}
     );
+  }
+
+  async getRotationConfig(tenantId: string): Promise<{ tenantId: string; rotationConfig: RotationConfig | null }> {
+    return this.request('GET', `/api/v1/admin/tenants/${tenantId}/rotation-config`);
+  }
+
+  async updateRotationConfig(tenantId: string, config: RotationConfig | null): Promise<void> {
+    await this.request('PUT', `/api/v1/admin/tenants/${tenantId}/rotation-config`, { rotationConfig: config });
   }
 
   async listTenantFiles(

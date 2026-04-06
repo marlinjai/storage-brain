@@ -12,9 +12,21 @@ import {
   ALLOWED_MIME_TYPES,
   type AllowedMimeType,
   type ListFilesInput,
+  type RotationConfig,
 } from '@storage-brain/shared';
 import { generateApiKey, hashApiKey, getKeyPrefix } from '../utils/crypto';
 import { generateSignedToken } from '../services/signed-url';
+import { pushKeyToInfisical } from '../services/infisical-push';
+import { triggerDeploy } from '../services/coolify-deploy';
+
+interface RotationStatus {
+  keyRotated: boolean;
+  gracePeriodSeconds: number;
+  infisicalPush: 'success' | 'failed' | null;
+  infisicalError?: string;
+  deployTrigger: 'success' | 'failed' | null;
+  deployError?: string;
+}
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -116,28 +128,116 @@ adminRoutes.post('/tenants', async (c) => {
 
 /**
  * POST /api/v1/admin/tenants/:tenantId/regenerate-key
- * Regenerate API key for a tenant
+ * Regenerate API key for a tenant with optional grace period
  */
 adminRoutes.post('/tenants/:tenantId/regenerate-key', async (c) => {
   const db = c.get('db');
   const tenantId = c.req.param('tenantId');
+
+  const body = await c.req.json().catch(() => ({}));
+  const gracePeriodSeconds = Math.max(0, Math.min(
+    typeof body.gracePeriodSeconds === 'number' ? body.gracePeriodSeconds : 600,
+    86400, // max 24 hours
+  ));
 
   // Generate new API key
   const apiKey = generateApiKey();
   const apiKeyHash = await hashApiKey(apiKey);
   const keyPrefix = getKeyPrefix(apiKey);
 
-  // Update tenant
-  const updated = await db.updateTenantApiKeyHash(tenantId, apiKeyHash, keyPrefix);
+  // Update tenant (copies old key to previous if grace period > 0)
+  const updated = await db.updateTenantApiKeyHash(tenantId, apiKeyHash, keyPrefix, gracePeriodSeconds);
 
+  if (!updated) {
+    throw ApiError.notFound('Tenant not found');
+  }
+
+  // If tenant has rotation config, run the automated pipeline
+  const tenant = await db.getTenantById(tenantId);
+  const rotationStatus: RotationStatus = {
+    keyRotated: true,
+    gracePeriodSeconds,
+    infisicalPush: null,
+    deployTrigger: null,
+  };
+
+  if (tenant?.rotationConfig?.infisical) {
+    try {
+      await pushKeyToInfisical(tenant.rotationConfig.infisical, apiKey, {
+        clientId: c.env.INFISICAL_CLIENT_ID,
+        clientSecret: c.env.INFISICAL_CLIENT_SECRET,
+        siteUrl: c.env.INFISICAL_SITE_URL,
+      });
+      rotationStatus.infisicalPush = 'success';
+    } catch (err) {
+      rotationStatus.infisicalPush = 'failed';
+      rotationStatus.infisicalError = err instanceof Error ? err.message : 'Unknown error';
+      console.error(`[rotation] Infisical push failed for tenant ${tenantId}:`, err);
+    }
+  }
+
+  if (tenant?.rotationConfig?.deploy && rotationStatus.infisicalPush === 'success') {
+    try {
+      await triggerDeploy(tenant.rotationConfig.deploy, {
+        coolifyToken: c.env.COOLIFY_API_TOKEN,
+        coolifyUrl: c.env.COOLIFY_URL,
+      });
+      rotationStatus.deployTrigger = 'success';
+    } catch (err) {
+      rotationStatus.deployTrigger = 'failed';
+      rotationStatus.deployError = err instanceof Error ? err.message : 'Unknown error';
+      console.error(`[rotation] Deploy trigger failed for tenant ${tenantId}:`, err);
+    }
+  }
+
+  return c.json({
+    tenantId,
+    apiKey, // Only returned once!
+    keyPrefix,
+    rotation: rotationStatus,
+    message: 'API key regenerated successfully. Store this key securely.',
+  });
+});
+
+/**
+ * GET /api/v1/admin/tenants/:tenantId/rotation-config
+ * Get the rotation config for a tenant
+ */
+adminRoutes.get('/tenants/:tenantId/rotation-config', async (c) => {
+  const db = c.get('db');
+  const tenantId = c.req.param('tenantId');
+
+  const tenant = await db.getTenantById(tenantId);
+  if (!tenant) {
+    throw ApiError.notFound('Tenant not found');
+  }
+
+  return c.json({
+    tenantId,
+    rotationConfig: tenant.rotationConfig,
+  });
+});
+
+/**
+ * PUT /api/v1/admin/tenants/:tenantId/rotation-config
+ * Set the rotation config for a tenant
+ */
+adminRoutes.put('/tenants/:tenantId/rotation-config', async (c) => {
+  const db = c.get('db');
+  const tenantId = c.req.param('tenantId');
+  const body = await c.req.json();
+
+  const config: RotationConfig | null = body.rotationConfig ?? null;
+
+  const updated = await db.updateTenantRotationConfig(tenantId, config);
   if (!updated) {
     throw ApiError.notFound('Tenant not found');
   }
 
   return c.json({
     tenantId,
-    apiKey, // Only returned once!
-    message: 'API key regenerated successfully. Store this key securely.',
+    rotationConfig: config,
+    message: 'Rotation config updated successfully.',
   });
 });
 
@@ -162,6 +262,7 @@ adminRoutes.get('/tenants', async (c) => {
       quotaBytes: t.quotaBytes,
       usedBytes: t.usedBytes,
       allowedFileTypes: t.allowedFileTypes,
+      hasRotationConfig: t.rotationConfig !== null,
       createdAt: t.createdAt,
       updatedAt: t.updatedAt,
     })),
@@ -192,6 +293,7 @@ adminRoutes.get('/tenants/:tenantId', async (c) => {
     quotaBytes: tenant.quotaBytes,
     usedBytes: tenant.usedBytes,
     allowedFileTypes: tenant.allowedFileTypes,
+    rotationConfig: tenant.rotationConfig,
     createdAt: tenant.createdAt,
     updatedAt: tenant.updatedAt,
     quota,

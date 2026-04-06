@@ -5,6 +5,7 @@ import type {
   Workspace,
   ListFilesInput,
   QuotaResponse,
+  RotationConfig,
 } from './types';
 import type {
   AllowedMimeType,
@@ -91,7 +92,8 @@ export interface DatabaseAdapter {
   getTenantByApiKey(apiKey: string): Promise<Tenant | null>;
   getTenantByName(name: string): Promise<Tenant | null>;
   getTenantById(id: string): Promise<Tenant | null>;
-  updateTenantApiKeyHash(tenantId: string, newHash: string, keyPrefix: string): Promise<boolean>;
+  updateTenantApiKeyHash(tenantId: string, newHash: string, keyPrefix: string, gracePeriodSeconds?: number): Promise<boolean>;
+  updateTenantRotationConfig(tenantId: string, config: RotationConfig | null): Promise<boolean>;
   listTenants(input: ListTenantsInput): Promise<ListTenantsResult>;
   updateTenant(tenantId: string, updates: UpdateTenantInput): Promise<Tenant | null>;
   deleteTenant(tenantId: string): Promise<boolean>;

@@ -23,6 +23,7 @@ import type {
   AllowedMimeType,
   UploadSessionStatus,
   ProcessingStatus,
+  RotationConfig,
 } from '@storage-brain/shared';
 import { hashApiKey, verifyApiKey } from '../../utils/crypto';
 
@@ -60,14 +61,32 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
 
   async getTenantByApiKey(apiKey: string): Promise<Tenant | null> {
     const apiKeyHash = await hashApiKey(apiKey);
-    const rows = await this.sql`SELECT * FROM tenants WHERE api_key_hash = ${apiKeyHash}`;
+    const now = Date.now();
+
+    // Check current key first, then fall back to previous key within grace period
+    const rows = await this.sql`
+      SELECT * FROM tenants
+      WHERE api_key_hash = ${apiKeyHash}
+        OR (previous_api_key_hash = ${apiKeyHash} AND previous_key_expires_at > ${now})
+    `;
 
     const row = rows[0];
     if (!row) return null;
 
     const tenant = this.mapTenantRow(row);
-    const isValid = await verifyApiKey(apiKey, tenant.apiKeyHash);
-    return isValid ? tenant : null;
+
+    // Verify against current key first, then previous
+    const isCurrentValid = await verifyApiKey(apiKey, tenant.apiKeyHash);
+    if (isCurrentValid) return tenant;
+
+    if (tenant.previousApiKeyHash) {
+      const isPreviousValid = await verifyApiKey(apiKey, tenant.previousApiKeyHash);
+      if (isPreviousValid && tenant.previousKeyExpiresAt && tenant.previousKeyExpiresAt > now) {
+        return tenant;
+      }
+    }
+
+    return null;
   }
 
   async getTenantByName(name: string): Promise<Tenant | null> {
@@ -82,10 +101,40 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     return row ? this.mapTenantRow(row) : null;
   }
 
-  async updateTenantApiKeyHash(tenantId: string, newHash: string, keyPrefix: string): Promise<boolean> {
+  async updateTenantApiKeyHash(tenantId: string, newHash: string, keyPrefix: string, gracePeriodSeconds = 0): Promise<boolean> {
+    const now = Date.now();
+
+    if (gracePeriodSeconds > 0) {
+      // Copy current key to previous with grace period
+      const expiresAt = now + gracePeriodSeconds * 1000;
+      const result = await this.sql`
+        UPDATE tenants SET
+          previous_api_key_hash = api_key_hash,
+          previous_key_expires_at = ${expiresAt},
+          api_key_hash = ${newHash},
+          key_prefix = ${keyPrefix},
+          updated_at = ${now}
+        WHERE id = ${tenantId}
+      `;
+      return result.count > 0;
+    }
+
+    const result = await this.sql`
+      UPDATE tenants SET
+        api_key_hash = ${newHash},
+        key_prefix = ${keyPrefix},
+        previous_api_key_hash = NULL,
+        previous_key_expires_at = NULL,
+        updated_at = ${now}
+      WHERE id = ${tenantId}
+    `;
+    return result.count > 0;
+  }
+
+  async updateTenantRotationConfig(tenantId: string, config: RotationConfig | null): Promise<boolean> {
     const now = Date.now();
     const result = await this.sql`
-      UPDATE tenants SET api_key_hash = ${newHash}, key_prefix = ${keyPrefix}, updated_at = ${now} WHERE id = ${tenantId}
+      UPDATE tenants SET rotation_config = ${config ? JSON.stringify(config) : null}, updated_at = ${now} WHERE id = ${tenantId}
     `;
     return result.count > 0;
   }
@@ -545,6 +594,11 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
       usedBytes: Number(row.used_bytes),
       allowedFileTypes: row.allowed_file_types
         ? (JSON.parse(row.allowed_file_types as string) as AllowedMimeType[])
+        : null,
+      previousApiKeyHash: (row.previous_api_key_hash as string) ?? null,
+      previousKeyExpiresAt: row.previous_key_expires_at ? Number(row.previous_key_expires_at) : null,
+      rotationConfig: row.rotation_config
+        ? (JSON.parse(row.rotation_config as string) as RotationConfig)
         : null,
       createdAt: Number(row.created_at),
       updatedAt: Number(row.updated_at),

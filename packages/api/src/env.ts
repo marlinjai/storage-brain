@@ -17,6 +17,15 @@ export interface Env {
   // Secrets (set via wrangler secret put)
   ADMIN_API_KEY?: string;
   URL_SIGNING_SECRET: string;
+
+  // Key rotation — Infisical push credentials (optional)
+  INFISICAL_CLIENT_ID?: string;
+  INFISICAL_CLIENT_SECRET?: string;
+  INFISICAL_SITE_URL?: string;
+
+  // Key rotation — Coolify deploy credentials (optional)
+  COOLIFY_API_TOKEN?: string;
+  COOLIFY_URL?: string;
 }
 
 /**

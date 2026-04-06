@@ -69,3 +69,13 @@ CREATE TABLE IF NOT EXISTS upload_sessions (
 CREATE INDEX IF NOT EXISTS idx_upload_sessions_file_id ON upload_sessions(file_id);
 CREATE INDEX IF NOT EXISTS idx_upload_sessions_expires_at ON upload_sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_upload_sessions_status ON upload_sessions(status);
+
+-- 0003: key_prefix
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS key_prefix VARCHAR(10);
+
+-- 0004: dual-key grace period
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS previous_api_key_hash TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS previous_key_expires_at BIGINT;
+
+-- 0005: rotation config (Infisical push + deploy trigger)
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS rotation_config TEXT;

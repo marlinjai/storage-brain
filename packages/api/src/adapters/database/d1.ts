@@ -20,6 +20,7 @@ import type {
   AllowedMimeType,
   UploadSessionStatus,
   ProcessingStatus,
+  RotationConfig,
 } from '@storage-brain/shared';
 import { hashApiKey, verifyApiKey } from '../../utils/crypto';
 
@@ -52,16 +53,30 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
 
   async getTenantByApiKey(apiKey: string): Promise<Tenant | null> {
     const apiKeyHash = await hashApiKey(apiKey);
+    const now = Date.now();
+
     const result = await this.db
-      .prepare('SELECT * FROM tenants WHERE api_key_hash = ?')
-      .bind(apiKeyHash)
+      .prepare(
+        'SELECT * FROM tenants WHERE api_key_hash = ? OR (previous_api_key_hash = ? AND previous_key_expires_at > ?)'
+      )
+      .bind(apiKeyHash, apiKeyHash, now)
       .first();
 
     if (!result) return null;
 
     const tenant = this.mapTenantRow(result);
-    const isValid = await verifyApiKey(apiKey, tenant.apiKeyHash);
-    return isValid ? tenant : null;
+
+    const isCurrentValid = await verifyApiKey(apiKey, tenant.apiKeyHash);
+    if (isCurrentValid) return tenant;
+
+    if (tenant.previousApiKeyHash) {
+      const isPreviousValid = await verifyApiKey(apiKey, tenant.previousApiKeyHash);
+      if (isPreviousValid && tenant.previousKeyExpiresAt && tenant.previousKeyExpiresAt > now) {
+        return tenant;
+      }
+    }
+
+    return null;
   }
 
   async getTenantByName(name: string): Promise<Tenant | null> {
@@ -74,12 +89,35 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     return result ? this.mapTenantRow(result) : null;
   }
 
-  async updateTenantApiKeyHash(tenantId: string, newHash: string, keyPrefix: string): Promise<boolean> {
-    const result = await this.db
-      .prepare('UPDATE tenants SET api_key_hash = ?, key_prefix = ?, updated_at = ? WHERE id = ?')
-      .bind(newHash, keyPrefix, Date.now(), tenantId)
-      .run();
+  async updateTenantApiKeyHash(tenantId: string, newHash: string, keyPrefix: string, gracePeriodSeconds = 0): Promise<boolean> {
+    const now = Date.now();
 
+    if (gracePeriodSeconds > 0) {
+      const expiresAt = now + gracePeriodSeconds * 1000;
+      const result = await this.db
+        .prepare(
+          'UPDATE tenants SET previous_api_key_hash = api_key_hash, previous_key_expires_at = ?, api_key_hash = ?, key_prefix = ?, updated_at = ? WHERE id = ?'
+        )
+        .bind(expiresAt, newHash, keyPrefix, now, tenantId)
+        .run();
+      return (result.meta.changes ?? 0) > 0;
+    }
+
+    const result = await this.db
+      .prepare(
+        'UPDATE tenants SET api_key_hash = ?, key_prefix = ?, previous_api_key_hash = NULL, previous_key_expires_at = NULL, updated_at = ? WHERE id = ?'
+      )
+      .bind(newHash, keyPrefix, now, tenantId)
+      .run();
+    return (result.meta.changes ?? 0) > 0;
+  }
+
+  async updateTenantRotationConfig(tenantId: string, config: RotationConfig | null): Promise<boolean> {
+    const now = Date.now();
+    const result = await this.db
+      .prepare('UPDATE tenants SET rotation_config = ?, updated_at = ? WHERE id = ?')
+      .bind(config ? JSON.stringify(config) : null, now, tenantId)
+      .run();
     return (result.meta.changes ?? 0) > 0;
   }
 
@@ -651,6 +689,11 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       usedBytes: row.used_bytes as number,
       allowedFileTypes: row.allowed_file_types
         ? (JSON.parse(row.allowed_file_types as string) as AllowedMimeType[])
+        : null,
+      previousApiKeyHash: (row.previous_api_key_hash as string) ?? null,
+      previousKeyExpiresAt: row.previous_key_expires_at ? (row.previous_key_expires_at as number) : null,
+      rotationConfig: row.rotation_config
+        ? (JSON.parse(row.rotation_config as string) as RotationConfig)
         : null,
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,

@@ -16,6 +16,37 @@ export interface Tenant extends BaseTenant {
   quotaBytes: number;
   usedBytes: number;
   allowedFileTypes: AllowedMimeType[] | null;
+  previousApiKeyHash: string | null;
+  previousKeyExpiresAt: number | null;
+  rotationConfig: RotationConfig | null;
+}
+
+/**
+ * Per-tenant rotation config — where to push new keys and how to redeploy
+ */
+export interface RotationConfig {
+  infisical?: InfisicalConfig;
+  deploy?: DeployConfig;
+}
+
+export interface InfisicalConfig {
+  projectId: string;
+  environment: string;
+  secretPath: string;
+  secretName: string;
+}
+
+export type DeployConfig = CoolifyDeployConfig | VercelDeployConfig;
+
+export interface CoolifyDeployConfig {
+  type: 'coolify';
+  appUuid: string;
+}
+
+export interface VercelDeployConfig {
+  type: 'vercel';
+  projectId: string;
+  deployHookUrl: string;
 }
 
 /**
