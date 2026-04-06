@@ -134,7 +134,7 @@ fileRoutes.get('/:fileId/signed-url', async (c) => {
   const expiresIn = expiresInParam ? Math.min(Math.max(parseInt(expiresInParam, 10), 60), 86400) : 3600;
   const expiresAt = Date.now() + expiresIn * 1000;
 
-  const token = await generateSignedToken(fileId, expiresAt, c.env.URL_SIGNING_SECRET);
+  const token = await generateSignedToken(fileId, tenant.id, expiresAt, c.env.URL_SIGNING_SECRET);
 
   // Derive base URL from the request
   const url = new URL(c.req.url);
@@ -142,7 +142,7 @@ fileRoutes.get('/:fileId/signed-url', async (c) => {
 
   return c.json({
     fileId,
-    url: `${baseUrl}/api/v1/files/${fileId}/download?token=${token}&expires=${expiresAt}`,
+    url: `${baseUrl}/api/v1/files/${fileId}/download?token=${token}&expires=${expiresAt}&tid=${tenant.id}`,
     expiresAt: new Date(expiresAt).toISOString(),
     expiresIn,
   });
