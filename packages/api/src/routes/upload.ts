@@ -4,6 +4,7 @@ import { authMiddleware } from '../middleware/auth';
 import { requestUploadSchema, type AllowedMimeType, PRESIGNED_URL_EXPIRATION_SECONDS } from '@storage-brain/shared';
 import { ApiError } from '../middleware/error-handler';
 import { MAX_FILE_SIZE_BYTES, ALLOWED_MIME_TYPES } from '@storage-brain/shared';
+import { generateUploadToken } from '../services/signed-url';
 
 export const uploadRoutes = new Hono<AppEnv>();
 
@@ -81,10 +82,11 @@ uploadRoutes.post('/request', async (c) => {
     workspaceId,
   });
 
-  // Generate presigned URL for upload
+  // Generate presigned URL for upload with HMAC token
   // MVP: uses internal worker endpoint, not true R2 presigned URLs
   const expiresAt = Date.now() + PRESIGNED_URL_EXPIRATION_SECONDS * 1000;
-  const presignedUrl = `/_internal/upload/${encodeURIComponent(storedPath)}`;
+  const uploadToken = await generateUploadToken(storedPath, expiresAt, c.env.URL_SIGNING_SECRET);
+  const presignedUrl = `/_internal/upload/${encodeURIComponent(storedPath)}?token=${uploadToken}&expires=${expiresAt}`;
 
   // Create upload session
   await db.createUploadSession({
