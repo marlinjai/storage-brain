@@ -24,6 +24,7 @@ export interface StorageBrainAdminConfig {
 export interface AdminTenant {
   id: string;
   name: string;
+  keyPrefix: string | null;
   quotaBytes: number;
   usedBytes: number;
   allowedFileTypes: AllowedMimeType[] | null;

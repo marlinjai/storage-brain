@@ -53,8 +53,8 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
   async createTenant(input: CreateTenantInput): Promise<void> {
     const now = Date.now();
     await this.sql`
-      INSERT INTO tenants (id, name, api_key_hash, quota_bytes, used_bytes, allowed_file_types, created_at, updated_at)
-      VALUES (${input.id}, ${input.name}, ${input.apiKeyHash}, ${input.quotaBytes}, 0, ${JSON.stringify(input.allowedFileTypes)}, ${now}, ${now})
+      INSERT INTO tenants (id, name, api_key_hash, key_prefix, quota_bytes, used_bytes, allowed_file_types, created_at, updated_at)
+      VALUES (${input.id}, ${input.name}, ${input.apiKeyHash}, ${input.keyPrefix}, ${input.quotaBytes}, 0, ${JSON.stringify(input.allowedFileTypes)}, ${now}, ${now})
     `;
   }
 
@@ -82,10 +82,10 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     return row ? this.mapTenantRow(row) : null;
   }
 
-  async updateTenantApiKeyHash(tenantId: string, newHash: string): Promise<boolean> {
+  async updateTenantApiKeyHash(tenantId: string, newHash: string, keyPrefix: string): Promise<boolean> {
     const now = Date.now();
     const result = await this.sql`
-      UPDATE tenants SET api_key_hash = ${newHash}, updated_at = ${now} WHERE id = ${tenantId}
+      UPDATE tenants SET api_key_hash = ${newHash}, key_prefix = ${keyPrefix}, updated_at = ${now} WHERE id = ${tenantId}
     `;
     return result.count > 0;
   }
@@ -540,6 +540,7 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
       id: row.id as string,
       name: row.name as string,
       apiKeyHash: row.api_key_hash as string,
+      keyPrefix: (row.key_prefix as string) ?? null,
       quotaBytes: Number(row.quota_bytes),
       usedBytes: Number(row.used_bytes),
       allowedFileTypes: row.allowed_file_types

@@ -34,13 +34,14 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     const now = Date.now();
     await this.db
       .prepare(
-        `INSERT INTO tenants (id, name, api_key_hash, quota_bytes, used_bytes, allowed_file_types, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 0, ?, ?, ?)`
+        `INSERT INTO tenants (id, name, api_key_hash, key_prefix, quota_bytes, used_bytes, allowed_file_types, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)`
       )
       .bind(
         input.id,
         input.name,
         input.apiKeyHash,
+        input.keyPrefix,
         input.quotaBytes,
         JSON.stringify(input.allowedFileTypes),
         now,
@@ -73,10 +74,10 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     return result ? this.mapTenantRow(result) : null;
   }
 
-  async updateTenantApiKeyHash(tenantId: string, newHash: string): Promise<boolean> {
+  async updateTenantApiKeyHash(tenantId: string, newHash: string, keyPrefix: string): Promise<boolean> {
     const result = await this.db
-      .prepare('UPDATE tenants SET api_key_hash = ?, updated_at = ? WHERE id = ?')
-      .bind(newHash, Date.now(), tenantId)
+      .prepare('UPDATE tenants SET api_key_hash = ?, key_prefix = ?, updated_at = ? WHERE id = ?')
+      .bind(newHash, keyPrefix, Date.now(), tenantId)
       .run();
 
     return (result.meta.changes ?? 0) > 0;
@@ -645,6 +646,7 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       id: row.id as string,
       name: row.name as string,
       apiKeyHash: row.api_key_hash as string,
+      keyPrefix: (row.key_prefix as string) ?? null,
       quotaBytes: row.quota_bytes as number,
       usedBytes: row.used_bytes as number,
       allowedFileTypes: row.allowed_file_types

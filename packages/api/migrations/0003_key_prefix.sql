@@ -1,0 +1,1 @@
+ALTER TABLE tenants ADD COLUMN key_prefix VARCHAR(10);

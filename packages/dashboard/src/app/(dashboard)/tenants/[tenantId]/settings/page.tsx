@@ -97,6 +97,7 @@ export default function TenantSettingsPage({
       if (res.ok) {
         const data = await res.json();
         setNewKey(data.apiKey);
+        mutate(); // Refresh tenant data to pick up new keyPrefix
       }
     } catch {
       // silent
@@ -215,6 +216,18 @@ export default function TenantSettingsPage({
         <p className="mb-4 text-sm text-gray-400">
           Regenerate the tenant API key. The old key will be invalidated immediately.
         </p>
+
+        <div className="mb-4">
+          {tenant?.keyPrefix ? (
+            <code className="font-mono text-sm text-gray-300">
+              {tenant.keyPrefix}****
+            </code>
+          ) : (
+            <p className="text-sm text-gray-500 italic">
+              Key prefix unavailable — regenerate to enable
+            </p>
+          )}
+        </div>
 
         {newKey && (
           <div className="mb-4 flex items-center gap-2 rounded-lg bg-gray-800 p-3">
