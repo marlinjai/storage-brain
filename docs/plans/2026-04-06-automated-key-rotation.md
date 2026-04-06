@@ -168,6 +168,10 @@ Infisical fires webhook → triggers `workflow_dispatch` on the consumer repo �
 
 **Recommendation**: Option A is simplest — Storage Brain orchestrates the full flow. It already has the Coolify context via tenant config.
 
+### Grace Period Duration
+
+Default: **10 minutes** (not 5). Coolify deploys can take 2-3 min in busy periods, and manual rotation adds human latency. 10 min is safe with no meaningful security cost.
+
 ### Vercel Apps
 
 For Vercel-deployed apps (if any use Storage Brain):
