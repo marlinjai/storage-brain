@@ -14,6 +14,7 @@ import { workspaceRoutes } from './routes/workspaces';
 import { webhookRoutes } from './routes/webhooks';
 import { internalUploadRoutes } from './routes/internal-upload';
 import { errorHandler } from './middleware/error-handler';
+import { rateLimiter } from './middleware/rate-limit';
 import { publicDownloadHandler } from './routes/public-download';
 
 export interface AppConfig {
@@ -72,22 +73,33 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
     });
   });
 
+  // --- Rate limiting (per route group, not global) ---
+  const apiRateLimit = rateLimiter({ windowMs: 60_000, max: 100 });
+  const adminRateLimit = rateLimiter({ windowMs: 60_000, max: 30 });
+  const internalRateLimit = rateLimiter({ windowMs: 60_000, max: 60 });
+
   // Admin routes first (own auth middleware, must not be intercepted by tenant auth)
+  app.use('/api/v1/admin/*', adminRateLimit);
   app.route('/api/v1/admin', adminRoutes);
 
   // Tenant & workspace routes (tenant authMiddleware)
+  app.use('/api/v1/tenant/*', apiRateLimit);
+  app.use('/api/v1/workspaces/*', apiRateLimit);
   app.route('/api/v1/tenant', tenantRoutes);
   app.route('/api/v1/workspaces', workspaceRoutes);
 
   // Public download route (token-based auth, no Bearer required) — must be registered before fileRoutes
+  app.use('/api/v1/files/*', apiRateLimit);
   app.get('/api/v1/files/:fileId/download', publicDownloadHandler);
 
   // Data routes (all use tenant authMiddleware)
+  app.use('/api/v1/upload/*', apiRateLimit);
   app.route('/api/v1/upload', uploadRoutes);
   app.route('/api/v1/files', fileRoutes);
   app.route('/webhooks', webhookRoutes);
 
   // Internal routes (for presigned URL uploads)
+  app.use('/_internal/*', internalRateLimit);
   app.route('/_internal', internalUploadRoutes);
 
   // 404 handler
