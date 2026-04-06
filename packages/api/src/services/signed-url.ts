@@ -70,3 +70,44 @@ export async function verifySignedToken(
   // crypto.subtle.verify performs timing-safe comparison internally
   return crypto.subtle.verify('HMAC', key, tokenBytes, data);
 }
+
+/**
+ * Generate a signed token for an internal upload URL.
+ *
+ * @param storedPath - The file's storage path
+ * @param expiresAt  - Expiry as Unix ms timestamp
+ * @param secret     - HMAC key (URL_SIGNING_SECRET)
+ * @returns Hex-encoded HMAC-SHA256 token
+ */
+export async function generateUploadToken(
+  storedPath: string,
+  expiresAt: number,
+  secret: string,
+): Promise<string> {
+  const key = await getKey(secret);
+  const data = new TextEncoder().encode(`upload:${storedPath}:${expiresAt}`);
+  const sig = await crypto.subtle.sign('HMAC', key, data);
+  return bufToHex(sig);
+}
+
+/**
+ * Verify an upload token using timing-safe comparison.
+ *
+ * @returns `true` if token is valid and not expired
+ */
+export async function verifyUploadToken(
+  storedPath: string,
+  expiresAt: number,
+  token: string,
+  secret: string,
+): Promise<boolean> {
+  if (expiresAt <= Date.now()) {
+    return false;
+  }
+
+  const key = await getKey(secret);
+  const data = new TextEncoder().encode(`upload:${storedPath}:${expiresAt}`);
+  const tokenBytes = hexToBuf(token);
+
+  return crypto.subtle.verify('HMAC', key, tokenBytes, data);
+}

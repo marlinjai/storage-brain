@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../env';
 import { sendWebhook } from '../services/webhook';
 import type { FileResponse } from '@storage-brain/shared';
+import { verifyUploadToken } from '../services/signed-url';
 
 export const internalUploadRoutes = new Hono<AppEnv>();
 
@@ -21,6 +22,24 @@ internalUploadRoutes.put('/upload/*', async (c) => {
 
   if (!storedPath) {
     return c.json({ error: 'Missing storage path' }, 400);
+  }
+
+  // Validate HMAC upload token
+  const token = c.req.query('token');
+  const expiresStr = c.req.query('expires');
+
+  if (!token || !expiresStr) {
+    return c.json({ error: 'Missing upload token or expires parameter' }, 403);
+  }
+
+  const expiresAt = Number(expiresStr);
+  if (Number.isNaN(expiresAt)) {
+    return c.json({ error: 'Invalid expires parameter' }, 403);
+  }
+
+  const isValid = await verifyUploadToken(storedPath, expiresAt, token, c.env.URL_SIGNING_SECRET);
+  if (!isValid) {
+    return c.json({ error: 'Invalid or expired upload token' }, 403);
   }
 
   // Get the file record by stored path
