@@ -28,18 +28,20 @@ function hexToBuf(hex: string): Uint8Array {
 /**
  * Generate a signed token for a file download URL.
  *
- * @param fileId   - The file's UUID
+ * @param fileId    - The file's UUID
+ * @param tenantId  - The tenant's UUID (defense in depth)
  * @param expiresAt - Expiry as Unix ms timestamp
- * @param secret   - HMAC key (URL_SIGNING_SECRET)
+ * @param secret    - HMAC key (URL_SIGNING_SECRET)
  * @returns Hex-encoded HMAC-SHA256 token
  */
 export async function generateSignedToken(
   fileId: string,
+  tenantId: string,
   expiresAt: number,
   secret: string,
 ): Promise<string> {
   const key = await getKey(secret);
-  const data = new TextEncoder().encode(`${fileId}:${expiresAt}`);
+  const data = new TextEncoder().encode(`${tenantId}:${fileId}:${expiresAt}`);
   const sig = await crypto.subtle.sign('HMAC', key, data);
   return bufToHex(sig);
 }
@@ -51,6 +53,7 @@ export async function generateSignedToken(
  */
 export async function verifySignedToken(
   fileId: string,
+  tenantId: string,
   expiresAt: number,
   token: string,
   secret: string,
@@ -61,7 +64,7 @@ export async function verifySignedToken(
   }
 
   const key = await getKey(secret);
-  const data = new TextEncoder().encode(`${fileId}:${expiresAt}`);
+  const data = new TextEncoder().encode(`${tenantId}:${fileId}:${expiresAt}`);
   const tokenBytes = hexToBuf(token);
 
   // crypto.subtle.verify performs timing-safe comparison internally

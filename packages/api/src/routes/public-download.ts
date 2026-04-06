@@ -28,17 +28,23 @@ export async function publicDownloadHandler(c: Context<AppEnv>) {
 
   if (token && expiresParam) {
     // --- Signed-token path ---
+    const tenantId = c.req.query('tid');
+    if (!tenantId) {
+      throw ApiError.unauthorized('Missing tenant ID parameter');
+    }
+
     const expiresAt = parseInt(expiresParam, 10);
     if (isNaN(expiresAt)) {
       throw ApiError.unauthorized('Invalid expires parameter');
     }
 
-    const valid = await verifySignedToken(fileId, expiresAt, token, c.env.URL_SIGNING_SECRET);
+    const valid = await verifySignedToken(fileId, tenantId, expiresAt, token, c.env.URL_SIGNING_SECRET);
     if (!valid) {
       throw ApiError.unauthorized('Invalid or expired download token');
     }
 
-    const file = await db.getFileByIdUnscoped(fileId);
+    // Tenant-scoped lookup for defense in depth
+    const file = await db.getFileById(fileId, tenantId);
     if (!file) {
       throw ApiError.notFound('File not found');
     }
