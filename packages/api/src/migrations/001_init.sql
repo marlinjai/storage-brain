@@ -1,17 +1,28 @@
 -- Storage Brain — Postgres schema
--- Combined from D1 migrations 0001_initial_schema + 0002_workspaces
+-- Combined from D1 migrations 0001_initial_schema + 0002_workspaces + 0003_key_prefix
 
 -- Tenants
 CREATE TABLE IF NOT EXISTS tenants (
   id              TEXT PRIMARY KEY,
   name            TEXT NOT NULL UNIQUE,
   api_key_hash    TEXT NOT NULL,
+  key_prefix      VARCHAR(10),
   quota_bytes     BIGINT NOT NULL DEFAULT 524288000,
   used_bytes      BIGINT NOT NULL DEFAULT 0,
   allowed_file_types TEXT,
   created_at      BIGINT NOT NULL,
   updated_at      BIGINT NOT NULL
 );
+
+-- Backfill key_prefix for existing deployments (idempotent)
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'tenants' AND column_name = 'key_prefix'
+  ) THEN
+    ALTER TABLE tenants ADD COLUMN key_prefix VARCHAR(10);
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_tenants_api_key_hash ON tenants(api_key_hash);
 
