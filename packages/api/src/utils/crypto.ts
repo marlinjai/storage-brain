@@ -8,8 +8,9 @@ export {
 } from '@marlinjai/brain-core';
 
 /**
- * Extract the first 7 characters of an API key as a recognisable prefix
+ * Extract the first 12 characters of an API key as a recognisable prefix
+ * (e.g. "sk_live_a3f9" — enough to identify the key without exposing it)
  */
 export function getKeyPrefix(apiKey: string): string {
-  return apiKey.slice(0, 7);
+  return apiKey.slice(0, 12);
 }
