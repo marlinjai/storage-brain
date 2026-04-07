@@ -1,31 +1,20 @@
-name: Deploy Docs
+name: Docs Trigger
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'docs/**'
+      - 'clearify.config.ts'
 
 jobs:
-  deploy:
+  notify-hub:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      deployments: write
     steps:
-      - uses: actions/checkout@v4
-      - name: Load Cloudflare credentials from 1Password
-        uses: 1password/load-secrets-action@v2
-        with:
-          export-env: true
-        env:
-          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-          CLOUDFLARE_API_KEY: op://Dev Secrets/Cloudflare Global API Key/credential
-          CLOUDFLARE_EMAIL: op://Dev Secrets/Cloudflare Global API Key/email
-          CLOUDFLARE_ACCOUNT_ID: op://Dev Secrets/Cloudflare Global API Key/account-id
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec clearify build
-      - run: npx wrangler pages deploy docs-dist --project-name=storage-brain-docs
+      - name: Trigger hub rebuild
+        run: |
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.HUB_DISPATCH_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/marlinjai/ERP-suite/dispatches \
+            -d '{"event_type": "docs-update"}'
