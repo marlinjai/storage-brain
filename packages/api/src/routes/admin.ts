@@ -8,6 +8,7 @@ import {
   listTenantsQuerySchema,
   listFilesQuerySchema,
   fileIdSchema,
+  createWorkspaceSchema,
   DEFAULT_QUOTA_BYTES,
   type ListFilesInput,
 } from '@storage-brain/shared';
@@ -406,6 +407,47 @@ adminRoutes.get('/tenants/:tenantId/workspaces', async (c) => {
       updatedAt: ws.updatedAt,
     })),
   });
+});
+
+/**
+ * POST /api/v1/admin/tenants/:tenantId/workspaces
+ * Create a workspace for a tenant
+ */
+adminRoutes.post('/tenants/:tenantId/workspaces', async (c) => {
+  const db = c.get('db');
+  const tenantId = c.req.param('tenantId');
+
+  // Verify tenant exists
+  const tenant = await db.getTenantById(tenantId);
+  if (!tenant) {
+    throw ApiError.notFound('Tenant not found');
+  }
+
+  const body = await c.req.json();
+  const validated = createWorkspaceSchema.parse(body);
+
+  const workspace = await db.createWorkspace({
+    id: crypto.randomUUID(),
+    tenantId,
+    name: validated.name,
+    slug: validated.slug,
+    quotaBytes: validated.quotaBytes,
+    metadata: validated.metadata,
+  });
+
+  return c.json(
+    {
+      id: workspace.id,
+      name: workspace.name,
+      slug: workspace.slug,
+      quotaBytes: workspace.quotaBytes,
+      usedBytes: workspace.usedBytes,
+      metadata: workspace.metadata,
+      createdAt: workspace.createdAt,
+      updatedAt: workspace.updatedAt,
+    },
+    201
+  );
 });
 
 /**

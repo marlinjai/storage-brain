@@ -133,14 +133,14 @@ describe('upload routes', () => {
       expect(db.reserveQuota).toHaveBeenCalledWith(TENANT_ID, 1024);
     });
 
-    it('rejects invalid file type', async () => {
+    it('rejects invalid MIME type format', async () => {
       const res = await app.request('/api/v1/upload/request', {
         method: 'POST',
         headers: {
           Authorization: 'Bearer sk_live_test123',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ ...validBody, fileType: 'text/plain' }),
+        body: JSON.stringify({ ...validBody, fileType: 'not-a-mime-type' }),
       }, ENV);
 
       expect(res.status).toBe(400);

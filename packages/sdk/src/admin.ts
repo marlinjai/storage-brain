@@ -124,6 +124,13 @@ export interface AdminWorkspace {
   updatedAt: number;
 }
 
+export interface CreateWorkspaceInput {
+  name: string;
+  slug: string;
+  quotaBytes?: number;
+  metadata?: Record<string, unknown>;
+}
+
 export interface QuotaInfo {
   quotaBytes: number;
   usedBytes: number;
@@ -241,6 +248,17 @@ export class StorageBrainAdmin {
     return this.request<{ workspaces: AdminWorkspace[] }>(
       'GET',
       `/api/v1/admin/tenants/${tenantId}/workspaces`
+    );
+  }
+
+  async createTenantWorkspace(
+    tenantId: string,
+    input: CreateWorkspaceInput
+  ): Promise<AdminWorkspace> {
+    return this.request<AdminWorkspace>(
+      'POST',
+      `/api/v1/admin/tenants/${tenantId}/workspaces`,
+      input
     );
   }
 

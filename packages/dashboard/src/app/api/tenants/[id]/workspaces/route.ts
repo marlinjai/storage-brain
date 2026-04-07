@@ -17,3 +17,21 @@ export async function GET(
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const admin = await getAdmin();
+    const body = await request.json();
+    const workspace = await admin.createTenantWorkspace(id, body);
+    return NextResponse.json(workspace, { status: 201 });
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Not authenticated') {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+  }
+}
