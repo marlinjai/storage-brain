@@ -1,5 +1,5 @@
 import type { AllowedMimeType } from './constants';
-import { ALLOWED_MIME_TYPES, RETRY_CONFIG } from './constants';
+import { RETRY_CONFIG } from './constants';
 import type {
   StorageBrainConfig,
   UploadOptions,
@@ -85,12 +85,12 @@ export class StorageBrain {
 
     // Get file info
     const fileName = file instanceof File ? file.name : 'file';
-    const fileType = file.type as AllowedMimeType;
+    const fileType = file.type;
     const fileSize = file.size;
 
-    // Validate file type
-    if (!ALLOWED_MIME_TYPES.includes(fileType)) {
-      throw new InvalidFileTypeError(fileType, [...ALLOWED_MIME_TYPES]);
+    // Validate file type format (must be a valid MIME type)
+    if (!fileType || !/^[a-z]+\/[a-z0-9.+\-]+$/i.test(fileType)) {
+      throw new InvalidFileTypeError(fileType || '(empty)', []);
     }
 
     // Resolve workspace: option override > client default

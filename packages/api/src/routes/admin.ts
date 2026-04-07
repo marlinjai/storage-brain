@@ -9,8 +9,6 @@ import {
   listFilesQuerySchema,
   fileIdSchema,
   DEFAULT_QUOTA_BYTES,
-  ALLOWED_MIME_TYPES,
-  type AllowedMimeType,
   type ListFilesInput,
 } from '@storage-brain/shared';
 import { generateApiKey, hashApiKey, getKeyPrefix } from '../utils/crypto';
@@ -90,7 +88,7 @@ adminRoutes.post('/tenants', async (c) => {
 
   // Create tenant
   const tenantId = crypto.randomUUID();
-  const allowedFileTypes = (validatedBody.allowedFileTypes as AllowedMimeType[] | undefined) ?? [...ALLOWED_MIME_TYPES];
+  const allowedFileTypes = validatedBody.allowedFileTypes ?? null; // null = accept any file type
   const quotaBytes = validatedBody.quotaBytes ?? DEFAULT_QUOTA_BYTES;
 
   await db.createTenant({

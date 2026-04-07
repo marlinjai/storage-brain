@@ -2,9 +2,11 @@
 export { API_KEY_PREFIX_LIVE, API_KEY_PREFIX_TEST, RETRY_CONFIG } from '@marlinjai/brain-core';
 
 /**
- * Allowed MIME types for file uploads
+ * Known MIME types with metadata (extension, category).
+ * This is a convenience lookup — NOT an enforcement gate.
+ * Any valid MIME type string is accepted for upload.
  */
-export const ALLOWED_FILE_TYPES = {
+export const KNOWN_FILE_TYPES: Record<string, { extension: string; category: string }> = {
   // Images
   'image/jpeg': { extension: 'jpg', category: 'image' },
   'image/png': { extension: 'png', category: 'image' },
@@ -13,25 +15,24 @@ export const ALLOWED_FILE_TYPES = {
   'image/avif': { extension: 'avif', category: 'image' },
   // Documents
   'application/pdf': { extension: 'pdf', category: 'document' },
+  'text/plain': { extension: 'txt', category: 'document' },
   // Audio
   'audio/mpeg': { extension: 'mp3', category: 'audio' },
-} as const;
+  'audio/wav': { extension: 'wav', category: 'audio' },
+  // Video
+  'video/mp4': { extension: 'mp4', category: 'video' },
+};
 
-export type AllowedMimeType = keyof typeof ALLOWED_FILE_TYPES;
+/**
+ * @deprecated Use `string` type directly — file types are no longer restricted to an enum.
+ * Kept for backwards compatibility during migration.
+ */
+export type AllowedMimeType = string;
 
-export const ALLOWED_MIME_TYPES = Object.keys(ALLOWED_FILE_TYPES) as AllowedMimeType[];
-
-export const IMAGE_MIME_TYPES = ALLOWED_MIME_TYPES.filter(
-  (type) => ALLOWED_FILE_TYPES[type].category === 'image'
-);
-
-export const DOCUMENT_MIME_TYPES = ALLOWED_MIME_TYPES.filter(
-  (type) => ALLOWED_FILE_TYPES[type].category === 'document'
-);
-
-export const AUDIO_MIME_TYPES = ALLOWED_MIME_TYPES.filter(
-  (type) => ALLOWED_FILE_TYPES[type].category === 'audio'
-);
+/** @deprecated Use KNOWN_FILE_TYPES instead */
+export const ALLOWED_FILE_TYPES = KNOWN_FILE_TYPES;
+/** @deprecated No longer used — any MIME type is accepted */
+export const ALLOWED_MIME_TYPES = Object.keys(KNOWN_FILE_TYPES);
 
 /**
  * Quota defaults

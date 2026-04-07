@@ -38,10 +38,9 @@ export type {
 } from './constants';
 
 export {
+  KNOWN_FILE_TYPES,
   ALLOWED_FILE_TYPES,
   ALLOWED_MIME_TYPES,
-  IMAGE_MIME_TYPES,
-  DOCUMENT_MIME_TYPES,
   PROCESSING_STATUSES,
   MAX_FILE_SIZE_BYTES,
 } from './constants';

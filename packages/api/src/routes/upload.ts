@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../env';
 import { authMiddleware } from '../middleware/auth';
-import { requestUploadSchema, type AllowedMimeType, PRESIGNED_URL_EXPIRATION_SECONDS } from '@storage-brain/shared';
+import { requestUploadSchema, PRESIGNED_URL_EXPIRATION_SECONDS } from '@storage-brain/shared';
 import { ApiError } from '../middleware/error-handler';
-import { MAX_FILE_SIZE_BYTES, ALLOWED_MIME_TYPES } from '@storage-brain/shared';
+import { MAX_FILE_SIZE_BYTES } from '@storage-brain/shared';
 import { generateUploadToken } from '../services/signed-url';
 
 export const uploadRoutes = new Hono<AppEnv>();
@@ -22,11 +22,10 @@ uploadRoutes.post('/request', async (c) => {
 
   // Validate request body
   const validatedBody = requestUploadSchema.parse(body);
-  const fileType = validatedBody.fileType as AllowedMimeType;
+  const fileType = validatedBody.fileType;
 
-  // Check if file type is allowed for this tenant
-  const allowedTypes = tenant.allowedFileTypes ?? ALLOWED_MIME_TYPES;
-  if (!allowedTypes.includes(fileType)) {
+  // Check if file type is allowed for this tenant (only if tenant has restrictions set)
+  if (tenant.allowedFileTypes && !tenant.allowedFileTypes.includes(fileType)) {
     throw ApiError.invalidFileType(
       `File type '${fileType}' is not allowed for this tenant`
     );
@@ -109,7 +108,7 @@ uploadRoutes.post('/request', async (c) => {
     expiresAt: new Date(expiresAt).toISOString(),
     uploadMetadata: {
       maxSizeBytes: MAX_FILE_SIZE_BYTES,
-      allowedTypes,
+      allowedTypes: tenant.allowedFileTypes,
     },
   });
 });

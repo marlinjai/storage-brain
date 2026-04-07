@@ -1,13 +1,13 @@
 import { z } from 'zod';
-import { ALLOWED_MIME_TYPES, MAX_FILE_SIZE_BYTES } from './constants';
+import { MAX_FILE_SIZE_BYTES } from './constants';
 
 // Re-export shared schemas from brain-core
 export { uuidSchema, apiKeySchema, cursorSchema, workspaceSlugSchema } from '@marlinjai/brain-core';
 
 /**
- * File type validation
+ * File type validation — accepts any valid MIME type string (e.g. "image/png", "audio/wav")
  */
-export const fileTypeSchema = z.enum(ALLOWED_MIME_TYPES as unknown as [string, ...string[]]);
+export const fileTypeSchema = z.string().regex(/^[a-z]+\/[a-z0-9.+\-]+$/i, 'Invalid MIME type format');
 
 /**
  * Tags validation (string key-value pairs)
@@ -62,7 +62,7 @@ export const fileIdSchema = z.string().uuid('Invalid file ID format');
 export const createTenantSchema = z.object({
   name: z.string().min(1).max(100),
   quotaBytes: z.number().int().positive().optional(),
-  allowedFileTypes: z.array(fileTypeSchema).optional(),
+  allowedFileTypes: z.array(fileTypeSchema).optional(), // null/undefined = accept any type
 });
 
 export type CreateTenantSchema = z.infer<typeof createTenantSchema>;

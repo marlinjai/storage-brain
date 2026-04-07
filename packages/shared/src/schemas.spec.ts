@@ -18,10 +18,16 @@ describe('fileTypeSchema', () => {
     expect(fileTypeSchema.parse('application/pdf')).toBe('application/pdf');
   });
 
-  it('rejects invalid MIME types', () => {
-    expect(() => fileTypeSchema.parse('text/plain')).toThrow();
-    expect(() => fileTypeSchema.parse('video/mp4')).toThrow();
+  it('accepts any valid MIME type string', () => {
+    expect(fileTypeSchema.parse('text/plain')).toBe('text/plain');
+    expect(fileTypeSchema.parse('video/mp4')).toBe('video/mp4');
+    expect(fileTypeSchema.parse('audio/wav')).toBe('audio/wav');
+  });
+
+  it('rejects invalid MIME type formats', () => {
     expect(() => fileTypeSchema.parse('')).toThrow();
+    expect(() => fileTypeSchema.parse('not-a-mime')).toThrow();
+    expect(() => fileTypeSchema.parse('just/spaces here')).toThrow();
   });
 });
 
@@ -81,8 +87,8 @@ describe('requestUploadSchema', () => {
     expect(() => requestUploadSchema.parse({ ...validInput, fileName: 'a'.repeat(256) })).toThrow();
   });
 
-  it('rejects invalid fileType', () => {
-    expect(() => requestUploadSchema.parse({ ...validInput, fileType: 'text/plain' })).toThrow();
+  it('rejects invalid fileType format', () => {
+    expect(() => requestUploadSchema.parse({ ...validInput, fileType: 'notamime' })).toThrow();
   });
 
   it('rejects negative fileSizeBytes', () => {

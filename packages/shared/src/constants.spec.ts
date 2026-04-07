@@ -1,9 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-  ALLOWED_FILE_TYPES,
+  KNOWN_FILE_TYPES,
   ALLOWED_MIME_TYPES,
-  IMAGE_MIME_TYPES,
-  DOCUMENT_MIME_TYPES,
   DEFAULT_QUOTA_BYTES,
   MAX_FILE_SIZE_BYTES,
   PRESIGNED_URL_EXPIRATION_SECONDS,
@@ -12,48 +10,34 @@ import {
   DEFAULT_RATE_LIMIT_PER_MINUTE,
 } from './constants';
 
-describe('ALLOWED_FILE_TYPES', () => {
+describe('KNOWN_FILE_TYPES', () => {
   it('contains expected image types', () => {
-    expect(ALLOWED_FILE_TYPES['image/jpeg']).toEqual({ extension: 'jpg', category: 'image' });
-    expect(ALLOWED_FILE_TYPES['image/png']).toEqual({ extension: 'png', category: 'image' });
-    expect(ALLOWED_FILE_TYPES['image/webp']).toEqual({ extension: 'webp', category: 'image' });
-    expect(ALLOWED_FILE_TYPES['image/gif']).toEqual({ extension: 'gif', category: 'image' });
-    expect(ALLOWED_FILE_TYPES['image/avif']).toEqual({ extension: 'avif', category: 'image' });
+    expect(KNOWN_FILE_TYPES['image/jpeg']).toEqual({ extension: 'jpg', category: 'image' });
+    expect(KNOWN_FILE_TYPES['image/png']).toEqual({ extension: 'png', category: 'image' });
+    expect(KNOWN_FILE_TYPES['image/webp']).toEqual({ extension: 'webp', category: 'image' });
+    expect(KNOWN_FILE_TYPES['image/gif']).toEqual({ extension: 'gif', category: 'image' });
+    expect(KNOWN_FILE_TYPES['image/avif']).toEqual({ extension: 'avif', category: 'image' });
   });
 
-  it('contains PDF document type', () => {
-    expect(ALLOWED_FILE_TYPES['application/pdf']).toEqual({ extension: 'pdf', category: 'document' });
-  });
-});
-
-describe('ALLOWED_MIME_TYPES', () => {
-  it('is an array of all keys from ALLOWED_FILE_TYPES', () => {
-    expect(ALLOWED_MIME_TYPES).toEqual(expect.arrayContaining(Object.keys(ALLOWED_FILE_TYPES)));
-    expect(ALLOWED_MIME_TYPES.length).toBe(Object.keys(ALLOWED_FILE_TYPES).length);
-  });
-});
-
-describe('IMAGE_MIME_TYPES', () => {
-  it('only contains image types', () => {
-    for (const type of IMAGE_MIME_TYPES) {
-      expect(type).toMatch(/^image\//);
-    }
+  it('contains document types', () => {
+    expect(KNOWN_FILE_TYPES['application/pdf']).toEqual({ extension: 'pdf', category: 'document' });
+    expect(KNOWN_FILE_TYPES['text/plain']).toEqual({ extension: 'txt', category: 'document' });
   });
 
-  it('does not contain document types', () => {
-    expect(IMAGE_MIME_TYPES).not.toContain('application/pdf');
+  it('contains audio types', () => {
+    expect(KNOWN_FILE_TYPES['audio/mpeg']).toEqual({ extension: 'mp3', category: 'audio' });
+    expect(KNOWN_FILE_TYPES['audio/wav']).toEqual({ extension: 'wav', category: 'audio' });
+  });
+
+  it('contains video types', () => {
+    expect(KNOWN_FILE_TYPES['video/mp4']).toEqual({ extension: 'mp4', category: 'video' });
   });
 });
 
-describe('DOCUMENT_MIME_TYPES', () => {
-  it('only contains document types', () => {
-    expect(DOCUMENT_MIME_TYPES).toContain('application/pdf');
-  });
-
-  it('does not contain image types', () => {
-    for (const type of DOCUMENT_MIME_TYPES) {
-      expect(type).not.toMatch(/^image\//);
-    }
+describe('ALLOWED_MIME_TYPES (deprecated compat)', () => {
+  it('is an array of all keys from KNOWN_FILE_TYPES', () => {
+    expect(ALLOWED_MIME_TYPES).toEqual(expect.arrayContaining(Object.keys(KNOWN_FILE_TYPES)));
+    expect(ALLOWED_MIME_TYPES.length).toBe(Object.keys(KNOWN_FILE_TYPES).length);
   });
 });
 
