@@ -1,0 +1,1 @@
+ALTER TABLE tenants ALTER COLUMN key_prefix TYPE VARCHAR(16);
