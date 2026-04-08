@@ -354,7 +354,8 @@ adminRoutes.get('/tenants/:tenantId/files/:fileId/signed-url', async (c) => {
   const token = await generateSignedToken(fileId, tenantId, expiresAt, c.env.URL_SIGNING_SECRET);
 
   const url = new URL(c.req.url);
-  const baseUrl = `${url.protocol}//${url.host}`;
+  const proto = c.req.header('x-forwarded-proto') || url.protocol.replace(':', '');
+  const baseUrl = `${proto}://${url.host}`;
 
   return c.json({
     fileId,
