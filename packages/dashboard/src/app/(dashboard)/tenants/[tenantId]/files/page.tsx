@@ -6,7 +6,7 @@ import { FileGrid } from '@/components/files/FileGrid';
 import { FileFilters } from '@/components/files/FileFilters';
 import { FileDetailPanel } from '@/components/files/FileDetailPanel';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
-import Link from 'next/link';
+
 
 interface FileFiltersState {
   fileType?: string;
@@ -59,15 +59,6 @@ export default function FilesPage({
 
   return (
     <div>
-      <div className="mb-4">
-        <Link
-          href={`/tenants/${tenantId}`}
-          className="text-sm text-gray-500 hover:text-gray-300"
-        >
-          &larr; Back to Tenant
-        </Link>
-      </div>
-
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-100">Files</h1>
         <div className="flex gap-2">

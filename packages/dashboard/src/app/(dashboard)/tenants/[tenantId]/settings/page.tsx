@@ -125,15 +125,6 @@ export default function TenantSettingsPage({
 
   return (
     <div>
-      <div className="mb-6">
-        <a
-          href={`/tenants/${tenantId}`}
-          className="text-sm text-gray-500 hover:text-gray-300"
-        >
-          &larr; Back to Tenant
-        </a>
-      </div>
-
       <h1 className="mb-8 text-2xl font-bold text-gray-100">
         Tenant Settings
       </h1>

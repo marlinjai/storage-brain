@@ -49,15 +49,6 @@ export default function WorkspacesPage({
 
   return (
     <div>
-      <div className="mb-4">
-        <Link
-          href={`/tenants/${tenantId}`}
-          className="text-sm text-gray-500 hover:text-gray-300"
-        >
-          &larr; Back to Tenant
-        </Link>
-      </div>
-
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-100">Workspaces</h1>
         <button

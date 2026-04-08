@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import TenantSwitcher from './TenantSwitcher';
 
 const navItems = [
   {
@@ -24,9 +25,19 @@ const navItems = [
   },
 ];
 
+const tenantSubNav = [
+  { label: 'Files', suffix: '/files' },
+  { label: 'Workspaces', suffix: '/workspaces' },
+  { label: 'Settings', suffix: '/settings' },
+];
+
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Extract current tenantId from URL
+  const match = pathname.match(/^\/tenants\/([^/]+)/);
+  const currentTenantId = match?.[1] ?? null;
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -38,6 +49,11 @@ export default function Sidebar() {
       {/* Header */}
       <div className="flex h-16 items-center border-b border-gray-800 px-6">
         <h1 className="text-lg font-bold text-gray-100">Storage Brain</h1>
+      </div>
+
+      {/* Tenant Switcher */}
+      <div className="border-b border-gray-800 py-3">
+        <TenantSwitcher />
       </div>
 
       {/* Navigation */}
@@ -63,6 +79,30 @@ export default function Sidebar() {
             </Link>
           );
         })}
+
+        {/* Tenant sub-navigation */}
+        {currentTenantId && (
+          <div className="ml-4 mt-1 space-y-0.5 border-l border-gray-800 pl-3">
+            {tenantSubNav.map((item) => {
+              const href = `/tenants/${currentTenantId}${item.suffix}`;
+              const isActive = pathname === href;
+
+              return (
+                <Link
+                  key={item.suffix}
+                  href={href}
+                  className={`block rounded-md px-3 py-1.5 text-sm transition-colors ${
+                    isActive
+                      ? 'bg-gray-800 text-gray-100'
+                      : 'text-gray-500 hover:bg-gray-900 hover:text-gray-300'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </nav>
 
       {/* Logout */}

@@ -38,15 +38,6 @@ export default function TenantDetailPage({
 
   return (
     <div>
-      <div className="mb-6">
-        <Link
-          href="/tenants"
-          className="text-sm text-gray-500 hover:text-gray-300"
-        >
-          &larr; All Tenants
-        </Link>
-      </div>
-
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-100">{tenant.name}</h1>
         <p className="mt-1 text-sm text-gray-500">

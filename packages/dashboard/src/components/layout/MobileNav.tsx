@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import TenantSwitcher from './TenantSwitcher';
 
 const navItems = [
   {
@@ -25,10 +26,19 @@ const navItems = [
   },
 ];
 
+const tenantSubNav = [
+  { label: 'Files', suffix: '/files' },
+  { label: 'Workspaces', suffix: '/workspaces' },
+  { label: 'Settings', suffix: '/settings' },
+];
+
 export default function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
+
+  const match = pathname.match(/^\/tenants\/([^/]+)/);
+  const currentTenantId = match?.[1] ?? null;
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -59,6 +69,11 @@ export default function MobileNav() {
       {/* Dropdown */}
       {open && (
         <div className="border-b border-gray-800 bg-gray-950 px-4 pb-4 pt-2">
+          {/* Tenant Switcher */}
+          <div className="mb-3 -mx-1">
+            <TenantSwitcher />
+          </div>
+
           <nav className="space-y-1">
             {navItems.map((item) => {
               const isActive =
@@ -82,6 +97,31 @@ export default function MobileNav() {
                 </Link>
               );
             })}
+
+            {/* Tenant sub-navigation */}
+            {currentTenantId && (
+              <div className="ml-4 space-y-0.5 border-l border-gray-800 pl-3">
+                {tenantSubNav.map((item) => {
+                  const href = `/tenants/${currentTenantId}${item.suffix}`;
+                  const isActive = pathname === href;
+
+                  return (
+                    <Link
+                      key={item.suffix}
+                      href={href}
+                      onClick={() => setOpen(false)}
+                      className={`block rounded-md px-3 py-1.5 text-sm transition-colors ${
+                        isActive
+                          ? 'bg-gray-800 text-gray-100'
+                          : 'text-gray-500 hover:bg-gray-900 hover:text-gray-300'
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
           </nav>
 
           <div className="mt-3 border-t border-gray-800 pt-3">
