@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { formatBytes, formatDate } from '@/lib/format';
 
 interface FileItem {
@@ -13,12 +14,13 @@ interface FileItem {
 
 interface FileGridProps {
   files: FileItem[];
+  tenantId: string;
   onFileClick: (file: FileItem) => void;
   onDeleteFile: (file: FileItem) => void;
 }
 
-function isImage(fileType: string) {
-  return fileType.startsWith('image/');
+function isPreviewable(fileType: string) {
+  return fileType.startsWith('image/') || fileType === 'application/pdf';
 }
 
 function FileTypeIcon({ fileType }: { fileType: string }) {
@@ -30,7 +32,52 @@ function FileTypeIcon({ fileType }: { fileType: string }) {
   );
 }
 
-export function FileGrid({ files, onFileClick, onDeleteFile }: FileGridProps) {
+function FilePreview({
+  file,
+  tenantId,
+}: {
+  file: FileItem;
+  tenantId: string;
+}) {
+  const [url, setUrl] = useState(file.signedUrl ?? '');
+
+  useEffect(() => {
+    if (url || !isPreviewable(file.fileType)) return;
+
+    fetch(`/api/tenants/${tenantId}/files/${file.id}/signed-url`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.url) setUrl(data.url);
+      })
+      .catch(() => {});
+  }, [file.id, file.fileType, tenantId, url]);
+
+  if (file.fileType.startsWith('image/') && url) {
+    return (
+      <img
+        src={url}
+        alt={file.originalName}
+        className="h-full w-full object-cover"
+      />
+    );
+  }
+
+  if (file.fileType === 'application/pdf' && url) {
+    return (
+      <object
+        data={`${url}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+        type="application/pdf"
+        className="pointer-events-none h-full w-full"
+      >
+        <FileTypeIcon fileType={file.fileType} />
+      </object>
+    );
+  }
+
+  return <FileTypeIcon fileType={file.fileType} />;
+}
+
+export function FileGrid({ files, tenantId, onFileClick, onDeleteFile }: FileGridProps) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {files.map((file) => (
@@ -42,15 +89,7 @@ export function FileGrid({ files, onFileClick, onDeleteFile }: FileGridProps) {
             className="relative aspect-[4/3] overflow-hidden"
             onClick={() => onFileClick(file)}
           >
-            {isImage(file.fileType) && file.signedUrl ? (
-              <img
-                src={file.signedUrl}
-                alt={file.originalName}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <FileTypeIcon fileType={file.fileType} />
-            )}
+            <FilePreview file={file} tenantId={tenantId} />
           </div>
           <div className="p-3" onClick={() => onFileClick(file)}>
             <p className="truncate text-sm font-medium text-gray-200">

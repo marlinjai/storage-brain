@@ -103,6 +103,7 @@ export default function FilesPage({
       {files && files.length > 0 && viewMode === 'grid' && (
         <FileGrid
           files={files}
+          tenantId={tenantId}
           onFileClick={(f) => setSelectedFile(f as FileItem)}
           onDeleteFile={(f) => setDeleteTarget(f as FileItem)}
         />

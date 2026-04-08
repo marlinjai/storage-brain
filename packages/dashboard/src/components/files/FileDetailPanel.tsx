@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { formatBytes, formatDate } from '@/lib/format';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 
@@ -31,10 +31,21 @@ export function FileDetailPanel({
   onDelete,
 }: FileDetailPanelProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!file) { setSignedUrl(null); return; }
+    setSignedUrl(null);
+    fetch(`/api/tenants/${tenantId}/files/${file.id}/signed-url`)
+      .then((r) => r.json())
+      .then((data) => { if (data?.url) setSignedUrl(data.url); })
+      .catch(() => {});
+  }, [file?.id, tenantId]);
 
   if (!file) return null;
 
   const isImage = file.fileType.startsWith('image/');
+  const isPdf = file.fileType === 'application/pdf';
 
   async function handleDelete() {
     if (!file) return;
@@ -69,12 +80,21 @@ export function FileDetailPanel({
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
           {/* Preview */}
-          {isImage && file.signedUrl && (
+          {isImage && signedUrl && (
             <div className="overflow-hidden rounded-lg border border-gray-800">
               <img
-                src={file.signedUrl}
+                src={signedUrl}
                 alt={file.originalName}
                 className="w-full object-contain"
+              />
+            </div>
+          )}
+          {isPdf && signedUrl && (
+            <div className="overflow-hidden rounded-lg border border-gray-800" style={{ height: '400px' }}>
+              <iframe
+                src={`${signedUrl}#toolbar=0&navpanes=0`}
+                className="h-full w-full"
+                title={file.originalName}
               />
             </div>
           )}
@@ -133,9 +153,9 @@ export function FileDetailPanel({
 
         {/* Actions */}
         <div className="flex gap-3 border-t border-gray-800 px-5 py-4">
-          {file.signedUrl && (
+          {signedUrl && (
             <a
-              href={file.signedUrl}
+              href={signedUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
