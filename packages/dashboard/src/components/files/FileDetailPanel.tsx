@@ -83,7 +83,7 @@ export function FileDetailPanel({
           {isImage && signedUrl && (
             <div className="overflow-hidden rounded-lg border border-gray-800">
               <img
-                src={signedUrl}
+                src={`${signedUrl}${signedUrl.includes('?') ? '&' : '?'}disposition=inline`}
                 alt={file.originalName}
                 className="w-full object-contain"
               />
@@ -92,7 +92,7 @@ export function FileDetailPanel({
           {isPdf && signedUrl && (
             <div className="overflow-hidden rounded-lg border border-gray-800" style={{ height: '400px' }}>
               <iframe
-                src={`${signedUrl}#toolbar=0&navpanes=0`}
+                src={`${signedUrl}${signedUrl.includes('?') ? '&' : '?'}disposition=inline#toolbar=0&navpanes=0`}
                 className="h-full w-full"
                 title={file.originalName}
               />

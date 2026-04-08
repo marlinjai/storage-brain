@@ -85,9 +85,11 @@ export async function publicDownloadHandler(c: Context<AppEnv>) {
     throw ApiError.notFound('File not found in storage');
   }
 
+  const disposition = c.req.query('disposition') === 'inline' ? 'inline' : 'attachment';
+
   const headers = new Headers();
   headers.set('Content-Type', fileType);
-  headers.set('Content-Disposition', `attachment; filename="${originalName}"`);
+  headers.set('Content-Disposition', `${disposition}; filename="${originalName}"`);
   headers.set('Content-Length', sizeBytes.toString());
 
   // Allow browser caching for signed URLs (they have expiry built in)

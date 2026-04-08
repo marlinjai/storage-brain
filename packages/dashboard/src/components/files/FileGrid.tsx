@@ -52,10 +52,12 @@ function FilePreview({
       .catch(() => {});
   }, [file.id, file.fileType, tenantId, url]);
 
+  const inlineUrl = url ? `${url}${url.includes('?') ? '&' : '?'}disposition=inline` : '';
+
   if (file.fileType.startsWith('image/') && url) {
     return (
       <img
-        src={url}
+        src={inlineUrl}
         alt={file.originalName}
         className="h-full w-full object-cover"
       />
@@ -64,13 +66,11 @@ function FilePreview({
 
   if (file.fileType === 'application/pdf' && url) {
     return (
-      <object
-        data={`${url}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-        type="application/pdf"
+      <iframe
+        src={`${inlineUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
         className="pointer-events-none h-full w-full"
-      >
-        <FileTypeIcon fileType={file.fileType} />
-      </object>
+        title={file.originalName}
+      />
     );
   }
 
