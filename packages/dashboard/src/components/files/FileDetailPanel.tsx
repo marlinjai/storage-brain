@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { formatBytes, formatDate } from '@/lib/format';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { useSignedUrl } from '@/hooks/useSignedUrl';
 
 interface FileItem {
   id: string;
@@ -31,16 +32,7 @@ export function FileDetailPanel({
   onDelete,
 }: FileDetailPanelProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [signedUrl, setSignedUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!file) { setSignedUrl(null); return; }
-    setSignedUrl(null);
-    fetch(`/api/tenants/${tenantId}/files/${file.id}/signed-url`)
-      .then((r) => r.json())
-      .then((data) => { if (data?.url) setSignedUrl(data.url); })
-      .catch(() => {});
-  }, [file?.id, tenantId]);
+  const { url: signedUrl } = useSignedUrl(tenantId, file?.id);
 
   if (!file) return null;
 

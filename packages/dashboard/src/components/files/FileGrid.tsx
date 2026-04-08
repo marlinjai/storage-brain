@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { formatBytes, formatDate } from '@/lib/format';
+import { useSignedUrl } from '@/hooks/useSignedUrl';
 
 interface FileItem {
   id: string;
@@ -9,7 +9,6 @@ interface FileItem {
   fileType: string;
   sizeBytes: number;
   createdAt: string;
-  signedUrl?: string;
 }
 
 interface FileGridProps {
@@ -39,18 +38,10 @@ function FilePreview({
   file: FileItem;
   tenantId: string;
 }) {
-  const [url, setUrl] = useState(file.signedUrl ?? '');
-
-  useEffect(() => {
-    if (url || !isPreviewable(file.fileType)) return;
-
-    fetch(`/api/tenants/${tenantId}/files/${file.id}/signed-url`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data?.url) setUrl(data.url);
-      })
-      .catch(() => {});
-  }, [file.id, file.fileType, tenantId, url]);
+  const { url } = useSignedUrl(
+    tenantId,
+    isPreviewable(file.fileType) ? file.id : undefined,
+  );
 
   const inlineUrl = url ? `${url}${url.includes('?') ? '&' : '?'}disposition=inline` : '';
 
