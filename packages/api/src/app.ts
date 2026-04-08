@@ -47,7 +47,9 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
   });
 
   // Global middleware
-  app.use('*', secureHeaders());
+  app.use('*', secureHeaders({
+    xFrameOptions: false,
+  }));
   app.use('*', requestId());
   app.use('*', logger());
   app.use(
