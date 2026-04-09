@@ -6,10 +6,10 @@ export default defineConfig({
   hubProject: {
     hubUrl: 'https://docs.lumitra.co',
     hubName: 'ERP Suite',
-    description: 'File storage & processing with multi-tenant workspaces',
+    description: 'Multi-tenant file storage with workspaces, signed URLs, and S3/R2 adapters',
     status: 'active',
     icon: '📦',
-    tags: ['api', 'storage', 'cloudflare'],
+    tags: ['api', 'storage', 'cloudflare', 'self-hosting'],
     group: 'Lumitra Infrastructure',
   },
   sections: [
