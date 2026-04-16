@@ -29,6 +29,9 @@ CleanShot*
 .DS_Store
 Thumbs.db
 
+# Infisical
+.infisical.json
+
 # Logs
 *.log
 npm-debug.log*
