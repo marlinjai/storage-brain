@@ -91,6 +91,15 @@ export async function publicDownloadHandler(c: Context<AppEnv>) {
   headers.set('Content-Type', fileType);
   headers.set('Content-Disposition', `${disposition}; filename="${originalName}"`);
   headers.set('Content-Length', sizeBytes.toString());
+  headers.set('Accept-Ranges', 'bytes');
+
+  // Explicit cross-origin embedding headers so audio/video/image elements on
+  // other origins can load this file. CORS headers are added by the global
+  // cors() middleware; CORP is set here (and globally via secureHeaders) to
+  // allow embedding without the crossorigin attribute as well.
+  headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  headers.set('Access-Control-Allow-Origin', '*');
+  headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
 
   // Allow browser caching for signed URLs (they have expiry built in)
   if (token) {

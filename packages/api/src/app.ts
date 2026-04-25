@@ -47,8 +47,14 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
   });
 
   // Global middleware
+  // Note: crossOriginResourcePolicy is set to 'cross-origin' so that file
+  // download responses (audio, image, video) can be embedded by browsers on
+  // other origins via <audio>/<video>/<img> tags. Without this, Chrome blocks
+  // the response with ERR_BLOCKED_BY_RESPONSE.NotSameOrigin even when CORS
+  // headers are present.
   app.use('*', secureHeaders({
     xFrameOptions: false,
+    crossOriginResourcePolicy: 'cross-origin',
   }));
   app.use('*', requestId());
   app.use('*', logger());
@@ -56,9 +62,9 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
     '*',
     cors({
       origin: '*',
-      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'Authorization', 'X-Workspace-Id'],
-      exposeHeaders: ['X-Request-Id'],
+      allowMethods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowHeaders: ['Content-Type', 'Authorization', 'X-Workspace-Id', 'Range'],
+      exposeHeaders: ['X-Request-Id', 'Content-Length', 'Content-Range', 'Accept-Ranges'],
       maxAge: 86400,
     })
   );

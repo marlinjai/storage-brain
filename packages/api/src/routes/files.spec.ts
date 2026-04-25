@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createApp } from '../app';
+import { generateSignedToken } from '../services/signed-url';
 import type { StorageAdapter, DatabaseAdapter, Tenant, StoredFile } from '@storage-brain/shared';
 
 const TENANT_ID = '550e8400-e29b-41d4-a716-446655440000';
@@ -169,6 +170,49 @@ describe('file routes', () => {
       }, ENV);
 
       expect(db.getFileById).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
+    });
+  });
+
+  describe('GET /api/v1/files/:fileId/download (cross-origin embedding)', () => {
+    it('responds with CORS + CORP headers so browsers can embed the file cross-origin', async () => {
+      const expiresAt = Date.now() + 60_000;
+      const token = await generateSignedToken(FILE_ID, TENANT_ID, expiresAt, ENV.URL_SIGNING_SECRET);
+
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}/download?token=${token}&expires=${expiresAt}&tid=${TENANT_ID}`,
+        { method: 'GET' },
+        ENV,
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+      expect(res.headers.get('Cross-Origin-Resource-Policy')).toBe('cross-origin');
+      expect(res.headers.get('Accept-Ranges')).toBe('bytes');
+      const expose = res.headers.get('Access-Control-Expose-Headers') ?? '';
+      expect(expose).toContain('Content-Length');
+      expect(expose).toContain('Accept-Ranges');
+    });
+
+    it('OPTIONS preflight succeeds with CORS allow headers', async () => {
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}/download`,
+        {
+          method: 'OPTIONS',
+          headers: {
+            Origin: 'http://localhost:3010',
+            'Access-Control-Request-Method': 'GET',
+            'Access-Control-Request-Headers': 'Range',
+          },
+        },
+        ENV,
+      );
+
+      expect(res.status).toBeLessThan(400);
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+      const allowMethods = res.headers.get('Access-Control-Allow-Methods') ?? '';
+      expect(allowMethods).toContain('GET');
+      const allowHeaders = res.headers.get('Access-Control-Allow-Headers') ?? '';
+      expect(allowHeaders.toLowerCase()).toContain('range');
     });
   });
 
