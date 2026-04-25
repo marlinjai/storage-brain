@@ -12,10 +12,12 @@ INFISICAL_TOKEN=$(infisical login \
   --domain "$DOMAIN" \
   --silent --plain)
 
-# Inject secrets and start the app
+# Inject secrets and start the app — call tsx directly to avoid Corepack
+# downloading pnpm from npmjs.org on every container start (can take 17+ min
+# when the registry is slow because the app user can't access root's corepack cache).
 exec infisical run \
   --env=prod \
   --projectId="$PROJECT_ID" \
   --domain "$DOMAIN" \
   --token "$INFISICAL_TOKEN" \
-  -- pnpm --filter @storage-brain/api start:node
+  -- /app/packages/api/node_modules/.bin/tsx /app/packages/api/src/node.ts
