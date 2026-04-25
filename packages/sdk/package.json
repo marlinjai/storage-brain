@@ -1,6 +1,6 @@
 {
   "name": "@marlinjai/storage-brain-sdk",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "TypeScript SDK for Storage Brain - edge-native file storage service",
   "type": "module",
   "main": "./dist/index.cjs",

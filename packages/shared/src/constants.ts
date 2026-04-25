@@ -18,7 +18,10 @@ export const KNOWN_FILE_TYPES: Record<string, { extension: string; category: str
   'text/plain': { extension: 'txt', category: 'document' },
   // Audio
   'audio/mpeg': { extension: 'mp3', category: 'audio' },
+  'audio/mp4': { extension: 'm4a', category: 'audio' },
   'audio/wav': { extension: 'wav', category: 'audio' },
+  'audio/ogg': { extension: 'ogg', category: 'audio' },
+  'audio/webm': { extension: 'webm', category: 'audio' },
   // Video
   'video/mp4': { extension: 'mp4', category: 'video' },
 };

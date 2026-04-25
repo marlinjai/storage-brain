@@ -26,7 +26,10 @@ describe('KNOWN_FILE_TYPES', () => {
 
   it('contains audio types', () => {
     expect(KNOWN_FILE_TYPES['audio/mpeg']).toEqual({ extension: 'mp3', category: 'audio' });
+    expect(KNOWN_FILE_TYPES['audio/mp4']).toEqual({ extension: 'm4a', category: 'audio' });
     expect(KNOWN_FILE_TYPES['audio/wav']).toEqual({ extension: 'wav', category: 'audio' });
+    expect(KNOWN_FILE_TYPES['audio/ogg']).toEqual({ extension: 'ogg', category: 'audio' });
+    expect(KNOWN_FILE_TYPES['audio/webm']).toEqual({ extension: 'webm', category: 'audio' });
   });
 
   it('contains video types', () => {
