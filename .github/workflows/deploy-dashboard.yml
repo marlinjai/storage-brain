@@ -9,6 +9,7 @@ on:
       - packages/sdk/**
       - package.json
       - pnpm-lock.yaml
+      - .github/workflows/deploy-dashboard.yml
   workflow_dispatch:
 
 jobs:

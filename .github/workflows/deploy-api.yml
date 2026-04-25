@@ -9,6 +9,7 @@ on:
       - packages/sdk/**
       - package.json
       - pnpm-lock.yaml
+      - .github/workflows/deploy-api.yml
   workflow_dispatch:
 
 jobs:
