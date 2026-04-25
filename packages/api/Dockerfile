@@ -40,7 +40,10 @@ USER app
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=3 \
+# start-period=300s: entrypoint runs Infisical auth + Prisma migrations + server boot
+# in series before /health is reachable. 120s was too tight on prod-sized migration
+# runs and caused Coolify to roll back successful deploys (see ROADMAP / CHANGELOG).
+HEALTHCHECK --interval=15s --timeout=5s --start-period=300s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/health', r => process.exit(r.statusCode < 400 ? 0 : 1)).on('error', () => process.exit(1))"
 
 # Secrets injected from Infisical at runtime via machine identity (Universal Auth).
