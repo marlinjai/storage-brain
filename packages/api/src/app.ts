@@ -22,6 +22,13 @@ export interface AppConfig {
   db: DatabaseAdapter;
   /** Optional env overrides — used by Node.js entry point to inject process.env values into c.env */
   env?: Partial<Env>;
+  /**
+   * Called on each /health request. Return false while the app is still
+   * initialising (e.g. running migrations) so the healthcheck gets a 503
+   * instead of blocking port bind until init completes. Defaults to true
+   * (always ready) so Cloudflare Workers and tests are unaffected.
+   */
+  isReady?: () => boolean;
 }
 
 export function createApp(config: AppConfig): Hono<AppEnv> {
@@ -72,8 +79,15 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
   // Error handling
   app.onError(errorHandler);
 
-  // Health check
+  // Health check — returns 503 while the app is still initialising so
+  // Coolify's healthcheck gets a real HTTP response (not "connection refused")
+  // immediately after container start, even before migrations complete.
   app.get('/health', (c) => {
+    const ready = config.isReady?.() ?? true;
+    if (!ready) {
+      c.header('Retry-After', '5');
+      return c.json({ status: 'starting', timestamp: new Date().toISOString() }, 503);
+    }
     return c.json({
       status: 'ok',
       timestamp: new Date().toISOString(),

@@ -31,12 +31,11 @@ async function main() {
     connectionString: required('DATABASE_URL'),
   });
 
-  // Run migrations
-  console.log('Running database migrations…');
-  await db.migrate();
-  console.log('Migrations complete.');
+  // Port binds BEFORE migrations so Coolify's healthcheck gets a real HTTP
+  // response immediately. /health returns 503 until migrations complete, then
+  // flips to 200. This prevents "connection refused" rollbacks on slow starts.
+  let ready = false;
 
-  // Create Hono app with injected adapters and env bindings
   const app = createApp({
     storage,
     db,
@@ -45,6 +44,7 @@ async function main() {
       URL_SIGNING_SECRET: required('URL_SIGNING_SECRET'),
       ENVIRONMENT: (process.env.ENVIRONMENT as 'development' | 'staging' | 'production') ?? 'production',
     },
+    isReady: () => ready,
   });
 
   console.log(`Storage Brain API listening on http://0.0.0.0:${port}`);
@@ -54,6 +54,18 @@ async function main() {
     port,
     hostname: '0.0.0.0',
   });
+
+  // Run migrations in background — /health returns 503 until this resolves.
+  console.log('Running database migrations…');
+  db.migrate()
+    .then(() => {
+      console.log('Migrations complete.');
+      ready = true;
+    })
+    .catch((err) => {
+      console.error('Migration failed:', err);
+      process.exit(1);
+    });
 
   // Graceful shutdown
   const shutdown = async () => {
