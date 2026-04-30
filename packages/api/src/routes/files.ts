@@ -4,6 +4,7 @@ import { authMiddleware } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import { listFilesQuerySchema, fileIdSchema, type ListFilesInput } from '@storage-brain/shared';
 import { generateSignedToken } from '../services/signed-url';
+import { buildContentDisposition } from '../utils/content-disposition';
 
 export const fileRoutes = new Hono<AppEnv>();
 
@@ -179,7 +180,7 @@ fileRoutes.get('/:fileId/download', async (c) => {
   // Return file with appropriate headers
   const headers = new Headers();
   headers.set('Content-Type', file.fileType);
-  headers.set('Content-Disposition', `attachment; filename="${file.originalName}"`);
+  headers.set('Content-Disposition', buildContentDisposition('attachment', file.originalName));
   headers.set('Content-Length', file.sizeBytes.toString());
 
   return new Response(object.body, {

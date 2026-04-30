@@ -3,6 +3,7 @@ import type { AppEnv } from '../env';
 import { ApiError } from '../middleware/error-handler';
 import { fileIdSchema, apiKeySchema } from '@storage-brain/shared';
 import { verifySignedToken } from '../services/signed-url';
+import { buildContentDisposition } from '../utils/content-disposition';
 
 /**
  * Public download handler that accepts either:
@@ -89,7 +90,7 @@ export async function publicDownloadHandler(c: Context<AppEnv>) {
 
   const headers = new Headers();
   headers.set('Content-Type', fileType);
-  headers.set('Content-Disposition', `${disposition}; filename="${originalName}"`);
+  headers.set('Content-Disposition', buildContentDisposition(disposition, originalName));
   headers.set('Content-Length', sizeBytes.toString());
   headers.set('Accept-Ranges', 'bytes');
 

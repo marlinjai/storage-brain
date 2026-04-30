@@ -193,6 +193,25 @@ describe('file routes', () => {
       expect(expose).toContain('Accept-Ranges');
     });
 
+    it('returns 200 and RFC 6266 Content-Disposition for non-ASCII filenames', async () => {
+      const expiresAt = Date.now() + 60_000;
+      const token = await generateSignedToken(FILE_ID, TENANT_ID, expiresAt, ENV.URL_SIGNING_SECRET);
+      // NFD-decomposed "ü" (u + U+0308 combining diaeresis): the exact prod failure mode.
+      const decomposedName = 'Rechnung für Test.pdf';
+      db.getFileById.mockResolvedValueOnce({ ...mockFile, originalName: decomposedName });
+
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}/download?token=${token}&expires=${expiresAt}&tid=${TENANT_ID}`,
+        { method: 'GET' },
+        ENV,
+      );
+
+      expect(res.status).toBe(200);
+      const cd = res.headers.get('Content-Disposition') ?? '';
+      expect(cd).toContain('filename="Rechnung fu_r Test.pdf"');
+      expect(cd).toContain("filename*=UTF-8''Rechnung%20fu%CC%88r%20Test.pdf");
+    });
+
     it('OPTIONS preflight succeeds with CORS allow headers', async () => {
       const res = await app.request(
         `/api/v1/files/${FILE_ID}/download`,
