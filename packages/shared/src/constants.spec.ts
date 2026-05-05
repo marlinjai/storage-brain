@@ -35,6 +35,15 @@ describe('KNOWN_FILE_TYPES', () => {
   it('contains video types', () => {
     expect(KNOWN_FILE_TYPES['video/mp4']).toEqual({ extension: 'mp4', category: 'video' });
   });
+
+  it('contains 3D model types', () => {
+    expect(KNOWN_FILE_TYPES['model/gltf-binary']).toEqual({ extension: 'glb', category: 'model' });
+    expect(KNOWN_FILE_TYPES['model/gltf+json']).toEqual({ extension: 'gltf', category: 'model' });
+    expect(KNOWN_FILE_TYPES['model/obj']).toEqual({ extension: 'obj', category: 'model' });
+    expect(KNOWN_FILE_TYPES['model/stl']).toEqual({ extension: 'stl', category: 'model' });
+    expect(KNOWN_FILE_TYPES['model/vnd.usdz+zip']).toEqual({ extension: 'usdz', category: 'model' });
+    expect(KNOWN_FILE_TYPES['application/vnd.ms-fbx']).toEqual({ extension: 'fbx', category: 'model' });
+  });
 });
 
 describe('ALLOWED_MIME_TYPES (deprecated compat)', () => {

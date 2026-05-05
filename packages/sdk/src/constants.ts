@@ -24,6 +24,14 @@ export const KNOWN_FILE_TYPES: Record<string, { extension: string; category: str
   'audio/webm': { extension: 'webm', category: 'audio' },
   // Video
   'video/mp4': { extension: 'mp4', category: 'video' },
+  // 3D models (binary glTF, glTF, OBJ, USDZ, STL, FBX)
+  'model/gltf-binary': { extension: 'glb', category: 'model' },
+  'model/gltf+json': { extension: 'gltf', category: 'model' },
+  'model/obj': { extension: 'obj', category: 'model' },
+  'model/mtl': { extension: 'mtl', category: 'model' },
+  'model/stl': { extension: 'stl', category: 'model' },
+  'model/vnd.usdz+zip': { extension: 'usdz', category: 'model' },
+  'application/vnd.ms-fbx': { extension: 'fbx', category: 'model' },
 };
 
 /** @deprecated Use `string` type directly — file types are no longer restricted */

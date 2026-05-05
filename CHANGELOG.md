@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- 3D model MIME types in `KNOWN_FILE_TYPES`: `model/gltf-binary` (glb), `model/gltf+json` (gltf), `model/obj`, `model/mtl`, `model/stl`, `model/vnd.usdz+zip` (usdz), `application/vnd.ms-fbx` (fbx). Server already accepts arbitrary MIME shapes; this just gives 3D uploads correct file extensions and a `model` category for downstream tools.
 - S3-compatible storage adapter and PostgreSQL adapter for self-hosting
 - Node.js self-hosting support with Docker
 
