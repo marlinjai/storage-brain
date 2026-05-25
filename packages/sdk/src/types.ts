@@ -145,6 +145,17 @@ export interface SignedUrlInfo {
 }
 
 /**
+ * Permanent (non-expiring) URL information returned from the API.
+ *
+ * The URL never expires on its own. Revoke every existing permanent URL at
+ * once by rotating `URL_SIGNING_SECRET` on the server.
+ */
+export interface PermanentUrlInfo {
+  fileId: string;
+  url: string;
+}
+
+/**
  * Upload handshake response
  */
 export interface UploadHandshake {

@@ -237,6 +237,17 @@ console.log(signed.expiresIn); // Seconds until expiry
 
 The `expiresIn` parameter defaults to 3600 seconds (1 hour) and accepts values from 60 to 86400 seconds.
 
+## Permanent Download URLs
+
+For consumers that need a link that survives indefinitely (e.g. Trello card attachments, review backlogs, emails), use `getPermanentUrl`. The returned URL never expires on its own; revoke every existing permanent URL at once by rotating the `URL_SIGNING_SECRET` server-side.
+
+```typescript
+const permanent = await storage.getPermanentUrl('file-uuid');
+
+console.log(permanent.url);    // Full URL with HMAC token
+console.log(permanent.fileId); // 'file-uuid'
+```
+
 ## Deleting Files
 
 ```typescript

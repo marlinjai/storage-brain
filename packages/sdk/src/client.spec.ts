@@ -167,6 +167,34 @@ describe('StorageBrain SDK', () => {
     });
   });
 
+  describe('getPermanentUrl', () => {
+    it('GETs the permanent-url endpoint with auth header', async () => {
+      const response = {
+        fileId: 'f1',
+        url: 'https://api.example.com/api/v1/files/f1/download?token=abc&expires=0&tid=t1',
+      };
+      mockFetch.mockResolvedValueOnce(jsonResponse(response));
+
+      const result = await client.getPermanentUrl('f1');
+
+      expect(result).toEqual(response);
+      const url = mockFetch.mock.calls[0][0] as string;
+      expect(url).toBe('https://api.example.com/api/v1/files/f1/permanent-url');
+      expect(mockFetch).toHaveBeenCalledWith(
+        url,
+        expect.objectContaining({ method: 'GET' }),
+      );
+    });
+
+    it('throws on 404', async () => {
+      mockFetch.mockResolvedValueOnce(
+        errorResponse(404, 'FILE_NOT_FOUND', 'File not found'),
+      );
+
+      await expect(client.getPermanentUrl('missing')).rejects.toThrow();
+    });
+  });
+
   describe('getQuota', () => {
     it('returns quota info', async () => {
       const quota = { quotaBytes: 500000, usedBytes: 1000, availableBytes: 499000, usagePercent: 0 };

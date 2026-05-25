@@ -3,7 +3,7 @@ import type { AppEnv } from '../env';
 import { authMiddleware } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
 import { listFilesQuerySchema, fileIdSchema, type ListFilesInput } from '@storage-brain/shared';
-import { generateSignedToken } from '../services/signed-url';
+import { generateSignedToken, generatePermanentToken } from '../services/signed-url';
 import { buildContentDisposition } from '../utils/content-disposition';
 
 export const fileRoutes = new Hono<AppEnv>();
@@ -116,6 +116,22 @@ fileRoutes.delete('/:fileId', async (c) => {
 });
 
 /**
+ * Resolve the public base URL for shareable file URLs.
+ *
+ * Prefers the configured `PUBLIC_BASE_URL` env var so we never leak internal
+ * hostnames (e.g. http://api in Docker). Falls back to deriving from the
+ * inbound request, respecting `x-forwarded-proto` for reverse-proxied TLS.
+ */
+function resolvePublicBaseUrl(c: { req: { url: string; header: (name: string) => string | undefined }; env: { PUBLIC_BASE_URL?: string } }): string {
+  if (c.env.PUBLIC_BASE_URL) {
+    return c.env.PUBLIC_BASE_URL.replace(/\/$/, '');
+  }
+  const url = new URL(c.req.url);
+  const proto = c.req.header('x-forwarded-proto') || url.protocol.replace(':', '');
+  return `${proto}://${url.host}`;
+}
+
+/**
  * GET /api/v1/files/:fileId/signed-url
  * Generate a time-limited signed URL for unauthenticated download
  */
@@ -136,17 +152,44 @@ fileRoutes.get('/:fileId/signed-url', async (c) => {
   const expiresAt = Date.now() + expiresIn * 1000;
 
   const token = await generateSignedToken(fileId, tenant.id, expiresAt, c.env.URL_SIGNING_SECRET);
-
-  // Derive base URL from the request (respect reverse proxy proto)
-  const url = new URL(c.req.url);
-  const proto = c.req.header('x-forwarded-proto') || url.protocol.replace(':', '');
-  const baseUrl = `${proto}://${url.host}`;
+  const baseUrl = resolvePublicBaseUrl(c);
 
   return c.json({
     fileId,
     url: `${baseUrl}/api/v1/files/${fileId}/download?token=${token}&expires=${expiresAt}&tid=${tenant.id}`,
     expiresAt: new Date(expiresAt).toISOString(),
     expiresIn,
+  });
+});
+
+/**
+ * GET /api/v1/files/:fileId/permanent-url
+ *
+ * Generate a permanent (non-expiring) URL for unauthenticated download.
+ * Suitable for review backlogs, Trello attachments, or any consumer that
+ * needs a link that survives indefinitely.
+ *
+ * Revocation: rotate `URL_SIGNING_SECRET` — every existing permanent URL
+ * becomes invalid (no per-token state to manage).
+ */
+fileRoutes.get('/:fileId/permanent-url', async (c) => {
+  const tenant = c.get('tenant');
+  const db = c.get('db');
+  const fileId = c.req.param('fileId');
+
+  fileIdSchema.parse(fileId);
+
+  const file = await db.getFileById(fileId, tenant.id);
+  if (!file) {
+    throw ApiError.notFound('File not found');
+  }
+
+  const token = await generatePermanentToken(fileId, tenant.id, c.env.URL_SIGNING_SECRET);
+  const baseUrl = resolvePublicBaseUrl(c);
+
+  return c.json({
+    fileId,
+    url: `${baseUrl}/api/v1/files/${fileId}/download?token=${token}&expires=0&tid=${tenant.id}`,
   });
 });
 

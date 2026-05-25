@@ -72,6 +72,46 @@ export async function verifySignedToken(
 }
 
 /**
+ * Generate a permanent (non-expiring) signed token for a file download URL.
+ *
+ * Revocation: rotate `URL_SIGNING_SECRET` to invalidate every existing
+ * permanent token. Same inputs → same token, so this is fully deterministic.
+ *
+ * @param fileId   - The file's UUID
+ * @param tenantId - The tenant's UUID (defense in depth)
+ * @param secret   - HMAC key (URL_SIGNING_SECRET)
+ * @returns Hex-encoded HMAC-SHA256 token
+ */
+export async function generatePermanentToken(
+  fileId: string,
+  tenantId: string,
+  secret: string,
+): Promise<string> {
+  const key = await getKey(secret);
+  const data = new TextEncoder().encode(`${tenantId}:${fileId}:permanent`);
+  const sig = await crypto.subtle.sign('HMAC', key, data);
+  return bufToHex(sig);
+}
+
+/**
+ * Verify a permanent (non-expiring) signed token using timing-safe comparison.
+ *
+ * @returns `true` if token is valid for (fileId, tenantId, secret)
+ */
+export async function verifyPermanentToken(
+  fileId: string,
+  tenantId: string,
+  token: string,
+  secret: string,
+): Promise<boolean> {
+  const key = await getKey(secret);
+  const data = new TextEncoder().encode(`${tenantId}:${fileId}:permanent`);
+  const tokenBytes = hexToBuf(token);
+
+  return crypto.subtle.verify('HMAC', key, tokenBytes, data);
+}
+
+/**
  * Generate a signed token for an internal upload URL.
  *
  * @param storedPath - The file's storage path

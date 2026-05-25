@@ -43,6 +43,7 @@ async function main() {
       ADMIN_API_KEY: required('ADMIN_API_KEY'),
       URL_SIGNING_SECRET: required('URL_SIGNING_SECRET'),
       ENVIRONMENT: (process.env.ENVIRONMENT as 'development' | 'staging' | 'production') ?? 'production',
+      PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL,
     },
     isReady: () => ready,
   });

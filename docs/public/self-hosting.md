@@ -63,7 +63,8 @@ const file = await client.upload(buffer, {
 | `AWS_SECRET_ACCESS_KEY` | Yes | — | S3 secret key |
 | `DATABASE_URL` | Yes | — | Postgres connection string |
 | `ADMIN_API_KEY` | Yes | — | Admin API key for tenant management |
-| `URL_SIGNING_SECRET` | Yes | — | Secret for signing download URLs |
+| `URL_SIGNING_SECRET` | Yes | — | Secret for signing download URLs (signed + permanent). Rotate to revoke all existing URLs. |
+| `PUBLIC_BASE_URL` | No | request host | Fully-qualified public origin used to construct shareable file URLs. Set this in production so links don't leak internal hostnames. |
 | `PORT` | No | `3000` | API server port |
 | `ENVIRONMENT` | No | `production` | `development`, `staging`, or `production` |
 
