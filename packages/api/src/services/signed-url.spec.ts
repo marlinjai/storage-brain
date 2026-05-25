@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { generateSignedToken, verifySignedToken } from './signed-url';
+import {
+  generateSignedToken,
+  verifySignedToken,
+  generatePermanentToken,
+  verifyPermanentToken,
+} from './signed-url';
 
 const SECRET = 'test-signing-secret';
 const FILE_ID = '550e8400-e29b-41d4-a716-446655440000';
@@ -99,6 +104,110 @@ describe('signed-url service', () => {
       const tampered = token.replace(/^./, token[0] === 'a' ? 'b' : 'a');
 
       const valid = await verifySignedToken(FILE_ID, TENANT_ID, expiresAt, tampered, SECRET);
+      expect(valid).toBe(false);
+    });
+  });
+
+  describe('generatePermanentToken', () => {
+    it('generates a hex-encoded token', async () => {
+      const token = await generatePermanentToken(FILE_ID, TENANT_ID, SECRET);
+
+      expect(token).toMatch(/^[0-9a-f]+$/);
+      expect(token.length).toBe(64);
+    });
+
+    it('is deterministic — same inputs produce the same token', async () => {
+      const token1 = await generatePermanentToken(FILE_ID, TENANT_ID, SECRET);
+      const token2 = await generatePermanentToken(FILE_ID, TENANT_ID, SECRET);
+
+      expect(token1).toBe(token2);
+    });
+
+    it('does NOT match a time-limited token with expires=0', async () => {
+      // Permanent tokens use a distinct payload (":permanent") so they can't
+      // be confused with a time-limited token that happens to use expires=0.
+      const permanent = await generatePermanentToken(FILE_ID, TENANT_ID, SECRET);
+      const timeLimited = await generateSignedToken(FILE_ID, TENANT_ID, 0, SECRET);
+
+      expect(permanent).not.toBe(timeLimited);
+    });
+
+    it('produces different tokens for different secrets (rotation invalidates)', async () => {
+      const token1 = await generatePermanentToken(FILE_ID, TENANT_ID, SECRET);
+      const token2 = await generatePermanentToken(FILE_ID, TENANT_ID, 'rotated-secret');
+
+      expect(token1).not.toBe(token2);
+    });
+
+    it('produces different tokens for different tenantIds', async () => {
+      const token1 = await generatePermanentToken(FILE_ID, TENANT_ID, SECRET);
+      const token2 = await generatePermanentToken(FILE_ID, 'other-tenant', SECRET);
+
+      expect(token1).not.toBe(token2);
+    });
+
+    it('produces different tokens for different fileIds', async () => {
+      const token1 = await generatePermanentToken(FILE_ID, TENANT_ID, SECRET);
+      const token2 = await generatePermanentToken('other-file', TENANT_ID, SECRET);
+
+      expect(token1).not.toBe(token2);
+    });
+  });
+
+  describe('verifyPermanentToken', () => {
+    it('verifies a valid permanent token', async () => {
+      const token = await generatePermanentToken(FILE_ID, TENANT_ID, SECRET);
+
+      const valid = await verifyPermanentToken(FILE_ID, TENANT_ID, token, SECRET);
+      expect(valid).toBe(true);
+    });
+
+    it('never expires — still valid far in the future', async () => {
+      const token = await generatePermanentToken(FILE_ID, TENANT_ID, SECRET);
+
+      // Jump 10 years forward.
+      vi.useFakeTimers();
+      vi.setSystemTime(Date.now() + 10 * 365 * 24 * 3600 * 1000);
+
+      const valid = await verifyPermanentToken(FILE_ID, TENANT_ID, token, SECRET);
+      expect(valid).toBe(true);
+    });
+
+    it('rejects token after secret rotation', async () => {
+      const token = await generatePermanentToken(FILE_ID, TENANT_ID, SECRET);
+
+      const valid = await verifyPermanentToken(FILE_ID, TENANT_ID, token, 'rotated-secret');
+      expect(valid).toBe(false);
+    });
+
+    it('rejects token with wrong tenantId (cross-tenant defense)', async () => {
+      const token = await generatePermanentToken(FILE_ID, TENANT_ID, SECRET);
+
+      const valid = await verifyPermanentToken(FILE_ID, 'other-tenant', token, SECRET);
+      expect(valid).toBe(false);
+    });
+
+    it('rejects token with wrong fileId', async () => {
+      const token = await generatePermanentToken(FILE_ID, TENANT_ID, SECRET);
+
+      const valid = await verifyPermanentToken('other-file', TENANT_ID, token, SECRET);
+      expect(valid).toBe(false);
+    });
+
+    it('rejects tampered token', async () => {
+      const token = await generatePermanentToken(FILE_ID, TENANT_ID, SECRET);
+      const tampered = token.replace(/^./, token[0] === 'a' ? 'b' : 'a');
+
+      const valid = await verifyPermanentToken(FILE_ID, TENANT_ID, tampered, SECRET);
+      expect(valid).toBe(false);
+    });
+
+    it('does NOT accept a time-limited token (mode confusion defense)', async () => {
+      // A token generated for the time-limited path must NOT verify against the
+      // permanent path, even if a caller passes expires=0.
+      const timeLimited = await generateSignedToken(FILE_ID, TENANT_ID, 0, SECRET);
+
+      const valid = await verifyPermanentToken(FILE_ID, TENANT_ID, timeLimited, SECRET);
       expect(valid).toBe(false);
     });
   });

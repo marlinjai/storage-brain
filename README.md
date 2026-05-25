@@ -98,6 +98,7 @@ Base URL: `https://storage-brain-api.marlin-pohl.workers.dev` (managed) or `http
 | `GET` | `/api/v1/files/:fileId` | Get file metadata |
 | `GET` | `/api/v1/files/:fileId/download` | Download file (signed token auth) |
 | `GET` | `/api/v1/files/:fileId/signed-url` | Get a time-limited signed download URL |
+| `GET` | `/api/v1/files/:fileId/permanent-url` | Get a permanent (non-expiring) download URL — revoke by rotating `URL_SIGNING_SECRET` |
 | `DELETE` | `/api/v1/files/:fileId` | Soft-delete a file |
 
 ### Workspaces
@@ -163,6 +164,18 @@ const { files, nextCursor, total } = await storage.listFiles({
 ```typescript
 const { url, expiresAt } = await storage.getSignedUrl('file-uuid', 3600);
 // Share this URL publicly — no API key required to download
+```
+
+### Permanent URLs
+
+For consumers that need a link that survives indefinitely (e.g. Trello card
+attachments, review backlogs, emails), use `getPermanentUrl`. The returned URL
+never expires on its own; revoke every permanent URL at once by rotating the
+`URL_SIGNING_SECRET` server-side.
+
+```typescript
+const { url } = await storage.getPermanentUrl('file-uuid');
+// Paste into Trello / email / any consumer that needs a long-lived link.
 ```
 
 ### Get and Delete a File
@@ -244,7 +257,8 @@ pnpm format            # Format
 |------|-------|-------------|
 | `ENVIRONMENT` | `wrangler.toml` / env | `development`, `staging`, or `production` |
 | `ADMIN_API_KEY` | Secret / env | Admin bearer token for tenant management |
-| `URL_SIGNING_SECRET` | Secret / env | HMAC key for signed download URLs |
+| `URL_SIGNING_SECRET` | Secret / env | HMAC key for signed download URLs. Rotating this secret invalidates every existing signed and permanent file URL — that is the revocation mechanism. |
+| `PUBLIC_BASE_URL` | env | Fully-qualified public origin (e.g. `https://api.storage-brain.example.com`) used to build shareable file URLs. Set this in production so links don't leak internal hostnames. Defaults to the inbound request host. |
 | `DB` | Binding | D1 database (Workers only) |
 | `BUCKET` | Binding | R2 bucket (Workers only) |
 | `DATABASE_URL` | env | Postgres connection string (self-hosted) |

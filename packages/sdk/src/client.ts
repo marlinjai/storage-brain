@@ -10,6 +10,7 @@ import type {
   TenantInfo,
   UploadHandshake,
   SignedUrlInfo,
+  PermanentUrlInfo,
   Workspace,
   CreateWorkspaceInput,
   UpdateWorkspaceInput,
@@ -346,6 +347,18 @@ export class StorageBrain {
    */
   async getSignedUrl(fileId: string, expiresIn = 3600): Promise<SignedUrlInfo> {
     return this.request<SignedUrlInfo>('GET', `/api/v1/files/${fileId}/signed-url?expiresIn=${expiresIn}`);
+  }
+
+  /**
+   * Get a permanent (non-expiring) URL for unauthenticated file download.
+   *
+   * Use for consumers that need a link that survives indefinitely (e.g. Trello
+   * card attachments, review backlogs, email). The URL never expires on its
+   * own — revoke every existing permanent URL at once by rotating
+   * `URL_SIGNING_SECRET` server-side.
+   */
+  async getPermanentUrl(fileId: string): Promise<PermanentUrlInfo> {
+    return this.request<PermanentUrlInfo>('GET', `/api/v1/files/${fileId}/permanent-url`);
   }
 
   /**

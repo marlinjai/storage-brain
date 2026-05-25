@@ -17,6 +17,15 @@ export interface Env {
   // Secrets (set via wrangler secret put)
   ADMIN_API_KEY?: string;
   URL_SIGNING_SECRET: string;
+
+  /**
+   * Fully-qualified public base URL (e.g. https://api.storage-brain.lumitra.co).
+   * Used to construct shareable permanent file URLs so they don't leak internal
+   * Docker hostnames (e.g. http://api/...). If unset, falls back to deriving
+   * the base URL from the inbound request (works in dev but not behind a
+   * reverse proxy that strips Host).
+   */
+  PUBLIC_BASE_URL?: string;
 }
 
 /**

@@ -2,13 +2,15 @@ import type { Context } from 'hono';
 import type { AppEnv } from '../env';
 import { ApiError } from '../middleware/error-handler';
 import { fileIdSchema, apiKeySchema } from '@storage-brain/shared';
-import { verifySignedToken } from '../services/signed-url';
+import { verifySignedToken, verifyPermanentToken } from '../services/signed-url';
 import { buildContentDisposition } from '../utils/content-disposition';
 
 /**
  * Public download handler that accepts either:
  *  1. Authorization: Bearer <apiKey>  (standard tenant auth)
- *  2. ?token=<hmac>&expires=<timestamp>  (signed URL)
+ *  2. ?token=<hmac>&expires=<timestamp>  (time-limited signed URL)
+ *  3. ?token=<hmac>&expires=0  (permanent signed URL — revoke by rotating
+ *     URL_SIGNING_SECRET)
  *
  * Registered before fileRoutes so it matches first for GET /api/v1/files/:fileId/download.
  */
@@ -27,21 +29,32 @@ export async function publicDownloadHandler(c: Context<AppEnv>) {
   let originalName: string;
   let sizeBytes: number;
 
-  if (token && expiresParam) {
-    // --- Signed-token path ---
+  if (token) {
+    // --- Signed-token path (time-limited or permanent) ---
     const tenantId = c.req.query('tid');
     if (!tenantId) {
       throw ApiError.unauthorized('Missing tenant ID parameter');
     }
 
-    const expiresAt = parseInt(expiresParam, 10);
-    if (isNaN(expiresAt)) {
-      throw ApiError.unauthorized('Invalid expires parameter');
-    }
+    // expires absent or "0" → permanent token (no expiry check).
+    // Backward compat: numeric timestamp → time-limited signed URL.
+    const isPermanent = expiresParam === undefined || expiresParam === '0';
 
-    const valid = await verifySignedToken(fileId, tenantId, expiresAt, token, c.env.URL_SIGNING_SECRET);
-    if (!valid) {
-      throw ApiError.unauthorized('Invalid or expired download token');
+    if (isPermanent) {
+      const valid = await verifyPermanentToken(fileId, tenantId, token, c.env.URL_SIGNING_SECRET);
+      if (!valid) {
+        throw ApiError.unauthorized('Invalid download token');
+      }
+    } else {
+      const expiresAt = parseInt(expiresParam, 10);
+      if (isNaN(expiresAt)) {
+        throw ApiError.unauthorized('Invalid expires parameter');
+      }
+
+      const valid = await verifySignedToken(fileId, tenantId, expiresAt, token, c.env.URL_SIGNING_SECRET);
+      if (!valid) {
+        throw ApiError.unauthorized('Invalid or expired download token');
+      }
     }
 
     // Tenant-scoped lookup for defense in depth

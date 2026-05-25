@@ -14,6 +14,7 @@ services:
       URL_SIGNING_SECRET: dev-signing-secret
       ENVIRONMENT: development
       PORT: '3000'
+      PUBLIC_BASE_URL: http://localhost:3000
     depends_on:
       postgres:
         condition: service_healthy

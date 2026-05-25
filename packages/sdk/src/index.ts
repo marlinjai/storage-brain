@@ -12,6 +12,7 @@ export type {
   TenantInfo,
   UploadHandshake,
   SignedUrlInfo,
+  PermanentUrlInfo,
   FileMetadata,
   Workspace,
   CreateWorkspaceInput,

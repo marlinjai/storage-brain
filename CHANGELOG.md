@@ -15,9 +15,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Permanent file URLs** (revocable via secret rotation) — new
+  `GET /api/v1/files/:fileId/permanent-url` endpoint and SDK
+  `getPermanentUrl(fileId)` method (SDK `v0.9.0`). Returns a fully-qualified
+  download URL with no expiry, suitable for Trello attachments, email, or any
+  consumer that needs a long-lived link. The HMAC token is deterministic over
+  `(fileId, tenantId, "permanent")`; rotate `URL_SIGNING_SECRET` to invalidate
+  every existing permanent URL at once.
+- `PUBLIC_BASE_URL` env var — fully-qualified public origin used when
+  constructing shareable file URLs. Falls back to the inbound request host
+  when unset. Set this in production so links don't leak internal hostnames
+  (e.g. `http://api` in Docker).
 - 3D model MIME types in `KNOWN_FILE_TYPES`: `model/gltf-binary` (glb), `model/gltf+json` (gltf), `model/obj`, `model/mtl`, `model/stl`, `model/vnd.usdz+zip` (usdz), `application/vnd.ms-fbx` (fbx). Server already accepts arbitrary MIME shapes; this just gives 3D uploads correct file extensions and a `model` category for downstream tools.
 - S3-compatible storage adapter and PostgreSQL adapter for self-hosting
 - Node.js self-hosting support with Docker
+
+### Changed
+- `public-download.ts` now accepts permanent tokens (`?token=...&expires=0&tid=...`)
+  alongside the existing time-limited signed-URL form. Existing signed URLs
+  continue to work unchanged.
 
 ### Changed
 - Migrated shared infrastructure (auth, crypto, errors, types) to `@marlinjai/brain-core`

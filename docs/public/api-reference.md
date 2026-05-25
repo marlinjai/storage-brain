@@ -269,6 +269,36 @@ The returned `url` can be shared publicly. It does not require an `Authorization
 **Error Responses:**
 - `404` -- File not found or belongs to another tenant
 
+### Get Permanent URL
+
+Generate a permanent (non-expiring) URL for unauthenticated file download. Suitable for review backlogs, Trello attachments, or any consumer that needs a link that survives indefinitely.
+
+```
+GET /api/v1/files/:fileId/permanent-url
+```
+
+**Auth:** Tenant API key (Bearer token)
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `fileId` | UUID | File identifier |
+
+**Example Response (200):**
+
+```json
+{
+  "fileId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "url": "https://your-instance.com/api/v1/files/a1b2c3d4-.../download?token=abc123&expires=0&tid=tenant-uuid"
+}
+```
+
+The returned `url` never expires on its own. Revoke every existing permanent URL at once by rotating the `URL_SIGNING_SECRET` server-side.
+
+**Error Responses:**
+- `404` -- File not found or belongs to another tenant
+
 ---
 
 ## Workspaces

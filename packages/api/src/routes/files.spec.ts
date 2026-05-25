@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createApp } from '../app';
-import { generateSignedToken } from '../services/signed-url';
+import { generateSignedToken, generatePermanentToken, verifyPermanentToken } from '../services/signed-url';
 import type { StorageAdapter, DatabaseAdapter, Tenant, StoredFile } from '@storage-brain/shared';
 
 const TENANT_ID = '550e8400-e29b-41d4-a716-446655440000';
@@ -232,6 +232,166 @@ describe('file routes', () => {
       expect(allowMethods).toContain('GET');
       const allowHeaders = res.headers.get('Access-Control-Allow-Headers') ?? '';
       expect(allowHeaders.toLowerCase()).toContain('range');
+    });
+  });
+
+  describe('GET /api/v1/files/:fileId/permanent-url', () => {
+    it('returns a permanent download URL with token, expires=0, and tid', async () => {
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}/permanent-url`,
+        { headers: { Authorization: 'Bearer sk_live_test123' } },
+        ENV,
+      );
+
+      expect(res.status).toBe(200);
+      const body: { fileId: string; url: string } = await res.json();
+      expect(body.fileId).toBe(FILE_ID);
+
+      const u = new URL(body.url);
+      expect(u.pathname).toBe(`/api/v1/files/${FILE_ID}/download`);
+      expect(u.searchParams.get('expires')).toBe('0');
+      expect(u.searchParams.get('tid')).toBe(TENANT_ID);
+      const token = u.searchParams.get('token');
+      expect(token).toMatch(/^[0-9a-f]{64}$/);
+
+      // Token must verify against the same secret + ids
+      const valid = await verifyPermanentToken(FILE_ID, TENANT_ID, token!, ENV.URL_SIGNING_SECRET);
+      expect(valid).toBe(true);
+    });
+
+    it('uses PUBLIC_BASE_URL when configured (no internal hostname leak)', async () => {
+      const envWithBase = { ...ENV, PUBLIC_BASE_URL: 'https://files.example.com' };
+
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}/permanent-url`,
+        { headers: { Authorization: 'Bearer sk_live_test123' } },
+        envWithBase,
+      );
+
+      expect(res.status).toBe(200);
+      const body: { url: string } = await res.json();
+      expect(body.url.startsWith('https://files.example.com/api/v1/files/')).toBe(true);
+    });
+
+    it('returns 401 without auth header', async () => {
+      const res = await app.request(`/api/v1/files/${FILE_ID}/permanent-url`, {}, ENV);
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 404 when file not found', async () => {
+      db.getFileById.mockResolvedValueOnce(null);
+
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}/permanent-url`,
+        { headers: { Authorization: 'Bearer sk_live_test123' } },
+        ENV,
+      );
+      expect(res.status).toBe(404);
+    });
+
+    it('scopes file lookup to the tenant (cross-tenant access denied)', async () => {
+      await app.request(
+        `/api/v1/files/${FILE_ID}/permanent-url`,
+        { headers: { Authorization: 'Bearer sk_live_test123' } },
+        ENV,
+      );
+
+      expect(db.getFileById).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
+    });
+  });
+
+  describe('GET /api/v1/files/:fileId/download (permanent-token path)', () => {
+    it('serves the file when the permanent token is valid', async () => {
+      const token = await generatePermanentToken(FILE_ID, TENANT_ID, ENV.URL_SIGNING_SECRET);
+
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}/download?token=${token}&expires=0&tid=${TENANT_ID}`,
+        { method: 'GET' },
+        ENV,
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('Content-Type')).toBe('image/png');
+    });
+
+    it('serves the file when expires is omitted entirely', async () => {
+      // expires=0 OR expires absent both signal "permanent" mode.
+      const token = await generatePermanentToken(FILE_ID, TENANT_ID, ENV.URL_SIGNING_SECRET);
+
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}/download?token=${token}&tid=${TENANT_ID}`,
+        { method: 'GET' },
+        ENV,
+      );
+
+      expect(res.status).toBe(200);
+    });
+
+    it('returns 401 when the permanent token is wrong', async () => {
+      const wrongToken = 'a'.repeat(64);
+
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}/download?token=${wrongToken}&expires=0&tid=${TENANT_ID}`,
+        { method: 'GET' },
+        ENV,
+      );
+
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 401 when tid is missing', async () => {
+      const token = await generatePermanentToken(FILE_ID, TENANT_ID, ENV.URL_SIGNING_SECRET);
+
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}/download?token=${token}&expires=0`,
+        { method: 'GET' },
+        ENV,
+      );
+
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 401 after secret rotation (revocation)', async () => {
+      const token = await generatePermanentToken(FILE_ID, TENANT_ID, ENV.URL_SIGNING_SECRET);
+
+      const rotatedEnv = { ...ENV, URL_SIGNING_SECRET: 'rotated-secret' };
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}/download?token=${token}&expires=0&tid=${TENANT_ID}`,
+        { method: 'GET' },
+        rotatedEnv,
+      );
+
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 404 when file not found (cross-tenant denial)', async () => {
+      // Token is valid for OTHER_TENANT, but DB lookup is scoped to that tenant
+      // and finds nothing (defense in depth).
+      const OTHER_TENANT = '770e8400-e29b-41d4-a716-446655440099';
+      const token = await generatePermanentToken(FILE_ID, OTHER_TENANT, ENV.URL_SIGNING_SECRET);
+      db.getFileById.mockResolvedValueOnce(null);
+
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}/download?token=${token}&expires=0&tid=${OTHER_TENANT}`,
+        { method: 'GET' },
+        ENV,
+      );
+
+      expect(res.status).toBe(404);
+    });
+
+    it('still serves time-limited signed URLs (backward compat)', async () => {
+      // The existing expires=<timestamp> path must keep working unchanged.
+      const expiresAt = Date.now() + 60_000;
+      const token = await generateSignedToken(FILE_ID, TENANT_ID, expiresAt, ENV.URL_SIGNING_SECRET);
+
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}/download?token=${token}&expires=${expiresAt}&tid=${TENANT_ID}`,
+        { method: 'GET' },
+        ENV,
+      );
+
+      expect(res.status).toBe(200);
     });
   });
 
