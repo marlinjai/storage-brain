@@ -16,3 +16,21 @@ export function resolvePublicBaseUrl(c: {
   const proto = c.req.header('x-forwarded-proto') ?? url.protocol.replace(':', '');
   return `${proto}://${url.host}`;
 }
+
+/**
+ * Build a fully-qualified file download URL. The single source of truth for the
+ * download URL shape (param names, order, and the `expires=0` permanent
+ * sentinel) consumed by the public-download handler.
+ *
+ * Omit `expiresAt` (or pass 0) for a permanent token; pass a timestamp for a
+ * time-limited signed token.
+ */
+export function buildDownloadUrl(
+  baseUrl: string,
+  fileId: string,
+  tenantId: string,
+  token: string,
+  expiresAt = 0,
+): string {
+  return `${baseUrl}/api/v1/files/${fileId}/download?token=${token}&expires=${expiresAt}&tid=${tenantId}`;
+}

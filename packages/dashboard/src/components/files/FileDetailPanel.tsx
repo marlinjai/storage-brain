@@ -4,14 +4,7 @@ import { useState } from 'react';
 import { formatBytes, formatDate } from '@/lib/format';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { ModelViewer } from '@/components/files/ModelViewer';
-
-function isModel(fileType: string, name: string): boolean {
-  return (
-    fileType === 'model/gltf-binary' ||
-    fileType === 'model/gltf+json' ||
-    /\.(glb|gltf)$/i.test(name)
-  );
-}
+import { isModel, withInlineDisposition } from '@/lib/fileTypes';
 
 interface FileItem {
   id: string;
@@ -47,9 +40,7 @@ export function FileDetailPanel({
   const isImage = file.fileType.startsWith('image/');
   const isPdf = file.fileType === 'application/pdf';
   const isModelFile = isModel(file.fileType, file.originalName);
-  const inlineUrl = signedUrl
-    ? `${signedUrl}${signedUrl.includes('?') ? '&' : '?'}disposition=inline`
-    : null;
+  const inlineUrl = signedUrl ? withInlineDisposition(signedUrl) : null;
 
   async function handleDelete() {
     if (!file) return;
@@ -84,19 +75,19 @@ export function FileDetailPanel({
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
           {/* Preview */}
-          {isImage && signedUrl && (
+          {isImage && inlineUrl && (
             <div className="overflow-hidden rounded-lg border border-gray-800">
               <img
-                src={`${signedUrl}${signedUrl.includes('?') ? '&' : '?'}disposition=inline`}
+                src={inlineUrl}
                 alt={file.originalName}
                 className="w-full object-contain"
               />
             </div>
           )}
-          {isPdf && signedUrl && (
+          {isPdf && inlineUrl && (
             <div className="overflow-hidden rounded-lg border border-gray-800" style={{ height: '400px' }}>
               <iframe
-                src={`${signedUrl}${signedUrl.includes('?') ? '&' : '?'}disposition=inline#toolbar=0&navpanes=0`}
+                src={`${inlineUrl}#toolbar=0&navpanes=0`}
                 className="h-full w-full"
                 title={file.originalName}
               />

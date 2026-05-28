@@ -5,7 +5,7 @@ import { ApiError } from '../middleware/error-handler';
 import { listFilesQuerySchema, fileIdSchema, type ListFilesInput } from '@storage-brain/shared';
 import { generateSignedToken, generatePermanentToken } from '../services/signed-url';
 import { buildContentDisposition } from '../utils/content-disposition';
-import { resolvePublicBaseUrl } from '../utils/public-url';
+import { resolvePublicBaseUrl, buildDownloadUrl } from '../utils/public-url';
 
 export const fileRoutes = new Hono<AppEnv>();
 
@@ -141,7 +141,7 @@ fileRoutes.get('/:fileId/signed-url', async (c) => {
 
   return c.json({
     fileId,
-    url: `${baseUrl}/api/v1/files/${fileId}/download?token=${token}&expires=${expiresAt}&tid=${tenant.id}`,
+    url: buildDownloadUrl(baseUrl, fileId, tenant.id, token, expiresAt),
     expiresAt: new Date(expiresAt).toISOString(),
     expiresIn,
   });
@@ -174,7 +174,7 @@ fileRoutes.get('/:fileId/permanent-url', async (c) => {
 
   return c.json({
     fileId,
-    url: `${baseUrl}/api/v1/files/${fileId}/download?token=${token}&expires=0&tid=${tenant.id}`,
+    url: buildDownloadUrl(baseUrl, fileId, tenant.id, token),
   });
 });
 

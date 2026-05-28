@@ -14,7 +14,7 @@ import {
 } from '@storage-brain/shared';
 import { generateApiKey, hashApiKey, getKeyPrefix } from '../utils/crypto';
 import { generateSignedToken, generatePermanentToken } from '../services/signed-url';
-import { resolvePublicBaseUrl } from '../utils/public-url';
+import { resolvePublicBaseUrl, buildDownloadUrl } from '../utils/public-url';
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -286,7 +286,7 @@ adminRoutes.get('/tenants/:tenantId/files', async (c) => {
       const token = await generatePermanentToken(file.id, tenantId, c.env.URL_SIGNING_SECRET);
       return {
         id: file.id,
-        url: `${baseUrl}/api/v1/files/${file.id}/download?token=${token}&expires=0&tid=${tenantId}`,
+        url: buildDownloadUrl(baseUrl, file.id, tenantId, token),
         originalName: file.originalName,
         fileType: file.fileType,
         sizeBytes: file.sizeBytes,
@@ -328,7 +328,7 @@ adminRoutes.get('/tenants/:tenantId/files/:fileId', async (c) => {
 
   return c.json({
     id: file.id,
-    url: `${baseUrl}/api/v1/files/${file.id}/download?token=${token}&expires=0&tid=${tenantId}`,
+    url: buildDownloadUrl(baseUrl, file.id, tenantId, token),
     originalName: file.originalName,
     fileType: file.fileType,
     sizeBytes: file.sizeBytes,

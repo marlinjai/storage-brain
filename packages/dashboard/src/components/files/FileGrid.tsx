@@ -1,6 +1,7 @@
 'use client';
 
 import { formatBytes, formatDate } from '@/lib/format';
+import { isModel, withInlineDisposition } from '@/lib/fileTypes';
 
 interface FileItem {
   id: string;
@@ -26,14 +27,6 @@ function FileTypeIcon({ fileType }: { fileType: string }) {
   );
 }
 
-function isModel(fileType: string, name: string): boolean {
-  return (
-    fileType === 'model/gltf-binary' ||
-    fileType === 'model/gltf+json' ||
-    /\.(glb|gltf)$/i.test(name)
-  );
-}
-
 function ModelBadge() {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-1 bg-gray-800 text-gray-400">
@@ -54,7 +47,7 @@ function ModelBadge() {
 
 function FilePreview({ file }: { file: FileItem }) {
   const url = file.url;
-  const inlineUrl = url ? `${url}${url.includes('?') ? '&' : '?'}disposition=inline` : '';
+  const inlineUrl = url ? withInlineDisposition(url) : '';
 
   if (isModel(file.fileType, file.originalName)) {
     return <ModelBadge />;
