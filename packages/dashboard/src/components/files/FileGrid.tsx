@@ -2,6 +2,7 @@
 
 import { formatBytes, formatDate } from '@/lib/format';
 import { isModel, withInlineDisposition } from '@/lib/fileTypes';
+import { ModelViewer } from '@/components/files/ModelViewer';
 
 interface FileItem {
   id: string;
@@ -50,7 +51,11 @@ function FilePreview({ file }: { file: FileItem }) {
   const inlineUrl = url ? withInlineDisposition(url) : '';
 
   if (isModel(file.fileType, file.originalName)) {
-    return <ModelBadge />;
+    return inlineUrl ? (
+      <ModelViewer url={inlineUrl} alt={file.originalName} interactive={false} />
+    ) : (
+      <ModelBadge />
+    );
   }
 
   if (file.fileType.startsWith('image/') && url) {

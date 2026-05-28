@@ -94,7 +94,12 @@ export function FileDetailPanel({
             </div>
           )}
           {isModelFile && inlineUrl && (
-            <ModelViewer url={inlineUrl} alt={file.originalName} />
+            <div
+              className="relative overflow-hidden rounded-lg border border-gray-800 bg-gray-900"
+              style={{ height: '400px' }}
+            >
+              <ModelViewer url={inlineUrl} alt={file.originalName} />
+            </div>
           )}
 
           {/* Metadata */}
