@@ -45,7 +45,7 @@ jobs:
     permissions:
       contents: read
       deployments: write
-    uses: marlinjai/actions-shared/.github/workflows/coolify-deploy-verify.yml@v1
+    uses: marlinjai/actions-shared/.github/workflows/coolify-deploy-verify.yml@v1.1.0
     with:
       health_url: https://storage-brain.lumitra.co/api/health
       environment: production-dashboard
