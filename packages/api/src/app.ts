@@ -14,7 +14,7 @@ import { workspaceRoutes } from './routes/workspaces';
 import { webhookRoutes } from './routes/webhooks';
 import { internalUploadRoutes } from './routes/internal-upload';
 import { errorHandler } from './middleware/error-handler';
-import { rateLimiter } from './middleware/rate-limit';
+import { rateLimiter, tenantKeyFn } from './middleware/rate-limit';
 import { publicDownloadHandler } from './routes/public-download';
 
 export interface AppConfig {
@@ -96,7 +96,7 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
   });
 
   // --- Rate limiting (per route group, not global) ---
-  const apiRateLimit = rateLimiter({ windowMs: 60_000, max: 100 });
+  const apiRateLimit = rateLimiter({ windowMs: 60_000, max: 100, keyFn: tenantKeyFn });
   const adminRateLimit = rateLimiter({ windowMs: 60_000, max: 30 });
   const internalRateLimit = rateLimiter({ windowMs: 60_000, max: 60 });
 

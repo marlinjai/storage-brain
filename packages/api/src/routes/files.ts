@@ -5,6 +5,7 @@ import { ApiError } from '../middleware/error-handler';
 import { listFilesQuerySchema, fileIdSchema, type ListFilesInput } from '@storage-brain/shared';
 import { generateSignedToken, generatePermanentToken } from '../services/signed-url';
 import { buildContentDisposition } from '../utils/content-disposition';
+import { resolvePublicBaseUrl } from '../utils/public-url';
 
 export const fileRoutes = new Hono<AppEnv>();
 
@@ -114,22 +115,6 @@ fileRoutes.delete('/:fileId', async (c) => {
 
   return c.json({ success: true });
 });
-
-/**
- * Resolve the public base URL for shareable file URLs.
- *
- * Prefers the configured `PUBLIC_BASE_URL` env var so we never leak internal
- * hostnames (e.g. http://api in Docker). Falls back to deriving from the
- * inbound request, respecting `x-forwarded-proto` for reverse-proxied TLS.
- */
-function resolvePublicBaseUrl(c: { req: { url: string; header: (name: string) => string | undefined }; env: { PUBLIC_BASE_URL?: string } }): string {
-  if (c.env.PUBLIC_BASE_URL) {
-    return c.env.PUBLIC_BASE_URL.replace(/\/$/, '');
-  }
-  const url = new URL(c.req.url);
-  const proto = c.req.header('x-forwarded-proto') || url.protocol.replace(':', '');
-  return `${proto}://${url.host}`;
-}
 
 /**
  * GET /api/v1/files/:fileId/signed-url

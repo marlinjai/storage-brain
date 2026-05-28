@@ -20,6 +20,36 @@ const DEFAULT_KEY_FN = (c: any): string =>
   c.req.header('x-real-ip') ||
   'unknown';
 
+// Fast non-cryptographic hash (FNV-1a). Used only to derive a stable rate-limit
+// bucket key from the API key without holding the plaintext secret in the store.
+function fnv1a(s: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
+/**
+ * Rate-limit key for tenant-facing routes: isolate per authenticated tenant
+ * instead of per IP, so server-side SDK callers sharing one egress IP don't
+ * share a bucket (and one tenant can't starve others). Runs before auth, so it
+ * keys on the Bearer API key (hashed) or the `tid` query param used by
+ * token-based downloads, falling back to client IP.
+ */
+export const tenantKeyFn = (c: any): string => {
+  const auth = c.req.header('Authorization');
+  if (auth?.startsWith('Bearer ')) {
+    return `key:${fnv1a(auth.slice(7))}`;
+  }
+  const tid = c.req.query('tid');
+  if (tid) {
+    return `tid:${tid}`;
+  }
+  return DEFAULT_KEY_FN(c);
+};
+
 /**
  * Simple in-memory sliding window rate limiter.
  *
