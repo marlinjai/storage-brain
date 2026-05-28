@@ -1,6 +1,12 @@
 #!/bin/sh
 set -e
 
+# Next.js standalone binds to $HOSTNAME. The container runtime sets HOSTNAME to
+# the container id, so the server listens on that host's IP only and is
+# unreachable on localhost, which fails Coolify's in-container healthcheck and
+# triggers a rollback. Force binding to all interfaces.
+export HOSTNAME=0.0.0.0
+
 PROJECT_ID="86dcae14-6cb2-473b-8b2d-43b37977f04e"
 DOMAIN="https://infisical.lumitra.co"
 
