@@ -13,7 +13,8 @@ import {
   type ListFilesInput,
 } from '@storage-brain/shared';
 import { generateApiKey, hashApiKey, getKeyPrefix } from '../utils/crypto';
-import { generateSignedToken } from '../services/signed-url';
+import { generateSignedToken, generatePermanentToken } from '../services/signed-url';
+import { resolvePublicBaseUrl, buildDownloadUrl } from '../utils/public-url';
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -279,19 +280,25 @@ adminRoutes.get('/tenants/:tenantId/files', async (c) => {
 
   const result = await db.listFilesByTenant(tenantId, validatedQuery);
 
-  const files = result.files.map((file) => ({
-    id: file.id,
-    url: `/api/v1/files/${file.id}/download`,
-    originalName: file.originalName,
-    fileType: file.fileType,
-    sizeBytes: file.sizeBytes,
-    context: file.context,
-    tags: file.tags,
-    metadata: file.metadata,
-    processingStatus: file.processingStatus,
-    workspaceId: file.workspaceId,
-    createdAt: new Date(file.createdAt).toISOString(),
-  }));
+  const baseUrl = resolvePublicBaseUrl(c);
+  const files = await Promise.all(
+    result.files.map(async (file) => {
+      const token = await generatePermanentToken(file.id, tenantId, c.env.URL_SIGNING_SECRET);
+      return {
+        id: file.id,
+        url: buildDownloadUrl(baseUrl, file.id, tenantId, token),
+        originalName: file.originalName,
+        fileType: file.fileType,
+        sizeBytes: file.sizeBytes,
+        context: file.context,
+        tags: file.tags,
+        metadata: file.metadata,
+        processingStatus: file.processingStatus,
+        workspaceId: file.workspaceId,
+        createdAt: new Date(file.createdAt).toISOString(),
+      };
+    })
+  );
 
   return c.json({
     files,
@@ -316,9 +323,12 @@ adminRoutes.get('/tenants/:tenantId/files/:fileId', async (c) => {
     throw ApiError.notFound('File not found');
   }
 
+  const token = await generatePermanentToken(file.id, tenantId, c.env.URL_SIGNING_SECRET);
+  const baseUrl = resolvePublicBaseUrl(c);
+
   return c.json({
     id: file.id,
-    url: `/api/v1/files/${file.id}/download`,
+    url: buildDownloadUrl(baseUrl, file.id, tenantId, token),
     originalName: file.originalName,
     fileType: file.fileType,
     sizeBytes: file.sizeBytes,

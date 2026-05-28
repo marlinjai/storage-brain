@@ -1,7 +1,7 @@
 'use client';
 
 import { formatBytes, formatDate } from '@/lib/format';
-import { useSignedUrl } from '@/hooks/useSignedUrl';
+import { isModel, withInlineDisposition } from '@/lib/fileTypes';
 
 interface FileItem {
   id: string;
@@ -9,17 +9,13 @@ interface FileItem {
   fileType: string;
   sizeBytes: number;
   createdAt: string;
+  url?: string;
 }
 
 interface FileGridProps {
   files: FileItem[];
-  tenantId: string;
   onFileClick: (file: FileItem) => void;
   onDeleteFile: (file: FileItem) => void;
-}
-
-function isPreviewable(fileType: string) {
-  return fileType.startsWith('image/') || fileType === 'application/pdf';
 }
 
 function FileTypeIcon({ fileType }: { fileType: string }) {
@@ -31,19 +27,31 @@ function FileTypeIcon({ fileType }: { fileType: string }) {
   );
 }
 
-function FilePreview({
-  file,
-  tenantId,
-}: {
-  file: FileItem;
-  tenantId: string;
-}) {
-  const { url } = useSignedUrl(
-    tenantId,
-    isPreviewable(file.fileType) ? file.id : undefined,
+function ModelBadge() {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-1 bg-gray-800 text-gray-400">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        className="h-10 w-10"
+      >
+        <path d="M12 2 3 7v10l9 5 9-5V7z" />
+        <path d="M3 7l9 5 9-5M12 12v10" />
+      </svg>
+      <span className="text-xs font-bold tracking-wide">3D</span>
+    </div>
   );
+}
 
-  const inlineUrl = url ? `${url}${url.includes('?') ? '&' : '?'}disposition=inline` : '';
+function FilePreview({ file }: { file: FileItem }) {
+  const url = file.url;
+  const inlineUrl = url ? withInlineDisposition(url) : '';
+
+  if (isModel(file.fileType, file.originalName)) {
+    return <ModelBadge />;
+  }
 
   if (file.fileType.startsWith('image/') && url) {
     return (
@@ -68,7 +76,7 @@ function FilePreview({
   return <FileTypeIcon fileType={file.fileType} />;
 }
 
-export function FileGrid({ files, tenantId, onFileClick, onDeleteFile }: FileGridProps) {
+export function FileGrid({ files, onFileClick, onDeleteFile }: FileGridProps) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {files.map((file) => (
@@ -80,7 +88,7 @@ export function FileGrid({ files, tenantId, onFileClick, onDeleteFile }: FileGri
             className="relative aspect-[4/3] overflow-hidden"
             onClick={() => onFileClick(file)}
           >
-            <FilePreview file={file} tenantId={tenantId} />
+            <FilePreview file={file} />
           </div>
           <div className="p-3" onClick={() => onFileClick(file)}>
             <p className="truncate text-sm font-medium text-gray-200">

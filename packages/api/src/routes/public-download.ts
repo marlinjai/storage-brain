@@ -115,9 +115,16 @@ export async function publicDownloadHandler(c: Context<AppEnv>) {
   headers.set('Access-Control-Allow-Origin', '*');
   headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
 
-  // Allow browser caching for signed URLs (they have expiry built in)
+  // Allow browser caching for token-based downloads. Permanent URLs are stable
+  // (token is deterministic, revoked only by rotating URL_SIGNING_SECRET), so
+  // mark them immutable for a year — repeat dashboard loads serve from cache
+  // instead of re-fetching bytes. Time-limited signed URLs get a short window.
   if (token) {
-    headers.set('Cache-Control', 'public, max-age=3600');
+    const isPermanent = expiresParam === undefined || expiresParam === '0';
+    headers.set(
+      'Cache-Control',
+      isPermanent ? 'public, max-age=31536000, immutable' : 'public, max-age=3600'
+    );
   }
 
   return new Response(object.body, { status: 200, headers });

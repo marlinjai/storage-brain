@@ -14,7 +14,7 @@ import { workspaceRoutes } from './routes/workspaces';
 import { webhookRoutes } from './routes/webhooks';
 import { internalUploadRoutes } from './routes/internal-upload';
 import { errorHandler } from './middleware/error-handler';
-import { rateLimiter } from './middleware/rate-limit';
+import { rateLimiter, tenantKeyFn } from './middleware/rate-limit';
 import { publicDownloadHandler } from './routes/public-download';
 
 export interface AppConfig {
@@ -96,7 +96,14 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
   });
 
   // --- Rate limiting (per route group, not global) ---
-  const apiRateLimit = rateLimiter({ windowMs: 60_000, max: 100 });
+  const apiRateLimit = rateLimiter({ windowMs: 60_000, max: 100, keyFn: tenantKeyFn });
+  // Byte downloads arrive one-per-file when a gallery renders, so they get a
+  // dedicated, generous bucket instead of sharing the 100/60s API-operation
+  // budget (tenant-keyed like the rest of the public group).
+  const downloadRateLimit = rateLimiter({ windowMs: 60_000, max: 1000, keyFn: tenantKeyFn });
+  // Admin & internal limiters stay IP-keyed: admin auth is a single shared key
+  // (per-key keying gives no isolation) and the internal uploader is one trusted
+  // caller, so per-tenant keying does not apply.
   const adminRateLimit = rateLimiter({ windowMs: 60_000, max: 30 });
   const internalRateLimit = rateLimiter({ windowMs: 60_000, max: 60 });
 
@@ -110,9 +117,15 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
   app.route('/api/v1/tenant', tenantRoutes);
   app.route('/api/v1/workspaces', workspaceRoutes);
 
-  // Public download route (token-based auth, no Bearer required) — must be registered before fileRoutes
-  app.use('/api/v1/files/*', apiRateLimit);
+  // Public download route (token-based auth, no Bearer required). Registered
+  // before fileRoutes so it matches first, and before the broad /files API
+  // limiter so it is metered only by the generous download bucket (a gallery
+  // load of N files must not exhaust the 100/60s API-operation budget).
+  app.use('/api/v1/files/:fileId/download', downloadRateLimit);
   app.get('/api/v1/files/:fileId/download', publicDownloadHandler);
+
+  // Remaining /files API operations (list, signed-url, permanent-url, delete)
+  app.use('/api/v1/files/*', apiRateLimit);
 
   // Data routes (all use tenant authMiddleware)
   app.use('/api/v1/upload/*', apiRateLimit);

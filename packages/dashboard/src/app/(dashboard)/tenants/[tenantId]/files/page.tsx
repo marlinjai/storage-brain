@@ -21,7 +21,7 @@ interface FileItem {
   fileType: string;
   sizeBytes: number;
   createdAt: string;
-  signedUrl?: string;
+  url?: string;
   context?: string;
   tags?: Record<string, string>;
   metadata?: Record<string, unknown>;
@@ -103,7 +103,6 @@ export default function FilesPage({
       {files && files.length > 0 && viewMode === 'grid' && (
         <FileGrid
           files={files}
-          tenantId={tenantId}
           onFileClick={(f) => setSelectedFile(f as FileItem)}
           onDeleteFile={(f) => setDeleteTarget(f as FileItem)}
         />
