@@ -3,7 +3,15 @@
 import { useState } from 'react';
 import { formatBytes, formatDate } from '@/lib/format';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
-import { useSignedUrl } from '@/hooks/useSignedUrl';
+import { ModelViewer } from '@/components/files/ModelViewer';
+
+function isModel(fileType: string, name: string): boolean {
+  return (
+    fileType === 'model/gltf-binary' ||
+    fileType === 'model/gltf+json' ||
+    /\.(glb|gltf)$/i.test(name)
+  );
+}
 
 interface FileItem {
   id: string;
@@ -11,7 +19,7 @@ interface FileItem {
   fileType: string;
   sizeBytes: number;
   createdAt: string;
-  signedUrl?: string;
+  url?: string;
   context?: string;
   tags?: Record<string, string>;
   metadata?: Record<string, unknown>;
@@ -32,12 +40,16 @@ export function FileDetailPanel({
   onDelete,
 }: FileDetailPanelProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const { url: signedUrl } = useSignedUrl(tenantId, file?.id);
+  const signedUrl = file?.url ?? null;
 
   if (!file) return null;
 
   const isImage = file.fileType.startsWith('image/');
   const isPdf = file.fileType === 'application/pdf';
+  const isModelFile = isModel(file.fileType, file.originalName);
+  const inlineUrl = signedUrl
+    ? `${signedUrl}${signedUrl.includes('?') ? '&' : '?'}disposition=inline`
+    : null;
 
   async function handleDelete() {
     if (!file) return;
@@ -89,6 +101,9 @@ export function FileDetailPanel({
                 title={file.originalName}
               />
             </div>
+          )}
+          {isModelFile && inlineUrl && (
+            <ModelViewer url={inlineUrl} alt={file.originalName} />
           )}
 
           {/* Metadata */}
