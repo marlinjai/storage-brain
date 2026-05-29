@@ -1,36 +1,63 @@
-import useSWR from 'swr';
+import useSWRInfinite from 'swr/infinite';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 interface UseFilesFilters {
   limit?: number;
-  cursor?: string;
   context?: string;
   fileType?: string;
   workspaceId?: string;
 }
 
-export function useFiles(tenantId: string | undefined, filters?: UseFilesFilters) {
-  const params = new URLSearchParams();
-  if (filters?.limit) params.set('limit', filters.limit.toString());
-  if (filters?.cursor) params.set('cursor', filters.cursor);
-  if (filters?.context) params.set('context', filters.context);
-  if (filters?.fileType) params.set('fileType', filters.fileType);
-  if (filters?.workspaceId) params.set('workspaceId', filters.workspaceId);
+interface FilesPage<T> {
+  files: T[];
+  total: number;
+  nextCursor?: string;
+}
 
-  const query = params.toString();
-  const url = tenantId
-    ? `/api/tenants/${tenantId}/files${query ? `?${query}` : ''}`
-    : null;
+export function useFiles<T = unknown>(
+  tenantId: string | undefined,
+  filters?: UseFilesFilters
+) {
+  const getKey = (pageIndex: number, previousPageData: FilesPage<T> | null) => {
+    if (!tenantId) return null;
+    // Reached the end: the previous page returned no cursor.
+    if (previousPageData && !previousPageData.nextCursor) return null;
 
-  const { data, error, isLoading, mutate } = useSWR(url, fetcher);
+    const params = new URLSearchParams();
+    if (filters?.limit) params.set('limit', filters.limit.toString());
+    if (filters?.context) params.set('context', filters.context);
+    if (filters?.fileType) params.set('fileType', filters.fileType);
+    if (filters?.workspaceId) params.set('workspaceId', filters.workspaceId);
+    // Every page after the first carries the prior page's cursor.
+    if (pageIndex > 0 && previousPageData?.nextCursor) {
+      params.set('cursor', previousPageData.nextCursor);
+    }
+
+    const query = params.toString();
+    return `/api/tenants/${tenantId}/files${query ? `?${query}` : ''}`;
+  };
+
+  const { data, error, isLoading, size, setSize, mutate } =
+    useSWRInfinite<FilesPage<T>>(getKey, fetcher, { revalidateFirstPage: false });
+
+  const pages = data ?? [];
+  const files = pages.flatMap((p) => p.files ?? []);
+  const lastPage = pages[pages.length - 1];
+  const hasMore = Boolean(lastPage?.nextCursor);
+
+  // A page was requested (size) but its data hasn't resolved yet (pages.length).
+  const isLoadingMore = data !== undefined && pages.length < size;
 
   return {
-    files: data?.files ?? [],
-    total: data?.total ?? 0,
-    nextCursor: data?.nextCursor,
+    files,
+    total: pages[0]?.total ?? 0,
+    hasMore,
     isLoading,
+    isLoadingMore,
     error,
+    loadMore: () => setSize(size + 1),
+    setSize,
     mutate,
   };
 }

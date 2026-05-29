@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useCallback } from 'react';
+import { use, useState, useCallback, useEffect } from 'react';
 import { useFiles } from '@/hooks/useFiles';
 import { FileGrid } from '@/components/files/FileGrid';
 import { FileFilters } from '@/components/files/FileFilters';
@@ -39,7 +39,14 @@ export default function FilesPage({
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<FileItem | null>(null);
 
-  const { files, isLoading, error, nextCursor, mutate } = useFiles(tenantId, filters);
+  const { files, isLoading, isLoadingMore, error, hasMore, loadMore, setSize, mutate } =
+    useFiles<FileItem>(tenantId, filters);
+
+  // Reset to the first page whenever the filters change, otherwise the
+  // accumulated pages would keep refetching under the new filter.
+  useEffect(() => {
+    setSize(1);
+  }, [filters, setSize]);
 
   const handleDeleteFile = useCallback(
     async (file: FileItem) => {
@@ -163,13 +170,14 @@ export default function FilesPage({
         </div>
       )}
 
-      {nextCursor && (
+      {hasMore && (
         <div className="mt-6 text-center">
           <button
-            onClick={() => mutate()}
-            className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-300 hover:bg-gray-800"
+            onClick={() => loadMore()}
+            disabled={isLoadingMore}
+            className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Load More
+            {isLoadingMore ? 'Loading...' : 'Load More'}
           </button>
         </div>
       )}
