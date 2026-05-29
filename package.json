@@ -4,7 +4,7 @@
   "private": true,
   "description": "Edge-native file storage micro-product built on Cloudflare Workers",
   "scripts": {
-    "dev": "docker compose up -d postgres minio minio-setup && infisical run --env=dev --projectId=86dcae14-6cb2-473b-8b2d-43b37977f04e -- pnpm --filter @storage-brain/api start:node",
+    "dev": "docker compose up -d postgres minio minio-setup && infisical run --token=\"$($HOME/software-dev/infra/scripts/infisical-mi-token.sh)\" --domain=https://infisical.lumitra.co --env=dev --projectId=86dcae14-6cb2-473b-8b2d-43b37977f04e -- pnpm --filter @storage-brain/api start:node",
     "dev:dashboard": "pnpm --filter @storage-brain/dashboard dev",
     "dev:workers": "pnpm --filter @storage-brain/api dev",
     "dev:stop": "docker compose down",
