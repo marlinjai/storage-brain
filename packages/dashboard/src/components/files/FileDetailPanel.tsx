@@ -38,6 +38,7 @@ export function FileDetailPanel({
   if (!file) return null;
 
   const isImage = file.fileType.startsWith('image/');
+  const isAudio = file.fileType.startsWith('audio/');
   const isPdf = file.fileType === 'application/pdf';
   const isModelFile = isModel(file.fileType, file.originalName);
   const inlineUrl = signedUrl ? withInlineDisposition(signedUrl) : null;
@@ -82,6 +83,13 @@ export function FileDetailPanel({
                 alt={file.originalName}
                 className="w-full object-contain"
               />
+            </div>
+          )}
+          {isAudio && inlineUrl && (
+            <div className="rounded-xl border border-gray-800 bg-gray-800/40 p-4">
+              <audio key={file.id} controls preload="metadata" src={inlineUrl} className="w-full">
+                Your browser does not support the audio element.
+              </audio>
             </div>
           )}
           {isPdf && inlineUrl && (
