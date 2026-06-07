@@ -1,5 +1,8 @@
 {
   "name": "@marlinjai/storage-brain-sdk",
+  "publishConfig": {
+    "access": "public"
+  },
   "version": "0.9.0",
   "description": "TypeScript SDK for Storage Brain - edge-native file storage service",
   "type": "module",
