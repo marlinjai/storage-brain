@@ -1,6 +1,6 @@
 ---
 type: plan
-status: draft
+status: done
 title: "Spec: Storage Brain dashboard auth via auth-brain session (slice 2A)"
 summary: "Dashboard humans authenticate via auth-brain's lumitra_session + verifySession + can(platform.admin), with the legacy admin-key iron-session kept as a transitional fallback. Backend API credential moves to a server-side env var. Adds the auth_workspace_id tenant binding as plumbing for future per-tenant authz. Machine/service-account-key auth on the API worker is explicitly deferred."
 date: 2026-06-16

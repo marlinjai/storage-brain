@@ -45,8 +45,23 @@ export default function LoginPage() {
           Storage Brain
         </h1>
         <p className="mb-8 text-sm text-gray-400">
-          Sign in with your admin credentials
+          Sign in with Lumitra, or use your admin credentials
         </p>
+
+        <a
+          href="/api/auth/lumitra"
+          className="mb-6 flex w-full items-center justify-center rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-gray-900 transition-colors hover:bg-gray-200"
+        >
+          Sign in with Lumitra
+        </a>
+
+        <div className="mb-6 flex items-center gap-3">
+          <div className="h-px flex-1 bg-gray-800" />
+          <span className="text-xs uppercase tracking-wide text-gray-500">
+            or
+          </span>
+          <div className="h-px flex-1 bg-gray-800" />
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>

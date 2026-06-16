@@ -34,8 +34,8 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     const now = Date.now();
     await this.db
       .prepare(
-        `INSERT INTO tenants (id, name, api_key_hash, key_prefix, quota_bytes, used_bytes, allowed_file_types, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)`
+        `INSERT INTO tenants (id, name, api_key_hash, key_prefix, quota_bytes, used_bytes, allowed_file_types, auth_workspace_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`
       )
       .bind(
         input.id,
@@ -44,6 +44,7 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
         input.keyPrefix,
         input.quotaBytes,
         JSON.stringify(input.allowedFileTypes),
+        input.authWorkspaceId ?? null,
         now,
         now
       )
@@ -71,6 +72,14 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
 
   async getTenantById(id: string): Promise<Tenant | null> {
     const result = await this.db.prepare('SELECT * FROM tenants WHERE id = ?').bind(id).first();
+    return result ? this.mapTenantRow(result) : null;
+  }
+
+  async getTenantByAuthWorkspaceId(authWorkspaceId: string): Promise<Tenant | null> {
+    const result = await this.db
+      .prepare('SELECT * FROM tenants WHERE auth_workspace_id = ?')
+      .bind(authWorkspaceId)
+      .first();
     return result ? this.mapTenantRow(result) : null;
   }
 
@@ -140,6 +149,11 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     if (updates.allowedFileTypes !== undefined) {
       setClauses.push('allowed_file_types = ?');
       params.push(updates.allowedFileTypes ? JSON.stringify(updates.allowedFileTypes) : null);
+    }
+
+    if (updates.authWorkspaceId !== undefined) {
+      setClauses.push('auth_workspace_id = ?');
+      params.push(updates.authWorkspaceId);
     }
 
     params.push(tenantId);
@@ -652,6 +666,7 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       allowedFileTypes: row.allowed_file_types
         ? (JSON.parse(row.allowed_file_types as string) as AllowedMimeType[])
         : null,
+      authWorkspaceId: (row.auth_workspace_id as string) ?? null,
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,
     };

@@ -56,7 +56,7 @@ describe('StorageBrain SDK', () => {
       mockFetch.mockResolvedValueOnce(jsonResponse({ id: 'f1' }));
       await scoped.getFile('f1');
 
-      const call = mockFetch.mock.calls[0];
+      const call = mockFetch.mock.calls[0]!;
       const headers = call[1].headers;
       expect(headers['X-Workspace-Id']).toBe('ws-123');
     });
@@ -106,7 +106,7 @@ describe('StorageBrain SDK', () => {
       const result = await client.listFiles({ limit: 10, context: 'app' });
 
       expect(result).toEqual(listData);
-      const url = mockFetch.mock.calls[0][0] as string;
+      const url = mockFetch.mock.calls[0]![0] as string;
       expect(url).toContain('limit=10');
       expect(url).toContain('context=app');
     });
@@ -117,7 +117,7 @@ describe('StorageBrain SDK', () => {
 
       await scoped.listFiles();
 
-      const url = mockFetch.mock.calls[0][0] as string;
+      const url = mockFetch.mock.calls[0]![0] as string;
       expect(url).toContain('workspaceId=ws-1');
     });
 
@@ -127,7 +127,7 @@ describe('StorageBrain SDK', () => {
 
       await scoped.listFiles({ workspaceId: 'ws-override' });
 
-      const url = mockFetch.mock.calls[0][0] as string;
+      const url = mockFetch.mock.calls[0]![0] as string;
       expect(url).toContain('workspaceId=ws-override');
     });
   });
@@ -153,7 +153,7 @@ describe('StorageBrain SDK', () => {
 
       await client.getSignedUrl('f1', 7200);
 
-      const url = mockFetch.mock.calls[0][0] as string;
+      const url = mockFetch.mock.calls[0]![0] as string;
       expect(url).toContain('expiresIn=7200');
     });
 
@@ -162,7 +162,7 @@ describe('StorageBrain SDK', () => {
 
       await client.getSignedUrl('f1');
 
-      const url = mockFetch.mock.calls[0][0] as string;
+      const url = mockFetch.mock.calls[0]![0] as string;
       expect(url).toContain('expiresIn=3600');
     });
   });
@@ -178,7 +178,7 @@ describe('StorageBrain SDK', () => {
       const result = await client.getPermanentUrl('f1');
 
       expect(result).toEqual(response);
-      const url = mockFetch.mock.calls[0][0] as string;
+      const url = mockFetch.mock.calls[0]![0] as string;
       expect(url).toBe('https://api.example.com/api/v1/files/f1/permanent-url');
       expect(mockFetch).toHaveBeenCalledWith(
         url,
@@ -239,7 +239,7 @@ describe('StorageBrain SDK', () => {
       mockFetch.mockResolvedValueOnce(jsonResponse({ id: 'ws1' }));
 
       await client.getWorkspace('ws1');
-      const url = mockFetch.mock.calls[0][0] as string;
+      const url = mockFetch.mock.calls[0]![0] as string;
       expect(url).toContain('/workspaces/ws1');
     });
 

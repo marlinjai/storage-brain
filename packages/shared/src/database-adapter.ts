@@ -18,7 +18,8 @@ export interface CreateTenantInput {
   apiKeyHash: string;
   keyPrefix: string;
   quotaBytes: number;
-  allowedFileTypes: AllowedMimeType[];
+  allowedFileTypes: AllowedMimeType[] | null;
+  authWorkspaceId?: string;
 }
 
 export interface CreateFileInput {
@@ -83,6 +84,7 @@ export interface UpdateTenantInput {
   name?: string;
   quotaBytes?: number;
   allowedFileTypes?: AllowedMimeType[] | null;
+  authWorkspaceId?: string | null;
 }
 
 export interface DatabaseAdapter {
@@ -91,6 +93,7 @@ export interface DatabaseAdapter {
   getTenantByApiKey(apiKey: string): Promise<Tenant | null>;
   getTenantByName(name: string): Promise<Tenant | null>;
   getTenantById(id: string): Promise<Tenant | null>;
+  getTenantByAuthWorkspaceId(authWorkspaceId: string): Promise<Tenant | null>;
   updateTenantApiKeyHash(tenantId: string, newHash: string, keyPrefix: string): Promise<boolean>;
   listTenants(input: ListTenantsInput): Promise<ListTenantsResult>;
   updateTenant(tenantId: string, updates: UpdateTenantInput): Promise<Tenant | null>;

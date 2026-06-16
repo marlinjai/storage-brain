@@ -19,6 +19,8 @@ date: 2026-04-09
 
 <!-- Currently being implemented -->
 
+- **[Dashboard auth via auth-brain (slice 2A)](docs/plans/2026-06-16-storage-brain-auth-brain-dashboard-session.md)**: Dashboard humans authenticate via auth-brain's `lumitra_session` (`verifySession` + `can(platform.admin)`), with the legacy admin-key login kept as a transitional fallback; adds the nullable `auth_workspace_id` tenant binding as plumbing for future per-tenant authz.
+
 ## Completed
 
 - **v0.5.0** — Multi-tenant workspaces, workspace quotas, workspace-scoped file listing

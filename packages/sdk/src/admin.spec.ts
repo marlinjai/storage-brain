@@ -70,7 +70,7 @@ describe('StorageBrainAdmin SDK', () => {
 
       await admin.createTenant({ name: 'Test' });
 
-      const headers = mockFetch.mock.calls[0][1].headers;
+      const headers = mockFetch.mock.calls[0]![1].headers;
       expect(headers.Authorization).toBe('Bearer admin-secret');
     });
   });

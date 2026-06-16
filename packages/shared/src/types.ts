@@ -16,6 +16,12 @@ export interface Tenant extends BaseTenant {
   quotaBytes: number;
   usedBytes: number;
   allowedFileTypes: AllowedMimeType[] | null;
+  /**
+   * Optional binding to an auth-brain workspace (one workspace per tenant).
+   * Nullable: existing tenants predate this plumbing. Laid down for future
+   * per-tenant authorization; not yet used to filter access.
+   */
+  authWorkspaceId: string | null;
 }
 
 /**

@@ -45,6 +45,8 @@ export interface CreateTenantInput {
   name: string;
   quotaBytes?: number;
   allowedFileTypes?: AllowedMimeType[];
+  /** Optional auth-brain workspace binding (one workspace per tenant). */
+  authWorkspaceId?: string;
 }
 
 export interface CreateTenantResult {
@@ -59,6 +61,8 @@ export interface UpdateTenantInput {
   name?: string;
   quotaBytes?: number;
   allowedFileTypes?: AllowedMimeType[] | null;
+  /** Optional auth-brain workspace binding; null clears it. */
+  authWorkspaceId?: string | null;
 }
 
 export interface ListTenantsOptions {
