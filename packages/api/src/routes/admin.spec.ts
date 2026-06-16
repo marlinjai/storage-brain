@@ -69,7 +69,7 @@ function createMockDb() {
   };
 }
 
-function createMockStorage(): StorageAdapter {
+function createMockStorage() {
   return { put: vi.fn(), get: vi.fn(), delete: vi.fn(), exists: vi.fn(), head: vi.fn() };
 }
 
@@ -136,7 +136,7 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(201);
-      const body = (await res.json()) as TestResponseBody;
+      const body = await res.json<TestResponseBody>();
       expect(body.name).toBe('New Tenant');
       expect(body.apiKey).toBeDefined();
       expect(body.apiKey).toMatch(/^sk_(live|test)_/);
@@ -174,7 +174,7 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(201);
-      const body = (await res.json()) as TestResponseBody;
+      const body = await res.json<TestResponseBody>();
       expect(body.quotaBytes).toBe(1024 * 1024);
       expect(body.allowedFileTypes).toEqual(['image/png']);
     });
@@ -188,7 +188,7 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = (await res.json()) as TestResponseBody;
+      const body = await res.json<TestResponseBody>();
       expect(body.apiKey).toBeDefined();
       expect(body.tenantId).toBe('tenant-123');
       expect(db.updateTenantApiKeyHash).toHaveBeenCalledTimes(1);
@@ -220,7 +220,7 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = (await res.json()) as TestResponseBody;
+      const body = await res.json<TestResponseBody>();
       expect(body.tenants).toHaveLength(1);
       expect(body.tenants?.[0]?.id).toBe('tenant-123');
       expect(body.tenants?.[0]?.name).toBe('Test Tenant');
@@ -250,7 +250,7 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = (await res.json()) as TestResponseBody;
+      const body = await res.json<TestResponseBody>();
       expect(body.id).toBe('tenant-123');
       expect(body.name).toBe('Test Tenant');
       expect(body.quota).toBeDefined();
@@ -284,7 +284,7 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = (await res.json()) as TestResponseBody;
+      const body = await res.json<TestResponseBody>();
       expect(body.name).toBe('Updated Name');
       expect(db.updateTenant).toHaveBeenCalledWith('tenant-123', { name: 'Updated Name' });
     });
@@ -303,7 +303,7 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = (await res.json()) as TestResponseBody;
+      const body = await res.json<TestResponseBody>();
       expect(body.quotaBytes).toBe(1024);
     });
 
@@ -348,7 +348,7 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = (await res.json()) as TestResponseBody;
+      const body = await res.json<TestResponseBody>();
       expect(body.success).toBe(true);
       expect(db.deleteTenant).toHaveBeenCalledWith('tenant-123');
     });
@@ -422,12 +422,12 @@ describe('admin routes', () => {
       const res = await post(validBody);
 
       expect(res.status).toBe(200);
-      const body = (await res.json()) as {
+      const body = await res.json<{
         fileId?: string;
         presignedUrl?: string;
         expiresAt?: string;
         uploadMetadata?: { maxSizeBytes?: number };
-      };
+      }>();
       expect(body.fileId).toBeDefined();
       expect(body.presignedUrl).toContain('/_internal/upload/');
       expect(body.expiresAt).toBeDefined();

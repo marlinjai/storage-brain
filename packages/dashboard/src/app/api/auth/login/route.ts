@@ -4,7 +4,10 @@ import { getSession } from '@/lib/session';
 
 export async function POST(request: Request) {
   try {
-    const { adminApiKey, baseUrl } = await request.json();
+    const { adminApiKey, baseUrl } = (await request.json()) as {
+      adminApiKey?: string;
+      baseUrl?: string;
+    };
 
     if (!adminApiKey) {
       return NextResponse.json(

@@ -39,7 +39,7 @@ describe('StorageBrainAdmin SDK', () => {
     it('strips trailing slash from baseUrl', () => {
       const a = new StorageBrainAdmin({ adminApiKey: 'key', baseUrl: 'https://api.example.com/' });
       mockFetch.mockResolvedValueOnce(jsonResponse({ tenants: [], nextCursor: null, total: 0 }));
-      a.listTenants();
+      void a.listTenants();
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/admin/tenants',
         expect.anything(),

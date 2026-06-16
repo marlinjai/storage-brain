@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import type { CreateTenantInput } from '@marlinjai/storage-brain-sdk/admin';
 import { getAdmin } from '@/lib/sdk';
 
 export async function GET() {
@@ -17,7 +18,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const admin = await getAdmin();
-    const body = await request.json();
+    const body = (await request.json()) as CreateTenantInput;
     const result = await admin.createTenant(body);
     return NextResponse.json(result, { status: 201 });
   } catch (err) {

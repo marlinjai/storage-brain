@@ -64,7 +64,11 @@ export function UploadDialog({ open, tenantId, onClose, onUploaded }: UploadDial
     if (!open) return;
     let cancelled = false;
     fetch(`/api/tenants/${tenantId}/workspaces`)
-      .then((r) => (r.ok ? r.json() : { workspaces: [] }))
+      .then((r) =>
+        r.ok
+          ? (r.json() as Promise<{ workspaces?: Workspace[] }>)
+          : { workspaces: [] }
+      )
       .then((data) => {
         if (!cancelled) setWorkspaces(data.workspaces ?? []);
       })
@@ -303,7 +307,7 @@ export function UploadDialog({ open, tenantId, onClose, onUploaded }: UploadDial
           </button>
           <button
             type="button"
-            onClick={handleUploadAll}
+            onClick={() => void handleUploadAll()}
             disabled={busy || !hasPending}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >

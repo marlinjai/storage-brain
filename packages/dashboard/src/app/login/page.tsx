@@ -25,7 +25,8 @@ export default function LoginPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as { error?: string };
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty-string error message falls through to generic copy
         setError(data.error || 'Login failed');
         return;
       }
@@ -63,7 +64,12 @@ export default function LoginPage() {
           <div className="h-px flex-1 bg-gray-800" />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form
+          onSubmit={(e) => {
+            void handleSubmit(e);
+          }}
+          className="space-y-5"
+        >
           <div>
             <label
               htmlFor="baseUrl"

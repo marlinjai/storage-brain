@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import type { RequestTenantUploadInput } from '@marlinjai/storage-brain-sdk/admin';
 import { getAdmin, getStorageBrainBaseUrl } from '@/lib/sdk';
 
 /**
@@ -33,7 +34,7 @@ export async function POST(
     const { id } = await params;
     const admin = await getAdmin();
     const baseUrl = await getStorageBrainBaseUrl();
-    const body = await request.json();
+    const body = (await request.json()) as RequestTenantUploadInput;
 
     const handshake = await admin.requestTenantUpload(id, body);
 
@@ -60,7 +61,8 @@ export async function POST(
     const status =
       typeof e?.statusCode === 'number' && e.statusCode >= 400 && e.statusCode < 600
         ? e.statusCode
-        : (code && STATUS_BY_CODE[code]) || 500;
+        : // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- falls back to 500 for unknown code (undefined) and missing code (false)
+          (code && STATUS_BY_CODE[code]) || 500;
     const message = err instanceof Error ? err.message : 'Internal error';
 
     return NextResponse.json({ error: message, code, details: e?.details }, { status });

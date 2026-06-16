@@ -11,7 +11,7 @@ vi.mock('next/server', () => ({
   NextResponse: {
     json: (body: unknown, init?: { status?: number }) => ({
       status: init?.status ?? 200,
-      json: async () => body,
+      json: () => Promise.resolve(body),
     }),
   },
 }));
@@ -19,7 +19,7 @@ vi.mock('next/server', () => ({
 import { POST } from './route';
 
 function makeRequest(body: unknown) {
-  return { json: async () => body } as unknown as Request;
+  return { json: () => Promise.resolve(body) } as unknown as Request;
 }
 
 function makeParams(id: string) {

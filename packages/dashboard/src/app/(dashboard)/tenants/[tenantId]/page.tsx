@@ -3,10 +3,12 @@
 import { use } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
+import type { AdminTenantDetail } from '@marlinjai/storage-brain-sdk/admin';
 import { QuotaBar } from '@/components/ui/QuotaBar';
 import { formatDate } from '@/lib/format';
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const fetcher = <T,>(url: string): Promise<T> =>
+  fetch(url).then((r) => r.json() as Promise<T>);
 
 export default function TenantDetailPage({
   params,
@@ -14,13 +16,17 @@ export default function TenantDetailPage({
   params: Promise<{ tenantId: string }>;
 }) {
   const { tenantId } = use(params);
-  const { data: tenant, isLoading, error } = useSWR(`/api/tenants/${tenantId}`, fetcher);
+  const {
+    data: tenant,
+    isLoading,
+    error,
+  } = useSWR<AdminTenantDetail, Error>(`/api/tenants/${tenantId}`, fetcher);
 
   if (isLoading) {
     return <div className="text-sm text-gray-400">Loading tenant...</div>;
   }
 
-  if (error || !tenant) {
+  if (error != null || !tenant) {
     return (
       <div>
         <div className="rounded-lg border border-red-800 bg-red-900/30 px-4 py-3 text-sm text-red-400">

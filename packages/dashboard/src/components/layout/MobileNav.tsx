@@ -126,7 +126,7 @@ export default function MobileNav() {
 
           <div className="mt-3 border-t border-gray-800 pt-3">
             <button
-              onClick={handleLogout}
+              onClick={() => void handleLogout()}
               className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-400 transition-colors hover:bg-gray-900 hover:text-gray-200"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">

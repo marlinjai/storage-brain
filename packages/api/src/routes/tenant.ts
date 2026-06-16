@@ -29,7 +29,7 @@ tenantRoutes.get('/quota', async (c) => {
  * GET /api/v1/tenant/info
  * Get tenant information
  */
-tenantRoutes.get('/info', async (c) => {
+tenantRoutes.get('/info', (c) => {
   const tenant = c.get('tenant');
 
   return c.json({

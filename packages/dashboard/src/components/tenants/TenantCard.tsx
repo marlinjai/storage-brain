@@ -1,20 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import type { AdminTenant } from '@marlinjai/storage-brain-sdk/admin';
 import { QuotaBar } from '@/components/ui/QuotaBar';
 import { formatDate } from '@/lib/format';
 
-interface Tenant {
-  id: string;
-  name: string;
-  quotaBytes: number;
-  usedBytes: number;
-  allowedFileTypes: string[];
-  createdAt: string;
-}
-
 interface TenantCardProps {
-  tenant: Tenant;
+  tenant: AdminTenant;
 }
 
 export function TenantCard({ tenant }: TenantCardProps) {

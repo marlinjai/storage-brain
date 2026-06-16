@@ -27,6 +27,12 @@ const DEFAULT_BASE_URL = 'https://api.storage-brain.lumitra.co';
 const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_MAX_RETRIES = 3;
 
+/** Shape of the JSON body returned by the upload PUT endpoint. */
+type UploadResponse = { processingStatus?: string; metadata?: Record<string, unknown> };
+
+/** Shape of an API error envelope returned on non-2xx responses. */
+type ApiErrorBody = { error?: { code?: string; message?: string; details?: Record<string, unknown> } };
+
 /**
  * Storage Brain SDK Client
  *
@@ -90,7 +96,7 @@ export class StorageBrain {
     const fileSize = file.size;
 
     // Validate file type format (must be a valid MIME type)
-    if (!fileType || !/^[a-z]+\/[a-z0-9.+\-]+$/i.test(fileType)) {
+    if (!fileType || !/^[a-z]+\/[a-z0-9.+-]+$/i.test(fileType)) {
       throw new InvalidFileTypeError(fileType || '(empty)', []);
     }
 
@@ -218,7 +224,7 @@ export class StorageBrain {
         if (xhr.status >= 200 && xhr.status < 300) {
           // Try to parse JSON response
           try {
-            const response = JSON.parse(xhr.responseText);
+            const response = JSON.parse(xhr.responseText) as UploadResponse;
             resolve(response);
           } catch {
             resolve(null);
@@ -284,8 +290,8 @@ export class StorageBrain {
 
     // Try to parse JSON response
     try {
-      const result = await response.json();
-      return result as { processingStatus?: string; metadata?: Record<string, unknown> };
+      const result = (await response.json()) as UploadResponse;
+      return result;
     } catch {
       return null;
     }
@@ -449,8 +455,8 @@ export class StorageBrain {
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-          const errorBody = await response.json().catch(() => ({}));
-          throw parseApiError(response.status, errorBody as { error?: { code?: string; message?: string; details?: Record<string, unknown> } });
+          const errorBody = (await response.json().catch(() => ({}))) as ApiErrorBody;
+          throw parseApiError(response.status, errorBody);
         }
 
         return await response.json() as T;

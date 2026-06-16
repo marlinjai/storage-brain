@@ -15,7 +15,7 @@
 /** Per-file 100MB cap. Mirrors the server-side MAX_FILE_SIZE_BYTES; do not raise. */
 export const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024;
 
-const MIME_RE = /^[a-z]+\/[a-z0-9.+\-]+$/i;
+const MIME_RE = /^[a-z]+\/[a-z0-9.+-]+$/i;
 
 export interface UploadHandshake {
   fileId: string;
@@ -161,6 +161,7 @@ async function requestHandshake(
       signal,
     });
   } catch (err) {
+    // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- aborted=false must fall through to the AbortError name check
     if (signal?.aborted || (err as Error)?.name === 'AbortError') {
       throw new UploadCanceledError();
     }
@@ -235,6 +236,7 @@ function putBytes(
         signal,
       });
     } catch (err) {
+      // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- aborted=false must fall through to the AbortError name check
       if (signal?.aborted || (err as Error)?.name === 'AbortError') {
         throw new UploadCanceledError();
       }

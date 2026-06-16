@@ -39,7 +39,7 @@ workspaceRoutes.get('/', async (c) => {
 workspaceRoutes.post('/', async (c) => {
   const tenant = c.get('tenant');
   const db = c.get('db');
-  const body = await c.req.json();
+  const body: unknown = await c.req.json();
 
   const validated = createWorkspaceSchema.parse(body);
 
@@ -112,7 +112,7 @@ workspaceRoutes.patch('/:workspaceId', async (c) => {
     throw ApiError.notFound('Workspace not found');
   }
 
-  const body = await c.req.json();
+  const body: unknown = await c.req.json();
   const validated = updateWorkspaceSchema.parse(body);
 
   const updated = await db.updateWorkspace(workspaceId, tenant.id, validated);

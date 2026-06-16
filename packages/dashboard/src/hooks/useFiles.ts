@@ -1,6 +1,7 @@
 import useSWRInfinite from 'swr/infinite';
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const fetcher = <T>(url: string): Promise<T> =>
+  fetch(url).then((r) => r.json() as Promise<T>);
 
 interface UseFilesFilters {
   limit?: number;
@@ -39,7 +40,9 @@ export function useFiles<T = unknown>(
   };
 
   const { data, error, isLoading, size, setSize, mutate } =
-    useSWRInfinite<FilesPage<T>>(getKey, fetcher, { revalidateFirstPage: false });
+    useSWRInfinite<FilesPage<T>, Error>(getKey, fetcher, {
+      revalidateFirstPage: false,
+    });
 
   const pages = data ?? [];
   const files = pages.flatMap((p) => p.files ?? []);

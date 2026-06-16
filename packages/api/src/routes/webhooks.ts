@@ -12,7 +12,7 @@ export const webhookRoutes = new Hono<AppEnv>();
  */
 webhookRoutes.post('/r2-upload-complete', async (c) => {
   const db = c.get('db');
-  const body = await c.req.json();
+  const body: unknown = await c.req.json();
 
   // R2 event notification payload structure
   // https://developers.cloudflare.com/r2/buckets/event-notifications/

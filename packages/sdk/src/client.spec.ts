@@ -42,7 +42,7 @@ describe('StorageBrain SDK', () => {
       const c = new StorageBrain({ apiKey: 'sk_live_x', baseUrl: 'https://api.example.com/' });
       // Access internal via getFile call — the URL should not have double slashes
       mockFetch.mockResolvedValueOnce(jsonResponse({ id: 'abc' }));
-      c.getFile('abc');
+      void c.getFile('abc');
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/files/abc',
         expect.anything()

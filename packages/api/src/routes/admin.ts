@@ -44,7 +44,7 @@ adminRoutes.use('*', createAdminAuthMiddleware());
  * Rotate the admin API key at runtime
  */
 adminRoutes.post('/rotate-key', async (c) => {
-  const body = await c.req.json();
+  const body: unknown = await c.req.json();
   const { newKey } = body as { newKey?: string };
 
   if (!newKey || typeof newKey !== 'string' || newKey.length < 32) {
@@ -73,7 +73,7 @@ adminRoutes.post('/rotate-key', async (c) => {
  */
 adminRoutes.post('/tenants', async (c) => {
   const db = c.get('db');
-  const body = await c.req.json();
+  const body: unknown = await c.req.json();
 
   // Validate request body
   const validatedBody = createTenantSchema.parse(body);
@@ -207,7 +207,7 @@ adminRoutes.get('/tenants/:tenantId', async (c) => {
 adminRoutes.patch('/tenants/:tenantId', async (c) => {
   const db = c.get('db');
   const tenantId = c.req.param('tenantId');
-  const body = await c.req.json();
+  const body: unknown = await c.req.json();
 
   const updates = updateTenantSchema.parse(body);
 
@@ -366,6 +366,7 @@ adminRoutes.get('/tenants/:tenantId/files/:fileId/signed-url', async (c) => {
   const token = await generateSignedToken(fileId, tenantId, expiresAt, c.env.URL_SIGNING_SECRET);
 
   const url = new URL(c.req.url);
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty-string fallthrough intended
   const proto = c.req.header('x-forwarded-proto') || url.protocol.replace(':', '');
   const baseUrl = `${proto}://${url.host}`;
 
@@ -436,7 +437,7 @@ adminRoutes.post('/tenants/:tenantId/workspaces', async (c) => {
     throw ApiError.notFound('Tenant not found');
   }
 
-  const body = await c.req.json();
+  const body: unknown = await c.req.json();
   const validated = createWorkspaceSchema.parse(body);
 
   const workspace = await db.createWorkspace({
@@ -480,7 +481,7 @@ adminRoutes.post('/tenants/:tenantId/upload/request', async (c) => {
     throw ApiError.notFound('Tenant not found');
   }
 
-  const body = await c.req.json();
+  const body: unknown = await c.req.json();
 
   const handshake = await requestUpload({
     db,

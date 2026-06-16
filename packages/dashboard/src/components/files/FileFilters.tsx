@@ -28,7 +28,7 @@ export function FileFilters({ filters, onChange }: FileFiltersProps) {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <select
-        value={filters.fileType || ''}
+        value={filters.fileType ?? ''}
         onChange={(e) => onChange({ ...filters, fileType: e.target.value || undefined })}
         className={inputClass}
       >
@@ -42,7 +42,7 @@ export function FileFilters({ filters, onChange }: FileFiltersProps) {
       <input
         type="text"
         placeholder="Filter by context..."
-        value={filters.context || ''}
+        value={filters.context ?? ''}
         onChange={(e) => onChange({ ...filters, context: e.target.value || undefined })}
         className={inputClass}
       />
@@ -50,7 +50,7 @@ export function FileFilters({ filters, onChange }: FileFiltersProps) {
       <input
         type="text"
         placeholder="Search by name..."
-        value={filters.search || ''}
+        value={filters.search ?? ''}
         onChange={(e) => onChange({ ...filters, search: e.target.value || undefined })}
         className={inputClass}
       />

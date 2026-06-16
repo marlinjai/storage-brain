@@ -55,12 +55,13 @@ export function CreateTenantModal({ open, onClose, onCreated }: CreateTenantModa
       });
 
       if (!res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as { error?: string };
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty-string error message falls through to generic copy
         setError(data.error || 'Failed to create tenant');
         return;
       }
 
-      const data = await res.json();
+      const data = (await res.json()) as { apiKey: string };
       setCreatedKey(data.apiKey);
       onCreated();
     } catch {
@@ -72,7 +73,7 @@ export function CreateTenantModal({ open, onClose, onCreated }: CreateTenantModa
 
   function handleCopy() {
     if (createdKey) {
-      navigator.clipboard.writeText(createdKey);
+      void navigator.clipboard.writeText(createdKey);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -125,7 +126,12 @@ export function CreateTenantModal({ open, onClose, onCreated }: CreateTenantModa
             <h2 className="mb-4 text-lg font-semibold text-gray-100">
               Create Tenant
             </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form
+              onSubmit={(e) => {
+                void handleSubmit(e);
+              }}
+              className="space-y-4"
+            >
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-300">
                   Name

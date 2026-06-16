@@ -1,4 +1,5 @@
 import { createMiddleware } from 'hono/factory';
+import type { Context } from 'hono';
 import type { AppEnv } from '../env';
 
 interface RateLimitEntry {
@@ -12,13 +13,12 @@ interface RateLimitOptions {
   /** Max requests per window */
   max: number;
   /** Function to extract rate limit key (default: client IP) */
-  keyFn?: (c: any) => string;
+  keyFn?: (c: Context<AppEnv>) => string;
 }
 
-const DEFAULT_KEY_FN = (c: any): string =>
-  c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ||
-  c.req.header('x-real-ip') ||
-  'unknown';
+const DEFAULT_KEY_FN = (c: Context<AppEnv>): string =>
+  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty-string fallthrough intended
+  c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || c.req.header('x-real-ip') || 'unknown';
 
 // Fast non-cryptographic hash (FNV-1a). Used only to derive a stable rate-limit
 // bucket key from the API key without holding the plaintext secret in the store.
@@ -38,7 +38,7 @@ function fnv1a(s: string): string {
  * keys on the Bearer API key (hashed) or the `tid` query param used by
  * token-based downloads, falling back to client IP.
  */
-export const tenantKeyFn = (c: any): string => {
+export const tenantKeyFn = (c: Context<AppEnv>): string => {
   const auth = c.req.header('Authorization');
   if (auth?.startsWith('Bearer ')) {
     return `key:${fnv1a(auth.slice(7))}`;

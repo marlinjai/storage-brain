@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useState, type FormEvent } from 'react';
+import type { AdminWorkspace } from '@marlinjai/storage-brain-sdk/admin';
 import { useWorkspaces } from '@/hooks/useWorkspaces';
 import { QuotaBar } from '@/components/ui/QuotaBar';
 import Link from 'next/link';
@@ -31,7 +32,8 @@ export default function WorkspacesPage({
       });
 
       if (!res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as { error?: string };
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty-string error message falls through to generic copy
         setCreateError(data.error || 'Failed to create workspace');
         return;
       }
@@ -39,7 +41,7 @@ export default function WorkspacesPage({
       setName('');
       setSlug('');
       setShowCreate(false);
-      mutate();
+      void mutate();
     } catch {
       setCreateError('Network error');
     } finally {
@@ -66,7 +68,12 @@ export default function WorkspacesPage({
             <h2 className="mb-4 text-lg font-semibold text-gray-100">
               Create Workspace
             </h2>
-            <form onSubmit={handleCreate} className="space-y-4">
+            <form
+              onSubmit={(e) => {
+                void handleCreate(e);
+              }}
+              className="space-y-4"
+            >
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-300">
                   Name
@@ -136,14 +143,7 @@ export default function WorkspacesPage({
       {workspaces && workspaces.length > 0 && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {workspaces.map(
-            (ws: {
-              id: string;
-              name: string;
-              slug?: string;
-              quotaBytes?: number;
-              usedBytes?: number;
-              fileCount?: number;
-            }) => (
+            (ws: AdminWorkspace & { fileCount?: number }) => (
               <Link
                 key={ws.id}
                 href={`/tenants/${tenantId}/files?workspaceId=${ws.id}`}

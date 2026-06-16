@@ -47,7 +47,7 @@ export default function FilesPage({
   // Reset to the first page whenever the filters change, otherwise the
   // accumulated pages would keep refetching under the new filter.
   useEffect(() => {
-    setSize(1);
+    void setSize(1);
   }, [filters, setSize]);
 
   const handleDeleteFile = useCallback(
@@ -56,7 +56,7 @@ export default function FilesPage({
         await fetch(`/api/tenants/${tenantId}/files/${file.id}`, {
           method: 'DELETE',
         });
-        mutate();
+        void mutate();
         setDeleteTarget(null);
         if (selectedFile?.id === file.id) setSelectedFile(null);
       } catch {
@@ -155,6 +155,7 @@ export default function FilesPage({
                     {formatBytesInline(file.sizeBytes)}
                   </td>
                   <td className="px-4 py-3 text-gray-400">
+                    {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty-string context renders as a dash */}
                     {file.context || '-'}
                   </td>
                   <td className="px-4 py-3 text-gray-500">
@@ -181,7 +182,7 @@ export default function FilesPage({
       {hasMore && (
         <div className="mt-6 text-center">
           <button
-            onClick={() => loadMore()}
+            onClick={() => void loadMore()}
             disabled={isLoadingMore}
             className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -195,7 +196,7 @@ export default function FilesPage({
         tenantId={tenantId}
         onClose={() => setSelectedFile(null)}
         onDelete={() => {
-          mutate();
+          void mutate();
           setSelectedFile(null);
         }}
       />
@@ -204,7 +205,7 @@ export default function FilesPage({
         open={uploadOpen}
         tenantId={tenantId}
         onClose={() => setUploadOpen(false)}
-        onUploaded={() => mutate()}
+        onUploaded={() => void mutate()}
       />
 
       <ConfirmModal
@@ -213,7 +214,9 @@ export default function FilesPage({
         message={`Are you sure you want to delete "${deleteTarget?.originalName}"?`}
         confirmLabel="Delete"
         variant="danger"
-        onConfirm={() => deleteTarget && handleDeleteFile(deleteTarget)}
+        onConfirm={() => {
+          if (deleteTarget) void handleDeleteFile(deleteTarget);
+        }}
         onCancel={() => setDeleteTarget(null)}
       />
     </div>
