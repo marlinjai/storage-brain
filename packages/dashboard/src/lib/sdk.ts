@@ -34,3 +34,37 @@ export async function getAdmin(): Promise<StorageBrainAdmin> {
     baseUrl: session.baseUrl,
   });
 }
+
+/**
+ * Resolve the browser-reachable base URL of the Storage Brain API for the
+ * current session, used to absolutize the API-relative presigned upload URL so
+ * the browser can PUT file bytes directly to the API origin.
+ *
+ * Resolution order:
+ * - `NEXT_PUBLIC_STORAGE_BRAIN_URL` (public override; set this when the
+ *   server-side `STORAGE_BRAIN_URL` is an internal-only hostname not reachable
+ *   from the browser).
+ * - auth-brain mode: server `STORAGE_BRAIN_URL`.
+ * - legacy mode: the base URL the user typed at `/login` (from the session).
+ *
+ * Returns '' when nothing is configured; callers then leave the presigned URL
+ * relative.
+ */
+export async function getStorageBrainBaseUrl(): Promise<string> {
+  const session = await getDashboardSession();
+
+  if (!session) {
+    throw new Error('Not authenticated');
+  }
+
+  const publicOverride = process.env.NEXT_PUBLIC_STORAGE_BRAIN_URL;
+  if (publicOverride) {
+    return publicOverride.replace(/\/$/, '');
+  }
+
+  if (session.mode === 'auth-brain') {
+    return (process.env.STORAGE_BRAIN_URL ?? '').replace(/\/$/, '');
+  }
+
+  return (session.baseUrl ?? '').replace(/\/$/, '');
+}

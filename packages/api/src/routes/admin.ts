@@ -15,6 +15,7 @@ import {
 import { generateApiKey, hashApiKey, getKeyPrefix } from '../utils/crypto';
 import { generateSignedToken, generatePermanentToken } from '../services/signed-url';
 import { resolvePublicBaseUrl, buildDownloadUrl } from '../utils/public-url';
+import { requestUpload } from '../lib/upload/request-upload';
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -460,6 +461,35 @@ adminRoutes.post('/tenants/:tenantId/workspaces', async (c) => {
     },
     201
   );
+});
+
+/**
+ * POST /api/v1/admin/tenants/:tenantId/upload/request
+ * Admin-scoped upload-request handshake. Lets the dashboard upload files into a
+ * tenant's bucket using the admin credential it already holds, without ever
+ * touching a tenant API key. Runs the SAME validation/quota/handshake logic as
+ * the tenant route via the shared `requestUpload` helper; the tenant is
+ * resolved here by path param instead of by API key.
+ */
+adminRoutes.post('/tenants/:tenantId/upload/request', async (c) => {
+  const db = c.get('db');
+  const tenantId = c.req.param('tenantId');
+
+  const tenant = await db.getTenantById(tenantId);
+  if (!tenant) {
+    throw ApiError.notFound('Tenant not found');
+  }
+
+  const body = await c.req.json();
+
+  const handshake = await requestUpload({
+    db,
+    tenant,
+    body,
+    urlSigningSecret: c.env.URL_SIGNING_SECRET,
+  });
+
+  return c.json(handshake);
 });
 
 /**

@@ -6,6 +6,19 @@ import { verifyUploadToken } from '../services/signed-url';
 
 export const internalUploadRoutes = new Hono<AppEnv>();
 
+// CORS note: browser-direct uploads from the dashboard PUT bytes straight to
+// this endpoint (cross-origin: dashboard origin -> API origin) with an
+// XMLHttpRequest, using only the HMAC token in the query string (no
+// Authorization header, no tenant key). The global CORS middleware in app.ts
+// (origin '*', allowMethods includes PUT/OPTIONS, allowHeaders includes
+// Content-Type) already permits that preflight + PUT for every origin,
+// including the dashboard. We deliberately do NOT add a second, route-scoped
+// cors() here: layering it over the global '*' would emit duplicate
+// Access-Control-Allow-Origin headers and browsers would then reject the
+// response. If the global policy is ever tightened away from '*', the
+// dashboard origin must be added to its allowlist for browser-direct upload to
+// keep working.
+
 /**
  * PUT /_internal/upload/:storedPath
  * Receives file data and uploads it to storage
