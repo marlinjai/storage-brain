@@ -53,8 +53,8 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
   async createTenant(input: CreateTenantInput): Promise<void> {
     const now = Date.now();
     await this.sql`
-      INSERT INTO tenants (id, name, api_key_hash, key_prefix, quota_bytes, used_bytes, allowed_file_types, created_at, updated_at)
-      VALUES (${input.id}, ${input.name}, ${input.apiKeyHash}, ${input.keyPrefix}, ${input.quotaBytes}, 0, ${JSON.stringify(input.allowedFileTypes)}, ${now}, ${now})
+      INSERT INTO tenants (id, name, api_key_hash, key_prefix, quota_bytes, used_bytes, allowed_file_types, auth_workspace_id, created_at, updated_at)
+      VALUES (${input.id}, ${input.name}, ${input.apiKeyHash}, ${input.keyPrefix}, ${input.quotaBytes}, 0, ${JSON.stringify(input.allowedFileTypes)}, ${input.authWorkspaceId ?? null}, ${now}, ${now})
     `;
   }
 
@@ -78,6 +78,12 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
 
   async getTenantById(id: string): Promise<Tenant | null> {
     const rows = await this.sql`SELECT * FROM tenants WHERE id = ${id}`;
+    const row = rows[0];
+    return row ? this.mapTenantRow(row) : null;
+  }
+
+  async getTenantByAuthWorkspaceId(authWorkspaceId: string): Promise<Tenant | null> {
+    const rows = await this.sql`SELECT * FROM tenants WHERE auth_workspace_id = ${authWorkspaceId}`;
     const row = rows[0];
     return row ? this.mapTenantRow(row) : null;
   }
@@ -148,6 +154,9 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     if (updates.quotaBytes !== undefined) sets.push(this.sql`quota_bytes = ${updates.quotaBytes}`);
     if (updates.allowedFileTypes !== undefined) {
       sets.push(this.sql`allowed_file_types = ${updates.allowedFileTypes ? JSON.stringify(updates.allowedFileTypes) : null}`);
+    }
+    if (updates.authWorkspaceId !== undefined) {
+      sets.push(this.sql`auth_workspace_id = ${updates.authWorkspaceId}`);
     }
 
     const setClause = sets.reduce((acc, s) => this.sql`${acc}, ${s}`);
@@ -546,6 +555,7 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
       allowedFileTypes: row.allowed_file_types
         ? (JSON.parse(row.allowed_file_types as string) as AllowedMimeType[])
         : null,
+      authWorkspaceId: (row.auth_workspace_id as string) ?? null,
       createdAt: Number(row.created_at),
       updatedAt: Number(row.updated_at),
     };

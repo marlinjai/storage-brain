@@ -23,6 +23,7 @@ export function CreateTenantModal({ open, onClose, onCreated }: CreateTenantModa
   const [name, setName] = useState('');
   const [quotaMB, setQuotaMB] = useState(500);
   const [allowedTypes, setAllowedTypes] = useState<string[]>([]);
+  const [authWorkspaceId, setAuthWorkspaceId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [createdKey, setCreatedKey] = useState<string | null>(null);
@@ -49,6 +50,7 @@ export function CreateTenantModal({ open, onClose, onCreated }: CreateTenantModa
           name,
           quotaBytes: quotaMB * 1024 * 1024,
           allowedFileTypes: allowedTypes.length > 0 ? allowedTypes : undefined,
+          authWorkspaceId: authWorkspaceId.trim() || undefined,
         }),
       });
 
@@ -80,6 +82,7 @@ export function CreateTenantModal({ open, onClose, onCreated }: CreateTenantModa
     setName('');
     setQuotaMB(500);
     setAllowedTypes([]);
+    setAuthWorkspaceId('');
     setError('');
     setCreatedKey(null);
     setCopied(false);
@@ -147,6 +150,19 @@ export function CreateTenantModal({ open, onClose, onCreated }: CreateTenantModa
                   onChange={(e) => setQuotaMB(Number(e.target.value))}
                   min={1}
                   className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                  Auth Workspace ID (optional)
+                </label>
+                <input
+                  type="text"
+                  value={authWorkspaceId}
+                  onChange={(e) => setAuthWorkspaceId(e.target.value)}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="auth-brain workspace id"
                 />
               </div>
 

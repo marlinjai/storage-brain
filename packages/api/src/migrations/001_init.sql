@@ -27,7 +27,18 @@ END $$;
 -- Widen key_prefix to fit 12-char prefixes (was varchar(10))
 ALTER TABLE tenants ALTER COLUMN key_prefix TYPE VARCHAR(16);
 
+-- Bind a tenant to an auth-brain workspace (nullable, idempotent for existing deployments)
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'tenants' AND column_name = 'auth_workspace_id'
+  ) THEN
+    ALTER TABLE tenants ADD COLUMN auth_workspace_id TEXT;
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_tenants_api_key_hash ON tenants(api_key_hash);
+CREATE INDEX IF NOT EXISTS idx_tenants_auth_workspace ON tenants(auth_workspace_id);
 
 -- Workspaces
 CREATE TABLE IF NOT EXISTS workspaces (

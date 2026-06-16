@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@google/model-viewer": "^4.2.0",
+    "@marlinjai/auth-brain-sdk": "^1.0.0",
     "@marlinjai/storage-brain-sdk": "workspace:*",
     "iron-session": "^8.0.4",
     "next": "^15.3.2",

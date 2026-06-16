@@ -15,6 +15,8 @@ const mockTenant: Tenant = {
   id: TENANT_ID,
   name: 'test-tenant',
   apiKeyHash: 'hashed',
+  keyPrefix: 'sk_live_test',
+  authWorkspaceId: null,
   quotaBytes: 500 * 1024 * 1024,
   usedBytes: 1000,
   allowedFileTypes: null,
@@ -69,6 +71,13 @@ function createMockStorage(): StorageAdapter {
   return { put: vi.fn(), get: vi.fn(), delete: vi.fn(), exists: vi.fn(), head: vi.fn() };
 }
 
+interface TestResponseBody {
+  fileId?: string;
+  presignedUrl?: string;
+  expiresAt?: string;
+  uploadMetadata?: { maxSizeBytes?: number };
+}
+
 describe('upload routes', () => {
   let db: ReturnType<typeof createMockDb>;
   let app: ReturnType<typeof createApp>;
@@ -99,11 +108,11 @@ describe('upload routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as TestResponseBody;
       expect(body.fileId).toBeDefined();
       expect(body.presignedUrl).toContain('/_internal/upload/');
       expect(body.expiresAt).toBeDefined();
-      expect(body.uploadMetadata.maxSizeBytes).toBeDefined();
+      expect(body.uploadMetadata?.maxSizeBytes).toBeDefined();
     });
 
     it('creates file record and upload session', async () => {

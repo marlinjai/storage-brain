@@ -73,6 +73,20 @@ function createMockStorage(): StorageAdapter {
   return { put: vi.fn(), get: vi.fn(), delete: vi.fn(), exists: vi.fn(), head: vi.fn() };
 }
 
+interface TestResponseBody {
+  success?: boolean;
+  id?: string;
+  name?: string;
+  tenantId?: string;
+  apiKey?: string;
+  allowedFileTypes?: string[];
+  quotaBytes?: number;
+  quota?: { quotaBytes?: number };
+  nextCursor?: string | null;
+  total?: number;
+  tenants?: Array<Record<string, unknown>>;
+}
+
 describe('admin routes', () => {
   let db: ReturnType<typeof createMockDb>;
   let app: ReturnType<typeof createApp>;
@@ -122,7 +136,7 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(201);
-      const body = await res.json();
+      const body = (await res.json()) as TestResponseBody;
       expect(body.name).toBe('New Tenant');
       expect(body.apiKey).toBeDefined();
       expect(body.apiKey).toMatch(/^sk_(live|test)_/);
@@ -160,7 +174,7 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(201);
-      const body = await res.json();
+      const body = (await res.json()) as TestResponseBody;
       expect(body.quotaBytes).toBe(1024 * 1024);
       expect(body.allowedFileTypes).toEqual(['image/png']);
     });
@@ -174,7 +188,7 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as TestResponseBody;
       expect(body.apiKey).toBeDefined();
       expect(body.tenantId).toBe('tenant-123');
       expect(db.updateTenantApiKeyHash).toHaveBeenCalledTimes(1);
@@ -206,10 +220,10 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as TestResponseBody;
       expect(body.tenants).toHaveLength(1);
-      expect(body.tenants[0].id).toBe('tenant-123');
-      expect(body.tenants[0].name).toBe('Test Tenant');
+      expect(body.tenants?.[0]?.id).toBe('tenant-123');
+      expect(body.tenants?.[0]?.name).toBe('Test Tenant');
       expect(body.total).toBe(1);
       expect(body.nextCursor).toBeNull();
     });
@@ -236,11 +250,11 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as TestResponseBody;
       expect(body.id).toBe('tenant-123');
       expect(body.name).toBe('Test Tenant');
       expect(body.quota).toBeDefined();
-      expect(body.quota.quotaBytes).toBe(500 * 1024 * 1024);
+      expect(body.quota?.quotaBytes).toBe(500 * 1024 * 1024);
     });
 
     it('returns 404 for unknown tenant', async () => {
@@ -270,7 +284,7 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as TestResponseBody;
       expect(body.name).toBe('Updated Name');
       expect(db.updateTenant).toHaveBeenCalledWith('tenant-123', { name: 'Updated Name' });
     });
@@ -289,7 +303,7 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as TestResponseBody;
       expect(body.quotaBytes).toBe(1024);
     });
 
@@ -334,7 +348,7 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as TestResponseBody;
       expect(body.success).toBe(true);
       expect(db.deleteTenant).toHaveBeenCalledWith('tenant-123');
     });

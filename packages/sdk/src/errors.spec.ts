@@ -6,7 +6,6 @@ import {
   InvalidFileTypeError,
   FileTooLargeError,
   FileNotFoundError,
-  NetworkError,
   UploadError,
   parseApiError,
 } from './errors';

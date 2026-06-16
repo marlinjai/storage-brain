@@ -44,7 +44,10 @@ describe('sendWebhook', () => {
     expect(result).toBe(true);
     expect(mockFetch).toHaveBeenCalledTimes(1);
 
-    const [url, options] = mockFetch.mock.calls[0];
+    const [url, options] = mockFetch.mock.calls[0] as [
+      string,
+      { method: string; body: string },
+    ];
     expect(url).toBe('https://example.com/webhook');
     expect(options.method).toBe('POST');
 
@@ -127,7 +130,9 @@ describe('sendWebhook', () => {
       event: 'file.uploaded',
     });
 
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    const body = JSON.parse(
+      (mockFetch.mock.calls[0] as [string, { body: string }])[1].body
+    );
     expect(body.workspaceId).toBe('ws-1');
   });
 });

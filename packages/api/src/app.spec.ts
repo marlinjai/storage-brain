@@ -51,6 +51,13 @@ function createMockStorage(): StorageAdapter {
   return { put: vi.fn(), get: vi.fn(), delete: vi.fn(), exists: vi.fn(), head: vi.fn() };
 }
 
+interface TestResponseBody {
+  status?: string;
+  timestamp?: string;
+  environment?: string;
+  error?: { code?: string; message?: string };
+}
+
 describe('app', () => {
   const app = createApp({
     db: createMockDb(),
@@ -62,7 +69,7 @@ describe('app', () => {
       const res = await app.request('/health', {}, ENV);
       expect(res.status).toBe(200);
 
-      const body = await res.json();
+      const body = (await res.json()) as TestResponseBody;
       expect(body.status).toBe('ok');
       expect(body.timestamp).toBeDefined();
       expect(body.environment).toBe('development');
@@ -74,9 +81,9 @@ describe('app', () => {
       const res = await app.request('/unknown/path', {}, ENV);
       expect(res.status).toBe(404);
 
-      const body = await res.json();
-      expect(body.error.code).toBe('NOT_FOUND');
-      expect(body.error.message).toContain('GET');
+      const body = (await res.json()) as TestResponseBody;
+      expect(body.error?.code).toBe('NOT_FOUND');
+      expect(body.error?.message).toContain('GET');
     });
   });
 });

@@ -63,6 +63,7 @@ export const createTenantSchema = z.object({
   name: z.string().min(1).max(100),
   quotaBytes: z.number().int().positive().optional(),
   allowedFileTypes: z.array(fileTypeSchema).optional(), // null/undefined = accept any type
+  authWorkspaceId: z.string().min(1).max(255).optional(), // optional auth-brain workspace binding
 });
 
 export type CreateTenantSchema = z.infer<typeof createTenantSchema>;
@@ -74,6 +75,7 @@ export const updateTenantSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   quotaBytes: z.number().int().positive().optional(),
   allowedFileTypes: z.array(fileTypeSchema).nullable().optional(),
+  authWorkspaceId: z.string().min(1).max(255).nullable().optional(),
 });
 
 export type UpdateTenantSchema = z.infer<typeof updateTenantSchema>;
