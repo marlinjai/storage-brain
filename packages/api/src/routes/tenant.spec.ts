@@ -71,6 +71,16 @@ function createMockStorage(): StorageAdapter {
   return { put: vi.fn(), get: vi.fn(), delete: vi.fn(), exists: vi.fn(), head: vi.fn() };
 }
 
+interface TestResponseBody {
+  id?: string;
+  name?: string;
+  createdAt?: string;
+  allowedFileTypes?: string[];
+  quotaBytes?: number;
+  usedBytes?: number;
+  usagePercent?: number;
+}
+
 describe('tenant routes', () => {
   let db: ReturnType<typeof createMockDb>;
   let app: ReturnType<typeof createApp>;
@@ -90,7 +100,7 @@ describe('tenant routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as TestResponseBody;
       expect(body.quotaBytes).toBe(500 * 1024 * 1024);
       expect(body.usedBytes).toBe(100 * 1024 * 1024);
       expect(body.usagePercent).toBe(20);
@@ -109,7 +119,7 @@ describe('tenant routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as TestResponseBody;
       expect(body.id).toBe(TENANT_ID);
       expect(body.name).toBe('test-tenant');
       expect(body.allowedFileTypes).toEqual(['image/png', 'application/pdf']);

@@ -96,6 +96,16 @@ function createMockStorage(): StorageAdapter {
   };
 }
 
+interface TestResponseBody {
+  success?: boolean;
+  fileId?: string;
+  id?: string;
+  originalName?: string;
+  url?: string;
+  total?: number;
+  files?: Array<Record<string, unknown>>;
+}
+
 describe('file routes', () => {
   let db: ReturnType<typeof createMockDb>;
   let storage: ReturnType<typeof createMockStorage>;
@@ -117,9 +127,9 @@ describe('file routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body: TestResponseBody = await res.json();
       expect(body.files).toHaveLength(1);
-      expect(body.files[0].id).toBe(FILE_ID);
+      expect(body.files?.[0]?.id).toBe(FILE_ID);
       expect(body.total).toBe(1);
     });
 
@@ -152,7 +162,7 @@ describe('file routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body: TestResponseBody = await res.json();
       expect(body.id).toBe(FILE_ID);
       expect(body.originalName).toBe('photo.png');
     });
@@ -405,7 +415,7 @@ describe('file routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body: TestResponseBody = await res.json();
       expect(body.success).toBe(true);
       expect(db.softDeleteFile).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
     });

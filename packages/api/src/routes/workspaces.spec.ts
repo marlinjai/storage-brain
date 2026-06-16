@@ -79,6 +79,11 @@ function createMockStorage(): StorageAdapter {
   return { put: vi.fn(), get: vi.fn(), delete: vi.fn(), exists: vi.fn(), head: vi.fn() };
 }
 
+interface TestResponseBody {
+  id?: string;
+  workspaces?: Array<Record<string, unknown>>;
+}
+
 describe('workspace routes', () => {
   let db: ReturnType<typeof createMockDb>;
   let app: ReturnType<typeof createApp>;
@@ -98,9 +103,9 @@ describe('workspace routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as TestResponseBody;
       expect(body.workspaces).toHaveLength(1);
-      expect(body.workspaces[0].id).toBe(WORKSPACE_ID);
+      expect(body.workspaces?.[0]?.id).toBe(WORKSPACE_ID);
     });
   });
 
@@ -140,7 +145,7 @@ describe('workspace routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as TestResponseBody;
       expect(body.id).toBe(WORKSPACE_ID);
     });
 
