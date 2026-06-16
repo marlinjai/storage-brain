@@ -169,6 +169,44 @@ describe('StorageBrainAdmin SDK', () => {
     });
   });
 
+  describe('requestTenantUpload', () => {
+    const handshake = {
+      fileId: 'file-1',
+      presignedUrl: '/_internal/upload/tenants/t1/files/file-1/a.png?token=x&expires=1',
+      expiresAt: '2026-06-16T00:00:00.000Z',
+      uploadMetadata: { maxSizeBytes: 100 * 1024 * 1024, allowedTypes: null },
+    };
+
+    it('POSTs to the admin upload-request endpoint and parses the handshake', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse(handshake));
+
+      const input = { fileName: 'a.png', fileType: 'image/png', fileSizeBytes: 1024 };
+      const result = await admin.requestTenantUpload('t1', input);
+
+      expect(result.fileId).toBe('file-1');
+      expect(result.presignedUrl).toContain('/_internal/upload/');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/admin/tenants/t1/upload/request',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(input),
+        }),
+      );
+      const headers = mockFetch.mock.calls[0]![1].headers;
+      expect(headers.Authorization).toBe('Bearer admin-secret');
+    });
+
+    it('propagates API errors (e.g. 400 invalid file type)', async () => {
+      mockFetch.mockResolvedValueOnce(
+        errorResponse(400, 'INVALID_FILE_TYPE', "File type 'image/png' is not allowed"),
+      );
+
+      await expect(
+        admin.requestTenantUpload('t1', { fileName: 'a.png', fileType: 'image/png' }),
+      ).rejects.toThrow();
+    });
+  });
+
   describe('error handling', () => {
     it('throws StorageBrainError on 401', async () => {
       mockFetch.mockResolvedValueOnce(errorResponse(401, 'UNAUTHORIZED', 'Invalid key'));

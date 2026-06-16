@@ -392,4 +392,94 @@ describe('admin routes', () => {
       expect(res.status).toBe(404);
     });
   });
+
+  describe('POST /api/v1/admin/tenants/:tenantId/upload/request', () => {
+    const WS_ID = '770e8400-e29b-41d4-a716-446655440000';
+    const validBody = { fileType: 'image/png', fileName: 'test.png', fileSizeBytes: 1024 };
+
+    function uploadDb(overrides: Partial<ReturnType<typeof createMockDb>> = {}) {
+      db.getTenantById.mockResolvedValue(mockTenant);
+      db.checkQuota.mockResolvedValue({
+        hasCapacity: true,
+        quotaBytes: 500 * 1024 * 1024,
+        usedBytes: 0,
+        availableBytes: 500 * 1024 * 1024,
+      });
+      db.createUploadSession.mockResolvedValue('session-1');
+      Object.assign(db, overrides);
+    }
+
+    function post(body: unknown, tenantId = 'tenant-123', auth = `Bearer ${ADMIN_KEY}`) {
+      return app.request(`/api/v1/admin/tenants/${tenantId}/upload/request`, {
+        method: 'POST',
+        headers: { Authorization: auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }, ENV);
+    }
+
+    it('returns a handshake on success', async () => {
+      uploadDb();
+      const res = await post(validBody);
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        fileId?: string;
+        presignedUrl?: string;
+        expiresAt?: string;
+        uploadMetadata?: { maxSizeBytes?: number };
+      };
+      expect(body.fileId).toBeDefined();
+      expect(body.presignedUrl).toContain('/_internal/upload/');
+      expect(body.expiresAt).toBeDefined();
+      expect(body.uploadMetadata?.maxSizeBytes).toBeDefined();
+      expect(db.createFile).toHaveBeenCalledTimes(1);
+      expect(db.createUploadSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('requires the admin key (401 without it)', async () => {
+      const res = await post(validBody, 'tenant-123', 'Bearer wrong-key');
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 404 when the tenant does not exist', async () => {
+      db.getTenantById.mockResolvedValue(null);
+      const res = await post(validBody);
+      expect(res.status).toBe(404);
+    });
+
+    it('rejects a disallowed MIME type with 400', async () => {
+      uploadDb();
+      db.getTenantById.mockResolvedValue({ ...mockTenant, allowedFileTypes: ['application/pdf'] });
+      const res = await post(validBody);
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects a file over the size limit with 400', async () => {
+      uploadDb();
+      const res = await post({ ...validBody, fileSizeBytes: 200 * 1024 * 1024 });
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects when the tenant quota is exceeded with 403', async () => {
+      uploadDb();
+      db.checkQuota.mockResolvedValue({ hasCapacity: false, quotaBytes: 100, usedBytes: 100, availableBytes: 0 });
+      const res = await post(validBody);
+      expect(res.status).toBe(403);
+    });
+
+    it('returns 404 when the workspace is missing', async () => {
+      uploadDb();
+      db.getWorkspaceById.mockResolvedValue(null);
+      const res = await post({ ...validBody, workspaceId: WS_ID });
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 403 when the workspace quota is exceeded', async () => {
+      uploadDb();
+      db.getWorkspaceById.mockResolvedValue({ id: WS_ID, tenantId: 'tenant-123' });
+      db.checkWorkspaceQuota.mockResolvedValue({ hasCapacity: false, quotaBytes: 10, usedBytes: 10 });
+      const res = await post({ ...validBody, workspaceId: WS_ID });
+      expect(res.status).toBe(403);
+    });
+  });
 });

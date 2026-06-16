@@ -6,6 +6,7 @@ import { FileGrid } from '@/components/files/FileGrid';
 import { FileFilters } from '@/components/files/FileFilters';
 import { FileDetailPanel } from '@/components/files/FileDetailPanel';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { UploadDialog } from '@/components/files/UploadDialog';
 
 
 interface FileFiltersState {
@@ -38,6 +39,7 @@ export default function FilesPage({
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<FileItem | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   const { files, isLoading, isLoadingMore, error, hasMore, loadMore, setSize, mutate } =
     useFiles<FileItem>(tenantId, filters);
@@ -69,6 +71,12 @@ export default function FilesPage({
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-100">Files</h1>
         <div className="flex gap-2">
+          <button
+            onClick={() => setUploadOpen(true)}
+            className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Upload
+          </button>
           <button
             onClick={() => setViewMode('grid')}
             className={`rounded-lg px-3 py-1.5 text-sm ${
@@ -190,6 +198,13 @@ export default function FilesPage({
           mutate();
           setSelectedFile(null);
         }}
+      />
+
+      <UploadDialog
+        open={uploadOpen}
+        tenantId={tenantId}
+        onClose={() => setUploadOpen(false)}
+        onUploaded={() => mutate()}
       />
 
       <ConfirmModal

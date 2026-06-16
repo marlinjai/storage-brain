@@ -142,6 +142,26 @@ export interface QuotaInfo {
   usagePercent: number;
 }
 
+export interface RequestTenantUploadInput {
+  fileName: string;
+  fileType: string;
+  fileSizeBytes?: number;
+  context?: string;
+  tags?: Record<string, string>;
+  workspaceId?: string;
+  webhookUrl?: string;
+}
+
+export interface AdminUploadHandshake {
+  fileId: string;
+  presignedUrl: string;
+  expiresAt: string;
+  uploadMetadata: {
+    maxSizeBytes: number;
+    allowedTypes: AllowedMimeType[] | null;
+  };
+}
+
 // ============================================================================
 // Admin Client
 // ============================================================================
@@ -270,6 +290,24 @@ export class StorageBrainAdmin {
     return this.request<QuotaInfo>(
       'GET',
       `/api/v1/admin/tenants/${tenantId}/quota`
+    );
+  }
+
+  /**
+   * Request an upload handshake for a tenant using the admin credential.
+   *
+   * The dashboard uses this so it can upload files into a tenant's bucket
+   * without ever holding a tenant API key. The returned handshake carries the
+   * presigned URL the caller then PUTs the file bytes to.
+   */
+  async requestTenantUpload(
+    tenantId: string,
+    input: RequestTenantUploadInput
+  ): Promise<AdminUploadHandshake> {
+    return this.request<AdminUploadHandshake>(
+      'POST',
+      `/api/v1/admin/tenants/${tenantId}/upload/request`,
+      input
     );
   }
 
