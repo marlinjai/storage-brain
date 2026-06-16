@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import type { UpdateTenantInput } from '@marlinjai/storage-brain-sdk/admin';
 import { getAdmin } from '@/lib/sdk';
 
 export async function GET(
@@ -25,7 +26,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const admin = await getAdmin();
-    const body = await request.json();
+    const body = (await request.json()) as UpdateTenantInput;
     const result = await admin.updateTenant(id, body);
     return NextResponse.json(result);
   } catch (err) {

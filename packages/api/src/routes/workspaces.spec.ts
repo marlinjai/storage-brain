@@ -103,7 +103,7 @@ describe('workspace routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = (await res.json()) as TestResponseBody;
+      const body = await res.json<TestResponseBody>();
       expect(body.workspaces).toHaveLength(1);
       expect(body.workspaces?.[0]?.id).toBe(WORKSPACE_ID);
     });
@@ -145,7 +145,7 @@ describe('workspace routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = (await res.json()) as TestResponseBody;
+      const body = await res.json<TestResponseBody>();
       expect(body.id).toBe(WORKSPACE_ID);
     });
 

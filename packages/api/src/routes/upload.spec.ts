@@ -108,7 +108,7 @@ describe('upload routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = (await res.json()) as TestResponseBody;
+      const body = await res.json<TestResponseBody>();
       expect(body.fileId).toBeDefined();
       expect(body.presignedUrl).toContain('/_internal/upload/');
       expect(body.expiresAt).toBeDefined();

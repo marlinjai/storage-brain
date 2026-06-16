@@ -19,7 +19,7 @@ uploadRoutes.use('*', authMiddleware);
 uploadRoutes.post('/request', async (c) => {
   const tenant = c.get('tenant');
   const db = c.get('db');
-  const body = await c.req.json();
+  const body: unknown = await c.req.json();
 
   const handshake = await requestUpload({
     db,

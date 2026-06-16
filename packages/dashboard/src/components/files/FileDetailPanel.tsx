@@ -189,7 +189,7 @@ export function FileDetailPanel({
         message={`Are you sure you want to delete "${file.originalName}"? This cannot be undone.`}
         confirmLabel="Delete"
         variant="danger"
-        onConfirm={handleDelete}
+        onConfirm={() => void handleDelete()}
         onCancel={() => setConfirmDelete(false)}
       />
     </>

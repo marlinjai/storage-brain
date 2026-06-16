@@ -3,9 +3,11 @@
 import { use, useState, useEffect, type FormEvent } from 'react';
 import useSWR from 'swr';
 import { useRouter } from 'next/navigation';
+import type { AdminTenantDetail } from '@marlinjai/storage-brain-sdk/admin';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const fetcher = <T,>(url: string): Promise<T> =>
+  fetch(url).then((r) => r.json() as Promise<T>);
 
 const FILE_TYPE_OPTIONS = [
   'image/jpeg',
@@ -25,10 +27,11 @@ export default function TenantSettingsPage({
 }) {
   const { tenantId } = use(params);
   const router = useRouter();
-  const { data: tenant, isLoading, mutate } = useSWR(
-    `/api/tenants/${tenantId}`,
-    fetcher
-  );
+  const {
+    data: tenant,
+    isLoading,
+    mutate,
+  } = useSWR<AdminTenantDetail, Error>(`/api/tenants/${tenantId}`, fetcher);
 
   const [name, setName] = useState('');
   const [quotaMB, setQuotaMB] = useState(500);
@@ -45,9 +48,9 @@ export default function TenantSettingsPage({
 
   useEffect(() => {
     if (tenant) {
-      setName(tenant.name || '');
-      setQuotaMB(Math.round((tenant.quotaBytes || 0) / (1024 * 1024)));
-      setAllowedTypes(tenant.allowedFileTypes || []);
+      setName(tenant.name);
+      setQuotaMB(Math.round(tenant.quotaBytes / (1024 * 1024)));
+      setAllowedTypes(tenant.allowedFileTypes ?? []);
     }
   }, [tenant]);
 
@@ -74,13 +77,14 @@ export default function TenantSettingsPage({
       });
 
       if (!res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as { error?: string };
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty-string error message falls through to generic copy
         setSaveMsg(data.error || 'Failed to save');
         return;
       }
 
       setSaveMsg('Settings saved');
-      mutate();
+      void mutate();
     } catch {
       setSaveMsg('Network error');
     } finally {
@@ -95,9 +99,9 @@ export default function TenantSettingsPage({
         method: 'POST',
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as { apiKey: string };
         setNewKey(data.apiKey);
-        mutate(); // Refresh tenant data to pick up new keyPrefix
+        void mutate(); // Refresh tenant data to pick up new keyPrefix
       }
     } catch {
       // silent
@@ -131,7 +135,9 @@ export default function TenantSettingsPage({
 
       {/* Settings form */}
       <form
-        onSubmit={handleSave}
+        onSubmit={(e) => {
+          void handleSave(e);
+        }}
         className="mb-10 max-w-lg space-y-4 rounded-xl border border-gray-800 bg-gray-900 p-6"
       >
         <div>
@@ -227,7 +233,7 @@ export default function TenantSettingsPage({
             </code>
             <button
               onClick={() => {
-                navigator.clipboard.writeText(newKey);
+                void navigator.clipboard.writeText(newKey);
                 setKeyCopied(true);
                 setTimeout(() => setKeyCopied(false), 2000);
               }}
@@ -239,7 +245,7 @@ export default function TenantSettingsPage({
         )}
 
         <button
-          onClick={handleRegenerateKey}
+          onClick={() => void handleRegenerateKey()}
           disabled={regenerating}
           className="rounded-lg border border-yellow-700 px-4 py-2 text-sm text-yellow-400 hover:bg-yellow-900/20 disabled:opacity-50"
         >
@@ -269,7 +275,7 @@ export default function TenantSettingsPage({
         message={`Are you sure you want to delete "${tenant?.name}"? All files and workspaces will be permanently removed.`}
         confirmLabel={deleting ? 'Deleting...' : 'Delete Tenant'}
         variant="danger"
-        onConfirm={handleDelete}
+        onConfirm={() => void handleDelete()}
         onCancel={() => setShowDelete(false)}
       />
     </div>

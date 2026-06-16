@@ -1,0 +1,44 @@
+name: Verify
+
+# Quality gates: build + typecheck + lint + test on every PR and on pushes to
+# main. These were never enforced in CI before (only deploy workflows existed),
+# so eslint and tsc silently rotted. This job keeps them honest.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm before setup-node so the node cache: pnpm step can find it.
+      # Version is read from the package.json "packageManager" field (pnpm@9.15.0),
+      # matching the corepack-pinned version used in the deploy Dockerfiles.
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Build runs first so packages/shared and packages/sdk emit their dist/.d.ts;
+      # without them the type-aware eslint and tsc see cross-package imports as `any`.
+      - name: Build
+        run: pnpm run build
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Test
+        run: pnpm test

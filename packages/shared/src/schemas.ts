@@ -7,7 +7,7 @@ export { uuidSchema, apiKeySchema, cursorSchema, workspaceSlugSchema } from '@ma
 /**
  * File type validation — accepts any valid MIME type string (e.g. "image/png", "audio/wav")
  */
-export const fileTypeSchema = z.string().regex(/^[a-z]+\/[a-z0-9.+\-]+$/i, 'Invalid MIME type format');
+export const fileTypeSchema = z.string().regex(/^[a-z]+\/[a-z0-9.+-]+$/i, 'Invalid MIME type format');
 
 /**
  * Tags validation (string key-value pairs)
@@ -23,6 +23,7 @@ export const requestUploadSchema = z.object({
     .string()
     .min(1, 'File name is required')
     .max(255, 'File name too long')
+    // eslint-disable-next-line no-control-regex -- intentionally reject ASCII control chars (\x00-\x1f) in filenames
     .regex(/^[^<>:"/\\|?*\x00-\x1f]+$/, 'File name contains invalid characters'),
   fileSizeBytes: z
     .number()

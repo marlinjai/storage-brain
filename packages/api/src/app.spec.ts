@@ -69,7 +69,7 @@ describe('app', () => {
       const res = await app.request('/health', {}, ENV);
       expect(res.status).toBe(200);
 
-      const body = (await res.json()) as TestResponseBody;
+      const body = await res.json<TestResponseBody>();
       expect(body.status).toBe('ok');
       expect(body.timestamp).toBeDefined();
       expect(body.environment).toBe('development');
@@ -81,7 +81,7 @@ describe('app', () => {
       const res = await app.request('/unknown/path', {}, ENV);
       expect(res.status).toBe(404);
 
-      const body = (await res.json()) as TestResponseBody;
+      const body = await res.json<TestResponseBody>();
       expect(body.error?.code).toBe('NOT_FOUND');
       expect(body.error?.message).toContain('GET');
     });

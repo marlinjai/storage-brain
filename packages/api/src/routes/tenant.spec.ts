@@ -100,7 +100,7 @@ describe('tenant routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = (await res.json()) as TestResponseBody;
+      const body = await res.json<TestResponseBody>();
       expect(body.quotaBytes).toBe(500 * 1024 * 1024);
       expect(body.usedBytes).toBe(100 * 1024 * 1024);
       expect(body.usagePercent).toBe(20);
@@ -119,7 +119,7 @@ describe('tenant routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
-      const body = (await res.json()) as TestResponseBody;
+      const body = await res.json<TestResponseBody>();
       expect(body.id).toBe(TENANT_ID);
       expect(body.name).toBe('test-tenant');
       expect(body.allowedFileTypes).toEqual(['image/png', 'application/pdf']);

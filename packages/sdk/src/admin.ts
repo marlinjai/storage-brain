@@ -10,6 +10,9 @@ const DEFAULT_BASE_URL = 'https://api.storage-brain.lumitra.co';
 const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_MAX_RETRIES = 3;
 
+/** Shape of an API error envelope returned on non-2xx responses. */
+type ApiErrorBody = { error?: { code?: string; message?: string; details?: Record<string, unknown> } };
+
 // ============================================================================
 // Admin Types
 // ============================================================================
@@ -335,11 +338,8 @@ export class StorageBrainAdmin {
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-          const errorBody = await response.json().catch(() => ({}));
-          throw parseApiError(
-            response.status,
-            errorBody as { error?: { code?: string; message?: string; details?: Record<string, unknown> } }
-          );
+          const errorBody = (await response.json().catch(() => ({}))) as ApiErrorBody;
+          throw parseApiError(response.status, errorBody);
         }
 
         return (await response.json()) as T;

@@ -95,7 +95,7 @@ export class S3StorageAdapter implements StorageAdapter {
       if (!result.Body) return null;
 
       return {
-        body: result.Body.transformToWebStream() as ReadableStream,
+        body: result.Body.transformToWebStream(),
         contentType: result.ContentType ?? 'application/octet-stream',
         size: result.ContentLength ?? 0,
         etag: result.ETag?.replace(/"/g, ''),

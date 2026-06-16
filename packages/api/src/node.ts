@@ -12,7 +12,7 @@ function required(name: string): string {
   return value;
 }
 
-async function main() {
+function main(): void {
   const port = parseInt(process.env.PORT ?? '3000', 10);
 
   // Storage adapter — S3 / MinIO / DO Spaces
@@ -69,17 +69,19 @@ async function main() {
     });
 
   // Graceful shutdown
-  const shutdown = async () => {
+  const shutdown = async (): Promise<void> => {
     console.log('\nShutting down…');
     await db.close();
     process.exit(0);
   };
 
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', () => void shutdown());
+  process.on('SIGINT', () => void shutdown());
 }
 
-main().catch((err) => {
+try {
+  main();
+} catch (err) {
   console.error('Fatal:', err);
   process.exit(1);
-});
+}

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import type { CreateWorkspaceInput } from '@marlinjai/storage-brain-sdk/admin';
 import { getAdmin } from '@/lib/sdk';
 
 export async function GET(
@@ -25,7 +26,7 @@ export async function POST(
   try {
     const { id } = await params;
     const admin = await getAdmin();
-    const body = await request.json();
+    const body = (await request.json()) as Partial<CreateWorkspaceInput>;
 
     // Auto-generate slug from name if not provided
     if (!body.slug && body.name) {
@@ -35,7 +36,10 @@ export async function POST(
         .replace(/^-|-$/g, '');
     }
 
-    const workspace = await admin.createTenantWorkspace(id, body);
+    const workspace = await admin.createTenantWorkspace(
+      id,
+      body as CreateWorkspaceInput
+    );
     return NextResponse.json(workspace, { status: 201 });
   } catch (err) {
     if (err instanceof Error && err.message === 'Not authenticated') {

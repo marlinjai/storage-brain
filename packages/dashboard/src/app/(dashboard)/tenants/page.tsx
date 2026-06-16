@@ -39,8 +39,7 @@ export default function TenantsPage() {
 
       {tenants && tenants.length > 0 && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-          {tenants.map((tenant: any) => (
+          {tenants.map((tenant) => (
             <TenantCard key={tenant.id} tenant={tenant} />
           ))}
         </div>
@@ -49,7 +48,7 @@ export default function TenantsPage() {
       <CreateTenantModal
         open={showCreate}
         onClose={() => setShowCreate(false)}
-        onCreated={() => mutate()}
+        onCreated={() => void mutate()}
       />
     </div>
   );

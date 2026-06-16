@@ -602,7 +602,7 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       .bind(workspaceId)
       .first<{ quota_bytes: number | null; used_bytes: number }>();
 
-    if (!result || result.quota_bytes === null) {
+    if (result?.quota_bytes == null) {
       return null;
     }
 
