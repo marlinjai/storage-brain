@@ -99,13 +99,13 @@ export function createStorageAuthBrainClient(config: ClientConfig): StorageAuthB
     async verifyApiKey(apiKey: string): Promise<ApiKeyVerifyResponse | null> {
       let res: Response;
       try {
-        res = await fetchImpl(`${config.baseUrl}/api/api-keys/verify`, {
+        // Real auth-brain contract (PR #35): POST /api/verify/api-key with the
+        // key in the BODY as { api_key }, no Authorization header. The endpoint
+        // is fail-closed (401 on bad/expired/revoked/unknown).
+        res = await fetchImpl(`${config.baseUrl}/api/verify/api-key`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({}),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: apiKey }),
         });
       } catch (err) {
         throw new AuthBrainNetworkError(err);
