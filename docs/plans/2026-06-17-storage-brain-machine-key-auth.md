@@ -1,6 +1,6 @@
 ---
 type: plan
-status: draft
+status: done
 title: "Spec: Storage Brain machine auth via auth-brain service-account keys (slice 2B)"
 summary: "The Storage Brain Worker API accepts auth-brain-issued service-account keys (verifyApiKey -> can) for machine callers, alongside the existing legacy tenant api_key_hash path (fallback). First cut supports workspace-scoped keys only, mapped 1:1 to an SB tenant via auth_workspace_id; broader (tenant/tenant_group) scopes are explicitly deferred."
 date: 2026-06-17
