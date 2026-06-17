@@ -53,6 +53,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.0
         version: 1.19.9(hono@4.12.0)
+      '@marlinjai/auth-brain-sdk':
+        specifier: ^1.1.0
+        version: 1.1.0(hono@4.12.0)(zod@3.25.76)
       '@marlinjai/brain-core':
         specifier: ^0.2.1
         version: 0.2.1(hono@4.12.0)(zod@3.25.76)

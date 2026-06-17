@@ -16,6 +16,14 @@ bucket_name = "storage-brain-files"
 # Environment variables (non-secret)
 [vars]
 ENVIRONMENT = "production"
+# auth-brain machine-auth (slice 2B). All optional: unset AUTH_BRAIN_URL ->
+# the auth-brain branch is skipped and only legacy tenant keys work. Set the
+# non-secret URLs/ids here per environment; provide OPENFGA_API_TOKEN via
+# `wrangler secret put` / Infisical (never commit it).
+# AUTH_BRAIN_URL = "https://auth.lumitra.co"
+# OPENFGA_API_URL = "http://localhost:8080"
+# OPENFGA_STORE_ID = ""
+# OPENFGA_MODEL_ID = ""
 
 # Staging environment
 [env.staging]

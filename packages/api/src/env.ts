@@ -26,6 +26,20 @@ export interface Env {
    * reverse proxy that strips Host).
    */
   PUBLIC_BASE_URL?: string;
+
+  /**
+   * auth-brain machine-auth (slice 2B). ALL OPTIONAL: when AUTH_BRAIN_URL is
+   * unset the Worker boots and only the legacy tenant api_key_hash path works
+   * (the auth-brain branch is skipped). Set these to also accept auth-brain
+   * service-account keys for machine callers.
+   */
+  AUTH_BRAIN_URL?: string;
+  OPENFGA_API_URL?: string;
+  OPENFGA_STORE_ID?: string;
+  // Optional OpenFGA authorization model id + pre-shared bearer token. Omit the
+  // token when OpenFGA runs unauthenticated (e.g. local dev).
+  OPENFGA_MODEL_ID?: string;
+  OPENFGA_API_TOKEN?: string;
 }
 
 /**
