@@ -44,12 +44,10 @@ function main(): void {
       URL_SIGNING_SECRET: required('URL_SIGNING_SECRET'),
       ENVIRONMENT: (process.env.ENVIRONMENT as 'development' | 'staging' | 'production') ?? 'production',
       PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL,
-      // auth-brain machine-auth (all optional; absent -> legacy-only auth).
+      // auth-brain machine-auth (optional; absent -> legacy-only auth). The
+      // OpenFGA check is folded into auth-brain's verify endpoint, so this is
+      // the only auth-brain config the server needs.
       AUTH_BRAIN_URL: process.env.AUTH_BRAIN_URL,
-      OPENFGA_API_URL: process.env.OPENFGA_API_URL,
-      OPENFGA_STORE_ID: process.env.OPENFGA_STORE_ID,
-      OPENFGA_MODEL_ID: process.env.OPENFGA_MODEL_ID,
-      OPENFGA_API_TOKEN: process.env.OPENFGA_API_TOKEN,
     },
     isReady: () => ready,
   });
