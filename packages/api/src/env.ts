@@ -28,18 +28,13 @@ export interface Env {
   PUBLIC_BASE_URL?: string;
 
   /**
-   * auth-brain machine-auth (slice 2B). ALL OPTIONAL: when AUTH_BRAIN_URL is
-   * unset the Worker boots and only the legacy tenant api_key_hash path works
-   * (the auth-brain branch is skipped). Set these to also accept auth-brain
-   * service-account keys for machine callers.
+   * auth-brain machine-auth (slice 2B). OPTIONAL: when unset the Worker boots
+   * and only the legacy tenant api_key_hash path works (the auth-brain branch
+   * is skipped). Set it to also accept auth-brain service-account keys for
+   * machine callers. The OpenFGA authorization check is folded into
+   * auth-brain's verify endpoint, so the Worker needs no OpenFGA access.
    */
   AUTH_BRAIN_URL?: string;
-  OPENFGA_API_URL?: string;
-  OPENFGA_STORE_ID?: string;
-  // Optional OpenFGA authorization model id + pre-shared bearer token. Omit the
-  // token when OpenFGA runs unauthenticated (e.g. local dev).
-  OPENFGA_MODEL_ID?: string;
-  OPENFGA_API_TOKEN?: string;
 }
 
 /**

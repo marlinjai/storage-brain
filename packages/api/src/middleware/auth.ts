@@ -75,48 +75,42 @@ async function resolveServiceAccountTenant(
 ): Promise<Tenant | null> {
   let verified;
   try {
-    verified = await client.verifyApiKey(apiKey);
+    // Single round trip: verify the key AND run the OpenFGA authorization
+    // check server-side in auth-brain (`member` is the floor to act as the
+    // tenant; this is the read/write gate for the tenant data routes). With no
+    // explicit resource, the check targets the key's own workspace scope, so a
+    // non-workspace-scoped key (unresolvable target) comes back as a 401 ->
+    // null -> generic 401 below.
+    verified = await client.verifyApiKey(apiKey, { requirement: 'workspace.member' });
   } catch {
     // Network/transport error: fail closed. Legacy already missed, so this is a 401.
     throw ApiError.unauthorized('Invalid API key');
   }
 
-  // Unknown / expired / revoked: not an auth-brain key we accept -> fall through to 401.
+  // Unknown / expired / revoked key, or a check target auth-brain could not
+  // resolve (e.g. a tenant-scoped key): not a key we accept -> fall through to 401.
   if (!verified) return null;
 
-  const { principal } = verified;
+  const { principal, authorization } = verified;
 
   // First cut: only workspace-scoped keys map 1:1 to an SB tenant. Broader
   // scopes span multiple tenants and need a target-resolution UX we have not
-  // built yet, so reject them explicitly rather than silently allow or 500.
+  // built yet. Defense in depth behind auth-brain's own 401 on these.
   if (principal.scope.type !== 'workspace') {
     throw ApiError.forbidden(
       'Only workspace-scoped keys are supported for the Storage Brain API'
     );
   }
 
+  // The folded check result MUST be present and true. An absent block (e.g. an
+  // older auth-brain that ignores `check`) is a deny, never a silent allow.
+  if (authorization?.allowed !== true) {
+    throw ApiError.forbidden('Service account is not permitted to act on this workspace');
+  }
+
   const tenant = await c.get('db').getTenantByAuthWorkspaceId(principal.scope.id);
   if (!tenant) {
     throw ApiError.unauthorized('No Storage Brain tenant is bound to this workspace');
-  }
-
-  let allowed: boolean;
-  try {
-    // `member` is the floor to act as the tenant; this is the read/write gate
-    // for the tenant data routes.
-    allowed = await client.can(
-      principal.id,
-      'workspace.member',
-      { workspaceId: principal.scope.id },
-      { subjectType: 'service_account' }
-    );
-  } catch {
-    // Authorization-check error: fail closed (never an allow).
-    throw ApiError.unauthorized('Invalid API key');
-  }
-
-  if (!allowed) {
-    throw ApiError.forbidden('Service account is not permitted to act on this workspace');
   }
 
   return tenant;

@@ -40,50 +40,40 @@ describe('createStorageAuthBrainClient.verifyApiKey', () => {
     expect(result?.principal.scope).toEqual({ type: 'workspace', id: 'ws-1' });
   });
 
-  it('returns null on 401 (bad/expired/revoked/unknown)', async () => {
+  it('sends the folded check block when provided and surfaces authorization', async () => {
+    const principal = {
+      type: 'service_account',
+      id: 'sa-1',
+      scope: { type: 'workspace', id: 'ws-1' },
+      role: 'member',
+    };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(200, { principal, authorization: { allowed: true } }));
+    const client = createStorageAuthBrainClient({ baseUrl: 'https://auth.test', fetchImpl });
+
+    const result = await client.verifyApiKey('sk_live_abc', { requirement: 'workspace.member' });
+
+    const call = fetchImpl.mock.calls[0];
+    expect(call).toBeDefined();
+    expect(JSON.parse(call?.[1].body)).toEqual({
+      api_key: 'sk_live_abc',
+      check: { requirement: 'workspace.member' },
+    });
+    expect(result?.authorization).toEqual({ allowed: true });
+  });
+
+  it('omits the check block entirely when not provided', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(401, { error: { code: 'unauthorized' } }));
+    const client = createStorageAuthBrainClient({ baseUrl: 'https://auth.test', fetchImpl });
+    await client.verifyApiKey('sk_live_abc');
+    const call = fetchImpl.mock.calls[0];
+    expect(JSON.parse(call?.[1].body)).toEqual({ api_key: 'sk_live_abc' });
+  });
+
+  it('returns null on 401 (bad/expired/revoked/unknown or unresolvable check target)', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(401, { error: { code: 'unauthorized' } }));
     const client = createStorageAuthBrainClient({ baseUrl: 'https://auth.test', fetchImpl });
     expect(await client.verifyApiKey('sk_live_bad')).toBeNull();
-  });
-});
-
-describe('createStorageAuthBrainClient.can', () => {
-  it('checks OpenFGA with a service_account subject and the workspace object', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, { allowed: true }));
-    const client = createStorageAuthBrainClient({
-      baseUrl: 'https://auth.test',
-      openfgaUrl: 'https://fga.test',
-      openfgaStoreId: 'store-1',
-      fetchImpl,
-    });
-
-    const allowed = await client.can('sa-1', 'workspace.member', { workspaceId: 'ws-1' }, {
-      subjectType: 'service_account',
-    });
-
-    expect(allowed).toBe(true);
-    const call = fetchImpl.mock.calls[0];
-    expect(call).toBeDefined();
-    const url = call?.[0];
-    const init = call?.[1];
-    expect(url).toBe('https://fga.test/stores/store-1/check');
-    expect(JSON.parse(init.body).tuple_key).toEqual({
-      user: 'service_account:sa-1',
-      relation: 'member',
-      object: 'workspace:ws-1',
-    });
-  });
-
-  it('returns false when OpenFGA says not allowed', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, { allowed: false }));
-    const client = createStorageAuthBrainClient({
-      baseUrl: 'https://auth.test',
-      openfgaUrl: 'https://fga.test',
-      openfgaStoreId: 'store-1',
-      fetchImpl,
-    });
-    expect(
-      await client.can('sa-1', 'workspace.member', { workspaceId: 'ws-1' }, { subjectType: 'service_account' })
-    ).toBe(false);
   });
 });

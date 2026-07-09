@@ -6,17 +6,19 @@ import type { Env } from '../env';
  *
  * Fetch-based and Cloudflare-Workers-safe (no Node deps), mirroring the
  * dashboard's slice-2A client and analytics-platform's singleton pattern. It
- * exposes exactly the two operations the compound auth middleware needs:
+ * exposes the single operation the compound auth middleware needs:
  *
- *   - verifyApiKey: resolve a service-account key to its principal
- *   - can:          authorize that principal against an OpenFGA relation
+ *   - verifyApiKey: resolve a service-account key to its principal AND run the
+ *     authorization check server-side in the same round trip (auth-brain PR #38
+ *     folds the OpenFGA check into POST /api/verify/api-key). The Worker never
+ *     talks to OpenFGA directly, so OpenFGA stays Docker-network/tailnet-only.
  *
  * NOTE: the published @marlinjai/auth-brain-sdk (1.1.0) only exposes the
  * browser-session surface (verifySession / getCurrentUser / user-scoped can).
- * The service-account key-verify call and the service_account-subject `can`
- * tuple are implemented here by direct fetch against the documented auth-brain
- * and OpenFGA REST shapes until a later SDK release exposes them. We still reuse
- * the SDK's error types so callers see one consistent failure surface.
+ * The service-account key-verify call is implemented here by direct fetch
+ * against the documented auth-brain REST shape until a later SDK release
+ * exposes it. We still reuse the SDK's error types so callers see one
+ * consistent failure surface.
  */
 
 /** Scope kinds an auth-brain key can carry. Only `workspace` is honored by the
@@ -41,71 +43,48 @@ export interface ServiceAccountPrincipal {
 
 export interface ApiKeyVerifyResponse {
   principal: ServiceAccountPrincipal;
+  /** Present iff the request carried a check block: the server-side OpenFGA
+   * check result. Never trust its absence as an allow. */
+  authorization?: { allowed: boolean };
 }
 
-/** Resource handle for `can()` checks (subset of the SDK's ResourceHandle). */
-export interface ResourceHandle {
-  id?: string;
-  workspaceId?: string;
-  tenantId?: string;
-  tenantGroupId?: string;
-}
-
-export interface CanOptions {
-  /** OpenFGA user-object type. Defaults to 'user'. */
-  subjectType?: 'user' | 'service_account';
+/** Folded authorization check, run server-side by auth-brain. `requirement` is
+ * `<scope>.<relation>` (e.g. 'workspace.member'); the resource id defaults to
+ * the key's own scope id when the scope types match. */
+export interface VerifyCheck {
+  requirement: string;
+  resource?: { workspace_id?: string; tenant_id?: string; tenant_group_id?: string };
 }
 
 export interface StorageAuthBrainClient {
-  /** Resolve a service-account key. Returns null for unknown/expired/revoked
-   * keys; throws on network/transport errors so callers can fail closed. */
-  verifyApiKey(apiKey: string): Promise<ApiKeyVerifyResponse | null>;
-  /** Authorize `subjectId` for `scope.role` (e.g. 'workspace.member') on
-   * `resource`. Throws on transport/config errors so callers can fail closed. */
-  can(
-    subjectId: string,
-    requirement: string,
-    resource: ResourceHandle,
-    opts?: CanOptions
-  ): Promise<boolean>;
+  /** Resolve a service-account key, optionally with a folded authorization
+   * check. Returns null for unknown/expired/revoked keys AND for keys whose
+   * check target cannot be resolved (auth-brain answers 401 for both, by
+   * design); throws on network/transport errors so callers can fail closed. */
+  verifyApiKey(apiKey: string, check?: VerifyCheck): Promise<ApiKeyVerifyResponse | null>;
 }
 
 interface ClientConfig {
   baseUrl: string;
-  openfgaUrl?: string;
-  openfgaStoreId?: string;
-  openfgaModelId?: string;
-  openfgaToken?: string;
   fetchImpl?: typeof fetch;
-}
-
-function openfgaObject(requirementScope: string, resource: ResourceHandle): string {
-  switch (requirementScope) {
-    case 'workspace':
-      return `workspace:${resource.workspaceId ?? resource.id}`;
-    case 'tenant':
-      return `tenant:${resource.tenantId ?? resource.id}`;
-    case 'tenant_group':
-      return `tenant_group:${resource.tenantGroupId ?? resource.id}`;
-    default:
-      throw new AuthBrainError(`Unknown scope: ${requirementScope}`);
-  }
 }
 
 export function createStorageAuthBrainClient(config: ClientConfig): StorageAuthBrainClient {
   const fetchImpl = config.fetchImpl ?? globalThis.fetch;
 
   return {
-    async verifyApiKey(apiKey: string): Promise<ApiKeyVerifyResponse | null> {
+    async verifyApiKey(apiKey: string, check?: VerifyCheck): Promise<ApiKeyVerifyResponse | null> {
       let res: Response;
       try {
-        // Real auth-brain contract (PR #35): POST /api/verify/api-key with the
-        // key in the BODY as { api_key }, no Authorization header. The endpoint
-        // is fail-closed (401 on bad/expired/revoked/unknown).
+        // auth-brain contract (PR #35 + #38): POST /api/verify/api-key with the
+        // key in the BODY as { api_key }, no Authorization header, plus an
+        // optional { check } block for the folded OpenFGA check. The endpoint
+        // is fail-closed (401 on bad/expired/revoked/unknown keys and on any
+        // OpenFGA transport error or unresolvable check target).
         res = await fetchImpl(`${config.baseUrl}/api/verify/api-key`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ api_key: apiKey }),
+          body: JSON.stringify({ api_key: apiKey, ...(check ? { check } : {}) }),
         });
       } catch (err) {
         throw new AuthBrainNetworkError(err);
@@ -115,42 +94,6 @@ export function createStorageAuthBrainClient(config: ClientConfig): StorageAuthB
       if (!res.ok) throw new AuthBrainError(`verifyApiKey failed: ${res.status}`, res.status);
       const data: ApiKeyVerifyResponse = await res.json();
       return data;
-    },
-
-    async can(
-      subjectId: string,
-      requirement: string,
-      resource: ResourceHandle,
-      opts?: CanOptions
-    ): Promise<boolean> {
-      const [scope, role] = requirement.split('.');
-      if (!scope || !role) {
-        throw new AuthBrainError(`Invalid requirement: ${requirement}`);
-      }
-      const object = openfgaObject(scope, resource);
-      if (!config.openfgaUrl || !config.openfgaStoreId) {
-        throw new AuthBrainError('openfgaUrl + openfgaStoreId required for can()');
-      }
-      const user = `${opts?.subjectType ?? 'user'}:${subjectId}`;
-      let res: Response;
-      try {
-        res = await fetchImpl(`${config.openfgaUrl}/stores/${config.openfgaStoreId}/check`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(config.openfgaToken ? { Authorization: `Bearer ${config.openfgaToken}` } : {}),
-          },
-          body: JSON.stringify({
-            tuple_key: { user, relation: role, object },
-            authorization_model_id: config.openfgaModelId,
-          }),
-        });
-      } catch (err) {
-        throw new AuthBrainNetworkError(err);
-      }
-      if (!res.ok) throw new AuthBrainError(`OpenFGA check failed: ${res.status}`, res.status);
-      const body: { allowed?: boolean } = await res.json();
-      return body.allowed === true;
     },
   };
 }
@@ -172,13 +115,7 @@ export function getAuthBrainClient(env: Env): StorageAuthBrainClient | null {
   const cached = clientCache.get(baseUrl);
   if (cached) return cached;
 
-  const client = createStorageAuthBrainClient({
-    baseUrl,
-    openfgaUrl: env.OPENFGA_API_URL,
-    openfgaStoreId: env.OPENFGA_STORE_ID,
-    openfgaModelId: env.OPENFGA_MODEL_ID,
-    openfgaToken: env.OPENFGA_API_TOKEN,
-  });
+  const client = createStorageAuthBrainClient({ baseUrl });
   clientCache.set(baseUrl, client);
   return client;
 }

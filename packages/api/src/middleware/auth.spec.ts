@@ -55,7 +55,7 @@ function createMockStorage(): StorageAdapter {
   return { put: vi.fn(), get: vi.fn(), delete: vi.fn(), exists: vi.fn(), head: vi.fn() };
 }
 
-function workspacePrincipal() {
+function workspacePrincipal(allowed: boolean | null = true) {
   return {
     principal: {
       type: 'service_account',
@@ -63,6 +63,7 @@ function workspacePrincipal() {
       scope: { type: 'workspace' as const, id: WORKSPACE_ID },
       role: 'member',
     },
+    ...(allowed === null ? {} : { authorization: { allowed } }),
   };
 }
 
@@ -70,13 +71,13 @@ const AUTH = { Authorization: 'Bearer sk_live_machinekey123' };
 
 describe('compound auth middleware (legacy + auth-brain)', () => {
   let db: ReturnType<typeof createMockDb>;
-  let client: { verifyApiKey: ReturnType<typeof vi.fn>; can: ReturnType<typeof vi.fn> };
+  let client: { verifyApiKey: ReturnType<typeof vi.fn> };
   let app: ReturnType<typeof createApp>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     db = createMockDb();
-    client = { verifyApiKey: vi.fn(), can: vi.fn() };
+    client = { verifyApiKey: vi.fn() };
     vi.mocked(getAuthBrainClient).mockReturnValue(client as unknown as StorageAuthBrainClient);
     app = createApp({
       db: db as unknown as DatabaseAdapter,
@@ -97,13 +98,11 @@ describe('compound auth middleware (legacy + auth-brain)', () => {
     const body = await res.json<{ id: string }>();
     expect(body.id).toBe(LEGACY_TENANT_ID);
     expect(client.verifyApiKey).not.toHaveBeenCalled();
-    expect(client.can).not.toHaveBeenCalled();
   });
 
-  it('authenticates a workspace-scoped auth-brain key and resolves the bound tenant', async () => {
+  it('authenticates a workspace-scoped auth-brain key (folded check) and resolves the bound tenant', async () => {
     client.verifyApiKey.mockResolvedValue(workspacePrincipal());
     db.getTenantByAuthWorkspaceId.mockResolvedValue(boundTenant);
-    client.can.mockResolvedValue(true);
 
     const res = await request();
 
@@ -111,18 +110,25 @@ describe('compound auth middleware (legacy + auth-brain)', () => {
     const body = await res.json<{ id: string }>();
     expect(body.id).toBe(BOUND_TENANT_ID);
     expect(db.getTenantByAuthWorkspaceId).toHaveBeenCalledWith(WORKSPACE_ID);
-    expect(client.can).toHaveBeenCalledWith(
-      SERVICE_ACCOUNT_ID,
-      'workspace.member',
-      { workspaceId: WORKSPACE_ID },
-      { subjectType: 'service_account' }
-    );
+    // The authorization check rides along in the verify call itself.
+    expect(client.verifyApiKey).toHaveBeenCalledWith('sk_live_machinekey123', {
+      requirement: 'workspace.member',
+    });
   });
 
-  it('returns 403 when can() denies the service account', async () => {
-    client.verifyApiKey.mockResolvedValue(workspacePrincipal());
+  it('returns 403 when the folded check denies the service account', async () => {
+    client.verifyApiKey.mockResolvedValue(workspacePrincipal(false));
     db.getTenantByAuthWorkspaceId.mockResolvedValue(boundTenant);
-    client.can.mockResolvedValue(false);
+
+    const res = await request();
+    expect(res.status).toBe(403);
+    expect(db.getTenantByAuthWorkspaceId).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 (never a silent allow) when the authorization block is absent', async () => {
+    // e.g. an older auth-brain that ignores the check block entirely.
+    client.verifyApiKey.mockResolvedValue(workspacePrincipal(null));
+    db.getTenantByAuthWorkspaceId.mockResolvedValue(boundTenant);
 
     const res = await request();
     expect(res.status).toBe(403);
@@ -134,10 +140,9 @@ describe('compound auth middleware (legacy + auth-brain)', () => {
 
     const res = await request();
     expect(res.status).toBe(401);
-    expect(client.can).not.toHaveBeenCalled();
   });
 
-  it('returns 403 deferred-scope for a tenant-scoped key', async () => {
+  it('returns 403 deferred-scope for a tenant-scoped key (defense in depth)', async () => {
     client.verifyApiKey.mockResolvedValue({
       principal: {
         type: 'service_account',
@@ -145,6 +150,7 @@ describe('compound auth middleware (legacy + auth-brain)', () => {
         scope: { type: 'tenant', id: 'tnt_1' },
         role: 'member',
       },
+      authorization: { allowed: true },
     });
 
     const res = await request();
@@ -164,15 +170,6 @@ describe('compound auth middleware (legacy + auth-brain)', () => {
 
   it('fails closed (401) when verifyApiKey throws (network error/timeout)', async () => {
     client.verifyApiKey.mockRejectedValue(new Error('network down'));
-
-    const res = await request();
-    expect(res.status).toBe(401);
-  });
-
-  it('fails closed (401) when can() throws', async () => {
-    client.verifyApiKey.mockResolvedValue(workspacePrincipal());
-    db.getTenantByAuthWorkspaceId.mockResolvedValue(boundTenant);
-    client.can.mockRejectedValue(new Error('openfga down'));
 
     const res = await request();
     expect(res.status).toBe(401);
