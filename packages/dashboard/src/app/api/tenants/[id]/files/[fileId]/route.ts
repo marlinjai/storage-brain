@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdmin } from '@/lib/sdk';
+import { routeError } from '@/lib/route-error';
 
 export async function DELETE(
   _request: Request,
@@ -11,9 +12,6 @@ export async function DELETE(
     await admin.deleteTenantFile(id, fileId);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    if (err instanceof Error && err.message === 'Not authenticated') {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    }
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+    return routeError(err, 'DELETE /api/tenants/[id]/files/[fileId]');
   }
 }

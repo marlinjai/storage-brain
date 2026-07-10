@@ -1,8 +1,6 @@
 import useSWR from 'swr';
 import type { AdminWorkspace } from '@marlinjai/storage-brain-sdk/admin';
-
-const fetcher = <T>(url: string): Promise<T> =>
-  fetch(url).then((r) => r.json() as Promise<T>);
+import { fetcher } from '@/lib/fetcher';
 
 interface WorkspacesResponse {
   workspaces: AdminWorkspace[];

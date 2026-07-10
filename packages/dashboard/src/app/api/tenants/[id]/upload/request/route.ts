@@ -65,6 +65,9 @@ export async function POST(
           (code && STATUS_BY_CODE[code]) || 500;
     const message = err instanceof Error ? err.message : 'Internal error';
 
+    if (status >= 500) {
+      console.error('[dashboard] POST /api/tenants/[id]/upload/request failed:', err);
+    }
     return NextResponse.json({ error: message, code, details: e?.details }, { status });
   }
 }
