@@ -50,8 +50,11 @@ export async function getDashboardSession(): Promise<DashboardSession | null> {
           return { mode: 'auth-brain', user: verified.user };
         }
       }
-    } catch {
+    } catch (err) {
       // verifySession / can threw or timed out: fail closed, never an allow.
+      // Log the cause: a silent null here surfaces as a bare 401 and is
+      // indistinguishable from a plain unauthorized user when debugging.
+      console.error('[dashboard] auth-brain session check failed:', err);
       return null;
     }
     // Lumitra cookie present but not a valid platform-admin session: do not fall

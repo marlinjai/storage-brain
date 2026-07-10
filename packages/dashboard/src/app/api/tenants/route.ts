@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { CreateTenantInput } from '@marlinjai/storage-brain-sdk/admin';
 import { getAdmin } from '@/lib/sdk';
+import { routeError } from '@/lib/route-error';
 
 export async function GET() {
   try {
@@ -8,10 +9,7 @@ export async function GET() {
     const result = await admin.listTenants();
     return NextResponse.json(result);
   } catch (err) {
-    if (err instanceof Error && err.message === 'Not authenticated') {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    }
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+    return routeError(err, 'GET /api/tenants');
   }
 }
 
@@ -22,9 +20,6 @@ export async function POST(request: Request) {
     const result = await admin.createTenant(body);
     return NextResponse.json(result, { status: 201 });
   } catch (err) {
-    if (err instanceof Error && err.message === 'Not authenticated') {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    }
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+    return routeError(err, 'POST /api/tenants');
   }
 }

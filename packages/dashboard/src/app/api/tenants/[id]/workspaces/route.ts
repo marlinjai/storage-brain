@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { CreateWorkspaceInput } from '@marlinjai/storage-brain-sdk/admin';
 import { getAdmin } from '@/lib/sdk';
+import { routeError } from '@/lib/route-error';
 
 export async function GET(
   _request: Request,
@@ -12,10 +13,7 @@ export async function GET(
     const result = await admin.listTenantWorkspaces(id);
     return NextResponse.json(result);
   } catch (err) {
-    if (err instanceof Error && err.message === 'Not authenticated') {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    }
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+    return routeError(err, 'GET /api/tenants/[id]/workspaces');
   }
 }
 
@@ -45,6 +43,7 @@ export async function POST(
     if (err instanceof Error && err.message === 'Not authenticated') {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
+    console.error('[dashboard] POST /api/tenants/[id]/workspaces failed:', err);
     const message = err instanceof Error ? err.message : 'Internal error';
     return NextResponse.json({ error: message }, { status: 500 });
   }

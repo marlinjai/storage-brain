@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getAdmin } from '@/lib/sdk';
+import { routeError } from '@/lib/route-error';
 
 export async function GET(
   request: NextRequest,
@@ -20,9 +21,6 @@ export async function GET(
     const result = await admin.listTenantFiles(id, query);
     return NextResponse.json(result);
   } catch (err) {
-    if (err instanceof Error && err.message === 'Not authenticated') {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    }
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+    return routeError(err, 'GET /api/tenants/[id]/files');
   }
 }

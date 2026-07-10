@@ -1,7 +1,5 @@
 import useSWRInfinite from 'swr/infinite';
-
-const fetcher = <T>(url: string): Promise<T> =>
-  fetch(url).then((r) => r.json() as Promise<T>);
+import { fetcher } from '@/lib/fetcher';
 
 interface UseFilesFilters {
   limit?: number;
