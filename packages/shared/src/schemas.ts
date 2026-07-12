@@ -126,6 +126,32 @@ export const createWorkspaceSchema = z.object({
 export type CreateWorkspaceSchema = z.infer<typeof createWorkspaceSchema>;
 
 /**
+ * Bulk file-to-workspace migration (admin)
+ *
+ * Moves matching files into a target workspace. Files are selected EITHER by a
+ * single tag key/value pair (e.g. the `env` provenance tag) OR by an explicit
+ * list of file IDs. `onlyUnassigned` (default true) restricts the move to files
+ * that currently have no workspace, which is the common backfill case.
+ */
+export const migrateWorkspaceSchema = z.object({
+  workspaceId: z.string().uuid(),
+  filter: z.union([
+    z.object({
+      tag: z.object({
+        key: z.string().min(1).max(100),
+        value: z.string().max(500),
+      }),
+    }),
+    z.object({
+      fileIds: z.array(z.string().uuid()).min(1).max(500),
+    }),
+  ]),
+  onlyUnassigned: z.boolean().default(true),
+});
+
+export type MigrateWorkspaceSchema = z.infer<typeof migrateWorkspaceSchema>;
+
+/**
  * Workspace update
  */
 export const updateWorkspaceSchema = z.object({

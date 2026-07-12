@@ -165,6 +165,25 @@ export interface AdminUploadHandshake {
   };
 }
 
+/** Selector for a bulk workspace migration — by tag or by explicit file IDs. */
+export type MigrateFilesFilter =
+  | { tag: { key: string; value: string } }
+  | { fileIds: string[] };
+
+export interface MigrateFilesToWorkspaceInput {
+  /** Target workspace; must belong to the tenant. */
+  workspaceId: string;
+  filter: MigrateFilesFilter;
+  /** Only move files that currently have no workspace. Defaults to true server-side. */
+  onlyUnassigned?: boolean;
+}
+
+export interface MigrateFilesToWorkspaceResult {
+  migratedCount: number;
+  totalBytes: number;
+  workspaceId: string;
+}
+
 // ============================================================================
 // Admin Client
 // ============================================================================
@@ -310,6 +329,22 @@ export class StorageBrainAdmin {
     return this.request<AdminUploadHandshake>(
       'POST',
       `/api/v1/admin/tenants/${tenantId}/upload/request`,
+      input
+    );
+  }
+
+  /**
+   * Bulk-move a tenant's files into a target workspace, selected by tag or by
+   * explicit file IDs. Backfills historically workspace-less files into the
+   * right workspace (e.g. by their `env` provenance tag).
+   */
+  async migrateFilesToWorkspace(
+    tenantId: string,
+    input: MigrateFilesToWorkspaceInput
+  ): Promise<MigrateFilesToWorkspaceResult> {
+    return this.request<MigrateFilesToWorkspaceResult>(
+      'POST',
+      `/api/v1/admin/tenants/${tenantId}/files/migrate-workspace`,
       input
     );
   }

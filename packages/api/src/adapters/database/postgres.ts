@@ -11,6 +11,8 @@ import type {
   UpdateWorkspaceInput,
   QuotaCheckResult,
   CreateUploadSessionInput,
+  MigrateFilesToWorkspaceInput,
+  MigrateFilesToWorkspaceResult,
   Tenant,
   StoredFile,
   UploadSession,
@@ -373,6 +375,88 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
       UPDATE files SET deleted_at = ${now}, updated_at = ${now}
       WHERE workspace_id = ${workspaceId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
     `;
+  }
+
+  async migrateFilesToWorkspace(
+    input: MigrateFilesToWorkspaceInput,
+  ): Promise<MigrateFilesToWorkspaceResult> {
+    const { tenantId, workspaceId, filter, onlyUnassigned } = input;
+
+    // Explicit-ID filter with an empty list can never match — short-circuit
+    // before opening a transaction. (The schema forbids this, but be defensive.)
+    if ('fileIds' in filter && filter.fileIds.length === 0) {
+      return { migratedCount: 0, totalBytes: 0 };
+    }
+
+    const now = Date.now();
+
+    return this.sql.begin(async (tx) => {
+      // postgres.js types `Omit` the tagged-template call signature off the
+      // transaction handle; cast back to the callable Sql type.
+      const sql = tx as unknown as postgres.Sql;
+
+      // Selection: active files of this tenant, not already in the target
+      // workspace, matching the requested filter.
+      const conditions: postgres.PendingQuery<postgres.Row[]>[] = [
+        sql`tenant_id = ${tenantId}`,
+        sql`deleted_at IS NULL`,
+        sql`workspace_id IS DISTINCT FROM ${workspaceId}`,
+      ];
+
+      if (onlyUnassigned) conditions.push(sql`workspace_id IS NULL`);
+
+      if ('tag' in filter) {
+        // tags is a TEXT column holding a JSON object; cast to jsonb to read a key.
+        conditions.push(sql`tags IS NOT NULL`);
+        conditions.push(sql`(tags::jsonb ->> ${filter.tag.key}) = ${filter.tag.value}`);
+      } else {
+        conditions.push(sql`id IN ${sql(filter.fileIds)}`);
+      }
+
+      const where = conditions.reduce((acc, cond) => sql`${acc} AND ${cond}`);
+
+      const rows = await sql`
+        SELECT id, size_bytes, workspace_id FROM files WHERE ${where} FOR UPDATE
+      `;
+
+      if (rows.length === 0) {
+        return { migratedCount: 0, totalBytes: 0 };
+      }
+
+      const ids = rows.map((row) => row.id as string);
+      let totalBytes = 0;
+      const sourceReleases = new Map<string, number>();
+      for (const row of rows) {
+        const size = Number(row.size_bytes);
+        totalBytes += size;
+        const source = (row.workspace_id as string | null) ?? null;
+        if (source) {
+          sourceReleases.set(source, (sourceReleases.get(source) ?? 0) + size);
+        }
+      }
+
+      // Release bytes from each source workspace the files are leaving.
+      for (const [source, bytes] of sourceReleases) {
+        await sql`
+          UPDATE workspaces SET used_bytes = GREATEST(0, used_bytes - ${bytes}), updated_at = ${now}
+          WHERE id = ${source}
+        `;
+      }
+
+      // Reassign the files.
+      await sql`
+        UPDATE files SET workspace_id = ${workspaceId}, updated_at = ${now}
+        WHERE id IN ${sql(ids)}
+      `;
+
+      // Add moved bytes to the target workspace (no quota-limit enforcement).
+      await sql`
+        UPDATE workspaces SET used_bytes = used_bytes + ${totalBytes}, updated_at = ${now}
+        WHERE id = ${workspaceId}
+      `;
+
+      return { migratedCount: rows.length, totalBytes };
+    });
   }
 
   // ============================================================================

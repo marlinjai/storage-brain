@@ -49,6 +49,7 @@ function createMockDb() {
     deleteWorkspace: vi.fn(),
     getActiveFilesByWorkspace: vi.fn(),
     softDeleteFilesByWorkspace: vi.fn(),
+    migrateFilesToWorkspace: vi.fn(),
     createUploadSession: vi.fn(),
     getUploadSessionByFileId: vi.fn(),
     updateUploadSessionStatus: vi.fn(),
@@ -480,6 +481,116 @@ describe('admin routes', () => {
       db.checkWorkspaceQuota.mockResolvedValue({ hasCapacity: false, quotaBytes: 10, usedBytes: 10 });
       const res = await post({ ...validBody, workspaceId: WS_ID });
       expect(res.status).toBe(403);
+    });
+  });
+
+  describe('POST /api/v1/admin/tenants/:tenantId/files/migrate-workspace', () => {
+    const WS_ID = '770e8400-e29b-41d4-a716-446655440000';
+    const FILE_A = '111e8400-e29b-41d4-a716-446655440000';
+    const FILE_B = '222e8400-e29b-41d4-a716-446655440000';
+
+    function post(body: unknown, tenantId = 'tenant-123', auth = `Bearer ${ADMIN_KEY}`) {
+      return app.request(`/api/v1/admin/tenants/${tenantId}/files/migrate-workspace`, {
+        method: 'POST',
+        headers: { Authorization: auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }, ENV);
+    }
+
+    interface MigrateBody {
+      migratedCount?: number;
+      totalBytes?: number;
+      workspaceId?: string;
+    }
+
+    it('requires the admin key (401 without it)', async () => {
+      const res = await post({ workspaceId: WS_ID, filter: { tag: { key: 'env', value: 'production' } } }, 'tenant-123', 'Bearer wrong-key');
+      expect(res.status).toBe(401);
+    });
+
+    it('migrates by tag filter and returns the counts', async () => {
+      db.getWorkspaceById.mockResolvedValueOnce({ id: WS_ID, tenantId: 'tenant-123' });
+      db.migrateFilesToWorkspace.mockResolvedValueOnce({ migratedCount: 3, totalBytes: 9000 });
+
+      const res = await post({
+        workspaceId: WS_ID,
+        filter: { tag: { key: 'env', value: 'production' } },
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json<MigrateBody>();
+      expect(body.migratedCount).toBe(3);
+      expect(body.totalBytes).toBe(9000);
+      expect(body.workspaceId).toBe(WS_ID);
+      expect(db.migrateFilesToWorkspace).toHaveBeenCalledWith({
+        tenantId: 'tenant-123',
+        workspaceId: WS_ID,
+        filter: { tag: { key: 'env', value: 'production' } },
+        onlyUnassigned: true, // schema default
+      });
+    });
+
+    it('migrates by explicit fileIds and passes onlyUnassigned=false through', async () => {
+      db.getWorkspaceById.mockResolvedValueOnce({ id: WS_ID, tenantId: 'tenant-123' });
+      db.migrateFilesToWorkspace.mockResolvedValueOnce({ migratedCount: 2, totalBytes: 42 });
+
+      const res = await post({
+        workspaceId: WS_ID,
+        filter: { fileIds: [FILE_A, FILE_B] },
+        onlyUnassigned: false,
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json<MigrateBody>();
+      expect(body.migratedCount).toBe(2);
+      expect(db.migrateFilesToWorkspace).toHaveBeenCalledWith({
+        tenantId: 'tenant-123',
+        workspaceId: WS_ID,
+        filter: { fileIds: [FILE_A, FILE_B] },
+        onlyUnassigned: false,
+      });
+    });
+
+    it('returns migratedCount 0 for an empty match', async () => {
+      db.getWorkspaceById.mockResolvedValueOnce({ id: WS_ID, tenantId: 'tenant-123' });
+      db.migrateFilesToWorkspace.mockResolvedValueOnce({ migratedCount: 0, totalBytes: 0 });
+
+      const res = await post({
+        workspaceId: WS_ID,
+        filter: { tag: { key: 'env', value: 'nonexistent' } },
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json<MigrateBody>();
+      expect(body.migratedCount).toBe(0);
+      expect(body.totalBytes).toBe(0);
+    });
+
+    it('returns 404 when the workspace does not belong to the tenant', async () => {
+      db.getWorkspaceById.mockResolvedValueOnce(null);
+
+      const res = await post({
+        workspaceId: WS_ID,
+        filter: { tag: { key: 'env', value: 'production' } },
+      });
+
+      expect(res.status).toBe(404);
+      expect(db.migrateFilesToWorkspace).not.toHaveBeenCalled();
+    });
+
+    it('rejects a body with neither tag nor fileIds with 400', async () => {
+      db.getWorkspaceById.mockResolvedValue({ id: WS_ID, tenantId: 'tenant-123' });
+
+      const res = await post({ workspaceId: WS_ID, filter: {} });
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects more than 500 fileIds with 400', async () => {
+      db.getWorkspaceById.mockResolvedValue({ id: WS_ID, tenantId: 'tenant-123' });
+
+      const fileIds = Array.from({ length: 501 }, () => FILE_A);
+      const res = await post({ workspaceId: WS_ID, filter: { fileIds } });
+      expect(res.status).toBe(400);
     });
   });
 });
