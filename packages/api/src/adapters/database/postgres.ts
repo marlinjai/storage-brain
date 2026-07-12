@@ -13,6 +13,7 @@ import type {
   CreateUploadSessionInput,
   MigrateFilesToWorkspaceInput,
   MigrateFilesToWorkspaceResult,
+  FileContextAggregate,
   Tenant,
   StoredFile,
   UploadSession,
@@ -457,6 +458,36 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
 
       return { migratedCount: rows.length, totalBytes };
     });
+  }
+
+  async aggregateFileContexts(
+    tenantId: string,
+    workspaceId?: string,
+  ): Promise<FileContextAggregate[]> {
+    const conditions: postgres.PendingQuery<postgres.Row[]>[] = [
+      this.sql`tenant_id = ${tenantId}`,
+      this.sql`deleted_at IS NULL`,
+    ];
+    if (workspaceId) conditions.push(this.sql`workspace_id = ${workspaceId}`);
+
+    const where = conditions.reduce((acc, cond) => this.sql`${acc} AND ${cond}`);
+
+    const rows = await this.sql`
+      SELECT
+        COALESCE(NULLIF(context, ''), 'default') AS context,
+        COUNT(*)::int AS file_count,
+        COALESCE(SUM(size_bytes), 0)::bigint AS total_bytes
+      FROM files
+      WHERE ${where}
+      GROUP BY COALESCE(NULLIF(context, ''), 'default')
+      ORDER BY total_bytes DESC
+    `;
+
+    return rows.map((row) => ({
+      context: row.context as string,
+      fileCount: Number(row.file_count),
+      totalBytes: Number(row.total_bytes),
+    }));
   }
 
   // ============================================================================

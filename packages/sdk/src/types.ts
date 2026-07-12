@@ -79,6 +79,24 @@ export interface FileInfo {
 }
 
 /**
+ * One "folder" in the context view: a distinct `context` value with rollups.
+ * NULL/empty contexts are folded into "default" by the API.
+ */
+export interface FileContextAggregate {
+  context: string;
+  fileCount: number;
+  totalBytes: number;
+}
+
+/**
+ * Options for the context aggregate ("folder" view).
+ */
+export interface ListContextsOptions {
+  /** Scope the aggregate to a single workspace. */
+  workspaceId?: string;
+}
+
+/**
  * Options for listing files
  */
 export interface ListFilesOptions {

@@ -14,6 +14,8 @@ export type {
   SignedUrlInfo,
   PermanentUrlInfo,
   FileMetadata,
+  FileContextAggregate,
+  ListContextsOptions,
   Workspace,
   CreateWorkspaceInput,
   UpdateWorkspaceInput,

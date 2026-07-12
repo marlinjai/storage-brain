@@ -152,6 +152,15 @@ export const migrateWorkspaceSchema = z.object({
 export type MigrateWorkspaceSchema = z.infer<typeof migrateWorkspaceSchema>;
 
 /**
+ * Context aggregate query — optional workspace scope for the "folder" view.
+ */
+export const listContextsQuerySchema = z.object({
+  workspaceId: z.string().uuid().optional(),
+});
+
+export type ListContextsQuerySchema = z.infer<typeof listContextsQuerySchema>;
+
+/**
  * Workspace update
  */
 export const updateWorkspaceSchema = z.object({

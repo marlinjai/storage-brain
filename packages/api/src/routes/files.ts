@@ -2,7 +2,12 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../env';
 import { authMiddleware } from '../middleware/auth';
 import { ApiError } from '../middleware/error-handler';
-import { listFilesQuerySchema, fileIdSchema, type ListFilesInput } from '@storage-brain/shared';
+import {
+  listFilesQuerySchema,
+  listContextsQuerySchema,
+  fileIdSchema,
+  type ListFilesInput,
+} from '@storage-brain/shared';
 import { generateSignedToken, generatePermanentToken } from '../services/signed-url';
 import { buildContentDisposition } from '../utils/content-disposition';
 import { resolvePublicBaseUrl, buildDownloadUrl } from '../utils/public-url';
@@ -55,6 +60,24 @@ fileRoutes.get('/', async (c) => {
     nextCursor: result.nextCursor,
     total: result.total,
   });
+});
+
+/**
+ * GET /api/v1/files/contexts
+ * Aggregate the authenticated tenant's active files by context ("folder" view),
+ * optionally scoped to one workspace via ?workspaceId=. Sorted by totalBytes desc.
+ */
+fileRoutes.get('/contexts', async (c) => {
+  const tenant = c.get('tenant');
+  const db = c.get('db');
+
+  const { workspaceId } = listContextsQuerySchema.parse({
+    workspaceId: c.req.query('workspaceId'),
+  });
+
+  const contexts = await db.aggregateFileContexts(tenant.id, workspaceId);
+
+  return c.json({ contexts });
 });
 
 /**
