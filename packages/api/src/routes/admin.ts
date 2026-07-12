@@ -10,6 +10,7 @@ import {
   fileIdSchema,
   createWorkspaceSchema,
   migrateWorkspaceSchema,
+  listContextsQuerySchema,
   DEFAULT_QUOTA_BYTES,
   type ListFilesInput,
 } from '@storage-brain/shared';
@@ -342,6 +343,24 @@ adminRoutes.post('/tenants/:tenantId/files/migrate-workspace', async (c) => {
     totalBytes: result.totalBytes,
     workspaceId: validated.workspaceId,
   });
+});
+
+/**
+ * GET /api/v1/admin/tenants/:tenantId/files/contexts
+ * Aggregate a tenant's active files by context ("folder" view), optionally
+ * scoped to one workspace via ?workspaceId=. Sorted by totalBytes desc.
+ */
+adminRoutes.get('/tenants/:tenantId/files/contexts', async (c) => {
+  const db = c.get('db');
+  const tenantId = c.req.param('tenantId');
+
+  const { workspaceId } = listContextsQuerySchema.parse({
+    workspaceId: c.req.query('workspaceId'),
+  });
+
+  const contexts = await db.aggregateFileContexts(tenantId, workspaceId);
+
+  return c.json({ contexts });
 });
 
 /**

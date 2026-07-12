@@ -1,8 +1,11 @@
 'use client';
 
 import { use, useState, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useFiles } from '@/hooks/useFiles';
+import { useFileContexts } from '@/hooks/useFileContexts';
 import { FileGrid } from '@/components/files/FileGrid';
+import { FolderGrid } from '@/components/files/FolderGrid';
 import { FileFilters } from '@/components/files/FileFilters';
 import { FileDetailPanel } from '@/components/files/FileDetailPanel';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -35,7 +38,13 @@ export default function FilesPage({
   params: Promise<{ tenantId: string }>;
 }) {
   const { tenantId } = use(params);
-  const [filters, setFilters] = useState<FileFiltersState>({});
+  // Deep-links from the workspaces page carry ?workspaceId=, so seed the filter
+  // from the URL on first render.
+  const searchParams = useSearchParams();
+  const [filters, setFilters] = useState<FileFiltersState>(() => {
+    const workspaceId = searchParams.get('workspaceId');
+    return workspaceId ? { workspaceId } : {};
+  });
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<FileItem | null>(null);
@@ -43,6 +52,14 @@ export default function FilesPage({
 
   const { files, isLoading, isLoadingMore, error, hasMore, loadMore, setSize, mutate } =
     useFiles<FileItem>(tenantId, filters);
+
+  const { contexts, mutate: mutateContexts } = useFileContexts(tenantId, filters.workspaceId);
+
+  // Hide the folder grid when there's nothing meaningful to browse: no files, or
+  // only the lone implicit "default" context (tenants that never set a context).
+  const showFolders =
+    contexts.length > 1 ||
+    (contexts.length === 1 && contexts[0]?.context !== 'default');
 
   // Reset to the first page whenever the filters change, otherwise the
   // accumulated pages would keep refetching under the new filter.
@@ -57,13 +74,14 @@ export default function FilesPage({
           method: 'DELETE',
         });
         void mutate();
+        void mutateContexts();
         setDeleteTarget(null);
         if (selectedFile?.id === file.id) setSelectedFile(null);
       } catch {
         // silent
       }
     },
-    [tenantId, mutate, selectedFile]
+    [tenantId, mutate, mutateContexts, selectedFile]
   );
 
   return (
@@ -100,8 +118,23 @@ export default function FilesPage({
         </div>
       </div>
 
+      {showFolders && (
+        <div className="mb-6">
+          <FolderGrid
+            contexts={contexts}
+            activeContext={filters.context}
+            onSelect={(context) => setFilters({ ...filters, context })}
+          />
+        </div>
+      )}
+
       <div className="mb-6">
-        <FileFilters filters={filters} onChange={setFilters} />
+        <FileFilters
+          tenantId={tenantId}
+          filters={filters}
+          contexts={contexts}
+          onChange={setFilters}
+        />
       </div>
 
       {isLoading && <p className="text-sm text-gray-400">Loading files...</p>}
@@ -197,6 +230,7 @@ export default function FilesPage({
         onClose={() => setSelectedFile(null)}
         onDelete={() => {
           void mutate();
+          void mutateContexts();
           setSelectedFile(null);
         }}
       />
@@ -205,7 +239,10 @@ export default function FilesPage({
         open={uploadOpen}
         tenantId={tenantId}
         onClose={() => setUploadOpen(false)}
-        onUploaded={() => void mutate()}
+        onUploaded={() => {
+          void mutate();
+          void mutateContexts();
+        }}
       />
 
       <ConfirmModal

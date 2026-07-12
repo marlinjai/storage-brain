@@ -78,6 +78,7 @@ function createMockDb() {
     checkWorkspaceQuota: vi.fn(),
     reserveWorkspaceQuota: vi.fn(),
     releaseWorkspaceQuota: vi.fn(),
+    aggregateFileContexts: vi.fn().mockResolvedValue([]),
     migrate: vi.fn(),
   };
 }
@@ -151,6 +152,51 @@ describe('file routes', () => {
       const res = await app.request('/api/v1/files', {
         headers: { Authorization: 'Bearer sk_live_test123' },
       }, ENV);
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('GET /api/v1/files/contexts', () => {
+    it('returns the context aggregate for the authenticated tenant', async () => {
+      db.aggregateFileContexts.mockResolvedValueOnce([
+        { context: 'story-audio', fileCount: 3, totalBytes: 9000 },
+        { context: 'default', fileCount: 1, totalBytes: 10 },
+      ]);
+
+      const res = await app.request('/api/v1/files/contexts', {
+        headers: { Authorization: 'Bearer sk_live_test123' },
+      }, ENV);
+
+      expect(res.status).toBe(200);
+      const body = await res.json<{ contexts?: Array<{ context: string }> }>();
+      expect(body.contexts).toHaveLength(2);
+      expect(body.contexts?.[0]?.context).toBe('story-audio');
+      // Tenant-scoped: aggregate is called with the authenticated tenant's id.
+      expect(db.aggregateFileContexts).toHaveBeenCalledWith(TENANT_ID, undefined);
+    });
+
+    it('passes the workspaceId filter through', async () => {
+      const WS = '770e8400-e29b-41d4-a716-446655440000';
+      db.aggregateFileContexts.mockResolvedValueOnce([]);
+
+      const res = await app.request(`/api/v1/files/contexts?workspaceId=${WS}`, {
+        headers: { Authorization: 'Bearer sk_live_test123' },
+      }, ENV);
+
+      expect(res.status).toBe(200);
+      expect(db.aggregateFileContexts).toHaveBeenCalledWith(TENANT_ID, WS);
+    });
+
+    it('rejects a non-uuid workspaceId with 400', async () => {
+      const res = await app.request('/api/v1/files/contexts?workspaceId=not-a-uuid', {
+        headers: { Authorization: 'Bearer sk_live_test123' },
+      }, ENV);
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 401 without auth header', async () => {
+      const res = await app.request('/api/v1/files/contexts', {}, ENV);
       expect(res.status).toBe(401);
     });
   });

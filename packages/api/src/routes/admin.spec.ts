@@ -50,6 +50,7 @@ function createMockDb() {
     getActiveFilesByWorkspace: vi.fn(),
     softDeleteFilesByWorkspace: vi.fn(),
     migrateFilesToWorkspace: vi.fn(),
+    aggregateFileContexts: vi.fn().mockResolvedValue([]),
     createUploadSession: vi.fn(),
     getUploadSessionByFileId: vi.fn(),
     updateUploadSessionStatus: vi.fn(),
@@ -590,6 +591,65 @@ describe('admin routes', () => {
 
       const fileIds = Array.from({ length: 501 }, () => FILE_A);
       const res = await post({ workspaceId: WS_ID, filter: { fileIds } });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('GET /api/v1/admin/tenants/:tenantId/files/contexts', () => {
+    const WS_ID = '770e8400-e29b-41d4-a716-446655440000';
+
+    interface ContextsBody {
+      contexts?: Array<{ context: string; fileCount: number; totalBytes: number }>;
+    }
+
+    it('requires the admin key (401 without it)', async () => {
+      const res = await app.request('/api/v1/admin/tenants/tenant-123/files/contexts', {
+        method: 'GET',
+        headers: { Authorization: 'Bearer wrong-key' },
+      }, ENV);
+      expect(res.status).toBe(401);
+    });
+
+    it('returns the tenant context aggregate', async () => {
+      db.aggregateFileContexts.mockResolvedValueOnce([
+        { context: 'story-audio', fileCount: 340, totalBytes: 123456 },
+        { context: 'marketplace-cover', fileCount: 25, totalBytes: 5000 },
+      ]);
+
+      const res = await app.request('/api/v1/admin/tenants/tenant-123/files/contexts', {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+      }, ENV);
+
+      expect(res.status).toBe(200);
+      const body = await res.json<ContextsBody>();
+      expect(body.contexts).toHaveLength(2);
+      expect(body.contexts?.[0]?.context).toBe('story-audio');
+      expect(body.contexts?.[0]?.fileCount).toBe(340);
+      expect(db.aggregateFileContexts).toHaveBeenCalledWith('tenant-123', undefined);
+    });
+
+    it('passes the workspaceId filter through', async () => {
+      db.aggregateFileContexts.mockResolvedValueOnce([]);
+
+      const res = await app.request(
+        `/api/v1/admin/tenants/tenant-123/files/contexts?workspaceId=${WS_ID}`,
+        { method: 'GET', headers: { Authorization: `Bearer ${ADMIN_KEY}` } },
+        ENV
+      );
+
+      expect(res.status).toBe(200);
+      const body = await res.json<ContextsBody>();
+      expect(body.contexts).toEqual([]);
+      expect(db.aggregateFileContexts).toHaveBeenCalledWith('tenant-123', WS_ID);
+    });
+
+    it('rejects a non-uuid workspaceId with 400', async () => {
+      const res = await app.request(
+        '/api/v1/admin/tenants/tenant-123/files/contexts?workspaceId=nope',
+        { method: 'GET', headers: { Authorization: `Bearer ${ADMIN_KEY}` } },
+        ENV
+      );
       expect(res.status).toBe(400);
     });
   });

@@ -88,6 +88,13 @@ export interface MigrateFilesToWorkspaceResult {
   totalBytes: number;
 }
 
+/** One "folder" in the context view: a distinct `files.context` value with rollups. */
+export interface FileContextAggregate {
+  context: string;
+  fileCount: number;
+  totalBytes: number;
+}
+
 export interface ListTenantsInput {
   cursor?: string;
   limit?: number;
@@ -145,6 +152,12 @@ export interface DatabaseAdapter {
    * workspace quota limit (moves are allowed to exceed it).
    */
   migrateFilesToWorkspace(input: MigrateFilesToWorkspaceInput): Promise<MigrateFilesToWorkspaceResult>;
+  /**
+   * Aggregate a tenant's ACTIVE files by their `context` value (the "folder"
+   * view), optionally scoped to one workspace. NULL/empty contexts fold into
+   * "default". Sorted by totalBytes desc.
+   */
+  aggregateFileContexts(tenantId: string, workspaceId?: string): Promise<FileContextAggregate[]>;
 
   // Upload sessions
   createUploadSession(input: CreateUploadSessionInput): Promise<string>;

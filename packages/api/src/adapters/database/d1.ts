@@ -10,6 +10,7 @@ import type {
   CreateUploadSessionInput,
   MigrateFilesToWorkspaceInput,
   MigrateFilesToWorkspaceResult,
+  FileContextAggregate,
   Tenant,
   StoredFile,
   UploadSession,
@@ -546,6 +547,43 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       .run();
 
     return { migratedCount: rows.length, totalBytes };
+  }
+
+  async aggregateFileContexts(
+    tenantId: string,
+    workspaceId?: string
+  ): Promise<FileContextAggregate[]> {
+    const conditions: string[] = ['tenant_id = ?', 'deleted_at IS NULL'];
+    const params: (string | number)[] = [tenantId];
+
+    if (workspaceId) {
+      conditions.push('workspace_id = ?');
+      params.push(workspaceId);
+    }
+
+    const where = conditions.join(' AND ');
+
+    const result = await this.db
+      .prepare(
+        `SELECT
+           COALESCE(NULLIF(context, ''), 'default') AS context,
+           COUNT(*) AS file_count,
+           COALESCE(SUM(size_bytes), 0) AS total_bytes
+         FROM files
+         WHERE ${where}
+         GROUP BY COALESCE(NULLIF(context, ''), 'default')
+         ORDER BY total_bytes DESC`
+      )
+      .bind(...params)
+      .all();
+
+    return (
+      result.results as Array<{ context: string; file_count: number; total_bytes: number }>
+    ).map((row) => ({
+      context: row.context,
+      fileCount: Number(row.file_count),
+      totalBytes: Number(row.total_bytes),
+    }));
   }
 
   // ============================================================================

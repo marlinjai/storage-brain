@@ -6,6 +6,8 @@ import type {
   FileInfo,
   ListFilesOptions,
   ListFilesResult,
+  ListContextsOptions,
+  FileContextAggregate,
   QuotaInfo,
   TenantInfo,
   UploadHandshake,
@@ -339,6 +341,25 @@ export class StorageBrain {
     const path = query ? `/api/v1/files?${query}` : '/api/v1/files';
 
     return this.request<ListFilesResult>('GET', path);
+  }
+
+  /**
+   * List distinct file contexts ("folders") with per-context file counts and
+   * total bytes, sorted by total bytes desc. Optionally scoped to a workspace
+   * (falls back to the client's default workspace).
+   */
+  async listContexts(options?: ListContextsOptions): Promise<FileContextAggregate[]> {
+    const params = new URLSearchParams();
+
+    // Resolve workspace: option override > client default
+    const resolvedWorkspaceId = options?.workspaceId ?? this.workspaceId;
+    if (resolvedWorkspaceId) params.set('workspaceId', resolvedWorkspaceId);
+
+    const query = params.toString();
+    const path = query ? `/api/v1/files/contexts?${query}` : '/api/v1/files/contexts';
+
+    const result = await this.request<{ contexts: FileContextAggregate[] }>('GET', path);
+    return result.contexts;
   }
 
   /**

@@ -113,6 +113,18 @@ export interface ListTenantFilesResult {
   total: number;
 }
 
+/** One "folder" in the context view: a distinct `context` value with rollups. */
+export interface FileContextAggregate {
+  context: string;
+  fileCount: number;
+  totalBytes: number;
+}
+
+export interface ListFileContextsOptions {
+  /** Scope the aggregate to a single workspace. */
+  workspaceId?: string;
+}
+
 export interface SignedUrlResult {
   fileId: string;
   url: string;
@@ -256,6 +268,26 @@ export class StorageBrainAdmin {
       : `/api/v1/admin/tenants/${tenantId}/files`;
 
     return this.request<ListTenantFilesResult>('GET', path);
+  }
+
+  /**
+   * List a tenant's distinct file contexts ("folders") with per-context file
+   * counts and total bytes, sorted by total bytes desc. Optionally scoped to a
+   * single workspace.
+   */
+  async listFileContexts(
+    tenantId: string,
+    options?: ListFileContextsOptions
+  ): Promise<{ contexts: FileContextAggregate[] }> {
+    const params = new URLSearchParams();
+    if (options?.workspaceId) params.set('workspaceId', options.workspaceId);
+
+    const query = params.toString();
+    const path = query
+      ? `/api/v1/admin/tenants/${tenantId}/files/contexts?${query}`
+      : `/api/v1/admin/tenants/${tenantId}/files/contexts`;
+
+    return this.request<{ contexts: FileContextAggregate[] }>('GET', path);
   }
 
   async getTenantFile(tenantId: string, fileId: string): Promise<AdminFileInfo> {

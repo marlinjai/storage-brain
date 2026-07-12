@@ -293,3 +293,90 @@ describe('D1DatabaseAdapter migrateFilesToWorkspace', () => {
     expect(target?.usedBytes).toBe(600); // 300 from first move + 300 from f-in-source
   });
 });
+
+describe('D1DatabaseAdapter aggregateFileContexts', () => {
+  let db: D1DatabaseAdapter;
+
+  const TENANT = 'tenant-ctx';
+  const WS = 'ws-ctx';
+
+  async function seedFile(
+    id: string,
+    opts: { size: number; context?: string | null; workspaceId?: string; deleted?: boolean },
+  ): Promise<void> {
+    await db.createFile({
+      id,
+      tenantId: TENANT,
+      originalName: `${id}.bin`,
+      storedPath: `tenants/${TENANT}/${id}.bin`,
+      fileType: 'image/png',
+      sizeBytes: opts.size,
+      context: opts.context === undefined ? 'default' : opts.context,
+      tags: null,
+      workspaceId: opts.workspaceId,
+    });
+    if (opts.deleted) {
+      await db.softDeleteFile(id, TENANT);
+    }
+  }
+
+  beforeEach(async () => {
+    db = makeAdapter();
+    await db.createTenant({ id: TENANT, ...baseTenant, name: 'Context Tenant' });
+    await db.createWorkspace({ id: WS, tenantId: TENANT, name: 'WS', slug: 'ws' });
+  });
+
+  it('groups active files by context, sorted by totalBytes desc', async () => {
+    await seedFile('a1', { size: 100, context: 'story-audio' });
+    await seedFile('a2', { size: 300, context: 'story-audio' });
+    await seedFile('c1', { size: 50, context: 'marketplace-cover' });
+
+    const result = await db.aggregateFileContexts(TENANT);
+
+    expect(result).toEqual([
+      { context: 'story-audio', fileCount: 2, totalBytes: 400 },
+      { context: 'marketplace-cover', fileCount: 1, totalBytes: 50 },
+    ]);
+  });
+
+  it('folds empty context into "default"', async () => {
+    // NULL context is a postgres-only case (the D1/SQLite schema is NOT NULL);
+    // the same COALESCE(NULLIF(context, ''), 'default') expression folds both,
+    // so the empty-string path exercises the folding logic here.
+    await seedFile('e1', { size: 20, context: '' });
+    await seedFile('d1', { size: 5, context: 'default' });
+    await seedFile('s1', { size: 1000, context: 'story-audio' });
+
+    const result = await db.aggregateFileContexts(TENANT);
+
+    const defaultRow = result.find((r) => r.context === 'default');
+    expect(defaultRow).toEqual({ context: 'default', fileCount: 2, totalBytes: 25 });
+    // Sorted desc: story-audio (1000) comes before default (25).
+    expect(result[0]?.context).toBe('story-audio');
+  });
+
+  it('excludes soft-deleted files', async () => {
+    await seedFile('live', { size: 100, context: 'story-audio' });
+    await seedFile('gone', { size: 999, context: 'story-audio', deleted: true });
+
+    const result = await db.aggregateFileContexts(TENANT);
+
+    expect(result).toEqual([{ context: 'story-audio', fileCount: 1, totalBytes: 100 }]);
+  });
+
+  it('scopes to a workspace when workspaceId is given', async () => {
+    await seedFile('in-ws', { size: 100, context: 'story-audio', workspaceId: WS });
+    await seedFile('no-ws', { size: 500, context: 'story-audio' });
+
+    const scoped = await db.aggregateFileContexts(TENANT, WS);
+    expect(scoped).toEqual([{ context: 'story-audio', fileCount: 1, totalBytes: 100 }]);
+
+    const unscoped = await db.aggregateFileContexts(TENANT);
+    expect(unscoped).toEqual([{ context: 'story-audio', fileCount: 2, totalBytes: 600 }]);
+  });
+
+  it('returns an empty array for a tenant with no files', async () => {
+    const result = await db.aggregateFileContexts(TENANT);
+    expect(result).toEqual([]);
+  });
+});
