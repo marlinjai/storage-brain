@@ -134,3 +134,162 @@ describe('D1DatabaseAdapter auth_workspace_id', () => {
     expect(updated?.authWorkspaceId).toBe('ws-5');
   });
 });
+
+describe('D1DatabaseAdapter migrateFilesToWorkspace', () => {
+  let db: D1DatabaseAdapter;
+
+  const TENANT = 'tenant-mig';
+  const TARGET = 'ws-target';
+  const SOURCE = 'ws-source';
+
+  async function seedFile(
+    id: string,
+    opts: { size: number; tags?: Record<string, string>; workspaceId?: string; deleted?: boolean },
+  ): Promise<void> {
+    await db.createFile({
+      id,
+      tenantId: TENANT,
+      originalName: `${id}.bin`,
+      storedPath: `tenants/${TENANT}/${id}.bin`,
+      fileType: 'image/png',
+      sizeBytes: opts.size,
+      context: 'default',
+      tags: opts.tags ?? null,
+      workspaceId: opts.workspaceId,
+    });
+    if (opts.deleted) {
+      await db.softDeleteFile(id, TENANT);
+    }
+  }
+
+  beforeEach(async () => {
+    db = makeAdapter();
+    await db.createTenant({ id: TENANT, ...baseTenant, name: 'Migration Tenant' });
+    await db.createWorkspace({ id: TARGET, tenantId: TENANT, name: 'Target', slug: 'target' });
+    // Source has an explicit quota so we can seed its used_bytes via reserve.
+    await db.createWorkspace({
+      id: SOURCE,
+      tenantId: TENANT,
+      name: 'Source',
+      slug: 'source',
+      quotaBytes: 1024 * 1024,
+    });
+
+    await seedFile('f-prod-1', { size: 100, tags: { env: 'production' } });
+    await seedFile('f-prod-2', { size: 200, tags: { env: 'production' } });
+    await seedFile('f-dev-1', { size: 50, tags: { env: 'development' } });
+    await seedFile('f-notags', { size: 10 });
+    await seedFile('f-in-source', { size: 300, tags: { env: 'production' }, workspaceId: SOURCE });
+    await seedFile('f-deleted', { size: 999, tags: { env: 'production' }, deleted: true });
+    // Reflect f-in-source's bytes in the source workspace usage.
+    await db.reserveWorkspaceQuota(SOURCE, 300);
+  });
+
+  it('migrates unassigned files matching a tag and adds bytes to the target', async () => {
+    const result = await db.migrateFilesToWorkspace({
+      tenantId: TENANT,
+      workspaceId: TARGET,
+      filter: { tag: { key: 'env', value: 'production' } },
+      onlyUnassigned: true,
+    });
+
+    // f-prod-1 + f-prod-2 only (dev wrong env, notags no tag, in-source assigned, deleted inactive).
+    expect(result.migratedCount).toBe(2);
+    expect(result.totalBytes).toBe(300);
+
+    const target = await db.getWorkspaceById(TARGET, TENANT);
+    expect(target?.usedBytes).toBe(300);
+
+    const targetFiles = await db.getActiveFilesByWorkspace(TARGET, TENANT);
+    expect(targetFiles.map((f) => f.id).sort()).toEqual(['f-prod-1', 'f-prod-2']);
+
+    // Source untouched (nothing moved out of it).
+    const source = await db.getWorkspaceById(SOURCE, TENANT);
+    expect(source?.usedBytes).toBe(300);
+  });
+
+  it('with onlyUnassigned=false also moves files out of a source workspace and releases its quota', async () => {
+    const result = await db.migrateFilesToWorkspace({
+      tenantId: TENANT,
+      workspaceId: TARGET,
+      filter: { tag: { key: 'env', value: 'production' } },
+      onlyUnassigned: false,
+    });
+
+    // f-prod-1 (100) + f-prod-2 (200) + f-in-source (300).
+    expect(result.migratedCount).toBe(3);
+    expect(result.totalBytes).toBe(600);
+
+    const target = await db.getWorkspaceById(TARGET, TENANT);
+    expect(target?.usedBytes).toBe(600);
+
+    // Source released its 300 bytes.
+    const source = await db.getWorkspaceById(SOURCE, TENANT);
+    expect(source?.usedBytes).toBe(0);
+    expect(await db.getActiveFilesByWorkspace(SOURCE, TENANT)).toHaveLength(0);
+  });
+
+  it('migrates by explicit fileIds regardless of tag', async () => {
+    const result = await db.migrateFilesToWorkspace({
+      tenantId: TENANT,
+      workspaceId: TARGET,
+      filter: { fileIds: ['f-dev-1', 'f-notags'] },
+      onlyUnassigned: true,
+    });
+
+    expect(result.migratedCount).toBe(2);
+    expect(result.totalBytes).toBe(60);
+    const targetFiles = await db.getActiveFilesByWorkspace(TARGET, TENANT);
+    expect(targetFiles.map((f) => f.id).sort()).toEqual(['f-dev-1', 'f-notags']);
+  });
+
+  it('does not move soft-deleted files even when they match', async () => {
+    await db.migrateFilesToWorkspace({
+      tenantId: TENANT,
+      workspaceId: TARGET,
+      filter: { fileIds: ['f-deleted'] },
+      onlyUnassigned: false,
+    });
+
+    const target = await db.getWorkspaceById(TARGET, TENANT);
+    expect(target?.usedBytes).toBe(0);
+    expect(await db.getActiveFilesByWorkspace(TARGET, TENANT)).toHaveLength(0);
+  });
+
+  it('returns migratedCount 0 for a non-matching tag and leaves usage untouched', async () => {
+    const result = await db.migrateFilesToWorkspace({
+      tenantId: TENANT,
+      workspaceId: TARGET,
+      filter: { tag: { key: 'env', value: 'staging' } },
+      onlyUnassigned: true,
+    });
+
+    expect(result).toEqual({ migratedCount: 0, totalBytes: 0 });
+    const target = await db.getWorkspaceById(TARGET, TENANT);
+    expect(target?.usedBytes).toBe(0);
+  });
+
+  it('skips files already in the target workspace (no double counting)', async () => {
+    // First move puts f-prod-1/2 into the target.
+    await db.migrateFilesToWorkspace({
+      tenantId: TENANT,
+      workspaceId: TARGET,
+      filter: { tag: { key: 'env', value: 'production' } },
+      onlyUnassigned: true,
+    });
+
+    // Re-run with onlyUnassigned=false: the two already-in-target files are
+    // excluded; only f-in-source moves.
+    const result = await db.migrateFilesToWorkspace({
+      tenantId: TENANT,
+      workspaceId: TARGET,
+      filter: { tag: { key: 'env', value: 'production' } },
+      onlyUnassigned: false,
+    });
+
+    expect(result.migratedCount).toBe(1);
+    expect(result.totalBytes).toBe(300);
+    const target = await db.getWorkspaceById(TARGET, TENANT);
+    expect(target?.usedBytes).toBe(600); // 300 from first move + 300 from f-in-source
+  });
+});

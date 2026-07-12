@@ -69,6 +69,25 @@ export interface CreateUploadSessionInput {
   expiresAt: number;
 }
 
+/** Selector for which of a tenant's files to migrate — by tag or by explicit IDs. */
+export type MigrateFilesFilter =
+  | { tag: { key: string; value: string } }
+  | { fileIds: string[] };
+
+export interface MigrateFilesToWorkspaceInput {
+  tenantId: string;
+  /** Target workspace. Must already be validated as belonging to the tenant. */
+  workspaceId: string;
+  filter: MigrateFilesFilter;
+  /** When true, only files with a NULL workspace_id are moved. */
+  onlyUnassigned: boolean;
+}
+
+export interface MigrateFilesToWorkspaceResult {
+  migratedCount: number;
+  totalBytes: number;
+}
+
 export interface ListTenantsInput {
   cursor?: string;
   limit?: number;
@@ -118,6 +137,14 @@ export interface DatabaseAdapter {
   deleteWorkspace(workspaceId: string, tenantId: string): Promise<void>;
   getActiveFilesByWorkspace(workspaceId: string, tenantId: string): Promise<StoredFile[]>;
   softDeleteFilesByWorkspace(workspaceId: string, tenantId: string): Promise<void>;
+  /**
+   * Bulk-move matching active files into a target workspace, keeping workspace
+   * quota (`used_bytes`) consistent: bytes are added to the target and released
+   * from any source workspace a file is moving out of. Tenant-level usage is
+   * unchanged. This is an admin migration and does NOT enforce the target
+   * workspace quota limit (moves are allowed to exceed it).
+   */
+  migrateFilesToWorkspace(input: MigrateFilesToWorkspaceInput): Promise<MigrateFilesToWorkspaceResult>;
 
   // Upload sessions
   createUploadSession(input: CreateUploadSessionInput): Promise<string>;

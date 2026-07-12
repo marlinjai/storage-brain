@@ -8,6 +8,8 @@ import type {
   UpdateWorkspaceInput,
   QuotaCheckResult,
   CreateUploadSessionInput,
+  MigrateFilesToWorkspaceInput,
+  MigrateFilesToWorkspaceResult,
   Tenant,
   StoredFile,
   UploadSession,
@@ -459,6 +461,91 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       )
       .bind(now, now, workspaceId, tenantId)
       .run();
+  }
+
+  async migrateFilesToWorkspace(
+    input: MigrateFilesToWorkspaceInput
+  ): Promise<MigrateFilesToWorkspaceResult> {
+    const { tenantId, workspaceId, filter, onlyUnassigned } = input;
+
+    if ('fileIds' in filter && filter.fileIds.length === 0) {
+      return { migratedCount: 0, totalBytes: 0 };
+    }
+
+    const now = Date.now();
+
+    // Selection: active files of this tenant, not already in the target
+    // workspace, matching the requested filter.
+    const conditions: string[] = [
+      'tenant_id = ?',
+      'deleted_at IS NULL',
+      '(workspace_id IS NULL OR workspace_id != ?)',
+    ];
+    const params: (string | number)[] = [tenantId, workspaceId];
+
+    if (onlyUnassigned) conditions.push('workspace_id IS NULL');
+
+    if ('tag' in filter) {
+      // tags is a TEXT column holding a JSON object; json_extract reads a key.
+      conditions.push('tags IS NOT NULL');
+      conditions.push('json_extract(tags, ?) = ?');
+      params.push(`$."${filter.tag.key.replace(/"/g, '\\"')}"`, filter.tag.value);
+    } else {
+      const placeholders = filter.fileIds.map(() => '?').join(', ');
+      conditions.push(`id IN (${placeholders})`);
+      params.push(...filter.fileIds);
+    }
+
+    const where = conditions.join(' AND ');
+
+    const selectResult = await this.db
+      .prepare(`SELECT id, size_bytes, workspace_id FROM files WHERE ${where}`)
+      .bind(...params)
+      .all();
+
+    const rows = selectResult.results as Array<{
+      id: string;
+      size_bytes: number;
+      workspace_id: string | null;
+    }>;
+
+    if (rows.length === 0) {
+      return { migratedCount: 0, totalBytes: 0 };
+    }
+
+    let totalBytes = 0;
+    const sourceReleases = new Map<string, number>();
+    for (const row of rows) {
+      const size = Number(row.size_bytes);
+      totalBytes += size;
+      if (row.workspace_id) {
+        sourceReleases.set(row.workspace_id, (sourceReleases.get(row.workspace_id) ?? 0) + size);
+      }
+    }
+
+    // Release bytes from each source workspace the files are leaving.
+    for (const [source, bytes] of sourceReleases) {
+      await this.db
+        .prepare('UPDATE workspaces SET used_bytes = MAX(0, used_bytes - ?), updated_at = ? WHERE id = ?')
+        .bind(bytes, now, source)
+        .run();
+    }
+
+    // Reassign the files.
+    const ids = rows.map((row) => row.id);
+    const idPlaceholders = ids.map(() => '?').join(', ');
+    await this.db
+      .prepare(`UPDATE files SET workspace_id = ?, updated_at = ? WHERE id IN (${idPlaceholders})`)
+      .bind(workspaceId, now, ...ids)
+      .run();
+
+    // Add moved bytes to the target workspace (no quota-limit enforcement).
+    await this.db
+      .prepare('UPDATE workspaces SET used_bytes = used_bytes + ?, updated_at = ? WHERE id = ?')
+      .bind(totalBytes, now, workspaceId)
+      .run();
+
+    return { migratedCount: rows.length, totalBytes };
   }
 
   // ============================================================================

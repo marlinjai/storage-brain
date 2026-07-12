@@ -9,6 +9,7 @@ import {
   listFilesQuerySchema,
   fileIdSchema,
   createWorkspaceSchema,
+  migrateWorkspaceSchema,
   DEFAULT_QUOTA_BYTES,
   type ListFilesInput,
 } from '@storage-brain/shared';
@@ -306,6 +307,40 @@ adminRoutes.get('/tenants/:tenantId/files', async (c) => {
     files,
     nextCursor: result.nextCursor,
     total: result.total,
+  });
+});
+
+/**
+ * POST /api/v1/admin/tenants/:tenantId/files/migrate-workspace
+ * Bulk-move a tenant's files into a target workspace, selected by tag or by
+ * explicit file IDs. Used to backfill historically workspace-less files into
+ * the correct workspace by their provenance (e.g. the `env` tag). Keeps
+ * workspace quota accounting consistent; does not touch tenant-level usage.
+ */
+adminRoutes.post('/tenants/:tenantId/files/migrate-workspace', async (c) => {
+  const db = c.get('db');
+  const tenantId = c.req.param('tenantId');
+  const body: unknown = await c.req.json();
+
+  const validated = migrateWorkspaceSchema.parse(body);
+
+  // Target workspace must exist and belong to this tenant.
+  const workspace = await db.getWorkspaceById(validated.workspaceId, tenantId);
+  if (!workspace) {
+    throw ApiError.notFound('Workspace not found');
+  }
+
+  const result = await db.migrateFilesToWorkspace({
+    tenantId,
+    workspaceId: validated.workspaceId,
+    filter: validated.filter,
+    onlyUnassigned: validated.onlyUnassigned,
+  });
+
+  return c.json({
+    migratedCount: result.migratedCount,
+    totalBytes: result.totalBytes,
+    workspaceId: validated.workspaceId,
   });
 });
 
