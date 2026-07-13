@@ -15,16 +15,24 @@ export const fileTypeSchema = z.string().regex(/^[a-z]+\/[a-z0-9.+-]+$/i, 'Inval
 export const tagsSchema = z.record(z.string().max(100), z.string().max(500)).optional();
 
 /**
+ * File name validation, shared by upload and rename: no path separators or
+ * control characters (both would corrupt Content-Disposition headers and,
+ * for separators, break the flat `tenants/<id>/files/<id>/<name>` storage
+ * key convention).
+ */
+export const fileNameSchema = z
+  .string()
+  .min(1, 'File name is required')
+  .max(255, 'File name too long')
+  // eslint-disable-next-line no-control-regex -- intentionally reject ASCII control chars (\x00-\x1f) in filenames
+  .regex(/^[^<>:"/\\|?*\x00-\x1f]+$/, 'File name contains invalid characters');
+
+/**
  * POST /request-upload request body
  */
 export const requestUploadSchema = z.object({
   fileType: fileTypeSchema,
-  fileName: z
-    .string()
-    .min(1, 'File name is required')
-    .max(255, 'File name too long')
-    // eslint-disable-next-line no-control-regex -- intentionally reject ASCII control chars (\x00-\x1f) in filenames
-    .regex(/^[^<>:"/\\|?*\x00-\x1f]+$/, 'File name contains invalid characters'),
+  fileName: fileNameSchema,
   fileSizeBytes: z
     .number()
     .int()
@@ -56,6 +64,15 @@ export type ListFilesQuerySchema = z.infer<typeof listFilesQuerySchema>;
  * File ID parameter validation
  */
 export const fileIdSchema = z.string().uuid('Invalid file ID format');
+
+/**
+ * PATCH /files/:fileId request body — rename a file's display name.
+ */
+export const renameFileSchema = z.object({
+  originalName: fileNameSchema,
+});
+
+export type RenameFileSchema = z.infer<typeof renameFileSchema>;
 
 /**
  * Tenant creation (admin)

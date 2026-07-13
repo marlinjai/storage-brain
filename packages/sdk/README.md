@@ -106,6 +106,14 @@ Soft-delete a file.
 await storage.deleteFile('file-uuid');
 ```
 
+#### `renameFile(fileId, originalName)`
+
+Rename a file's display name. Metadata-only: the backing storage object keeps its original key, so this never moves or re-uploads bytes.
+
+```typescript
+const file = await storage.renameFile('file-uuid', 'voice-sample_max-mustermann_2026-07-08_ab12.webm');
+```
+
 #### `getSignedUrl(fileId, expiresIn?)`
 
 Get a time-limited signed URL for unauthenticated file download.

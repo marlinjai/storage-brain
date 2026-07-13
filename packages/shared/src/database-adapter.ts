@@ -135,6 +135,13 @@ export interface DatabaseAdapter {
   updateFileMetadata(fileId: string, metadata: Record<string, unknown>, status: ProcessingStatus): Promise<void>;
   updateFileProcessingStatus(fileId: string, status: ProcessingStatus): Promise<void>;
   updateFileSizeBytes(fileId: string, sizeBytes: number): Promise<void>;
+  /**
+   * Rename a file's display name (the `originalName` field only). The
+   * backing storage object keeps its original key — nothing moves in R2/S3,
+   * this is a metadata-only update. Returns the updated file, or null if no
+   * active file with this id exists for the tenant.
+   */
+  renameFile(fileId: string, tenantId: string, originalName: string): Promise<StoredFile | null>;
 
   // Workspaces
   createWorkspace(input: CreateWorkspaceInput): Promise<Workspace>;

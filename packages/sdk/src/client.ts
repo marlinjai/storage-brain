@@ -370,6 +370,16 @@ export class StorageBrain {
   }
 
   /**
+   * Rename a file's display name (the `originalName` field only).
+   *
+   * Metadata-only: the backing storage object keeps its original key, so
+   * this never moves or re-uploads bytes.
+   */
+  async renameFile(fileId: string, originalName: string): Promise<FileInfo> {
+    return this.request<FileInfo>('PATCH', `/api/v1/files/${fileId}`, { originalName });
+  }
+
+  /**
    * Get a time-limited signed URL for unauthenticated file download
    */
   async getSignedUrl(fileId: string, expiresIn = 3600): Promise<SignedUrlInfo> {

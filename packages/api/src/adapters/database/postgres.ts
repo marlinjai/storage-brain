@@ -295,6 +295,15 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     `;
   }
 
+  async renameFile(fileId: string, tenantId: string, originalName: string): Promise<StoredFile | null> {
+    const now = Date.now();
+    await this.sql`
+      UPDATE files SET original_name = ${originalName}, updated_at = ${now}
+      WHERE id = ${fileId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
+    `;
+    return this.getFileById(fileId, tenantId);
+  }
+
   // ============================================================================
   // Workspaces
   // ============================================================================

@@ -6,6 +6,7 @@ import {
   listFilesQuerySchema,
   listContextsQuerySchema,
   fileIdSchema,
+  renameFileSchema,
   type ListFilesInput,
 } from '@storage-brain/shared';
 import { generateSignedToken, generatePermanentToken } from '../services/signed-url';
@@ -94,6 +95,42 @@ fileRoutes.get('/:fileId', async (c) => {
 
   // Fetch file from database
   const file = await db.getFileById(fileId, tenant.id);
+
+  if (!file) {
+    throw ApiError.notFound('File not found');
+  }
+
+  return c.json({
+    id: file.id,
+    url: getFileUrl(file.id),
+    originalName: file.originalName,
+    fileType: file.fileType,
+    sizeBytes: file.sizeBytes,
+    context: file.context,
+    tags: file.tags,
+    metadata: file.metadata,
+    processingStatus: file.processingStatus,
+    workspaceId: file.workspaceId,
+    createdAt: new Date(file.createdAt).toISOString(),
+  });
+});
+
+/**
+ * PATCH /api/v1/files/:fileId
+ * Rename a file's display name (`originalName`). Metadata-only: the backing
+ * object's storage key is untouched, so this never moves or re-uploads bytes.
+ */
+fileRoutes.patch('/:fileId', async (c) => {
+  const tenant = c.get('tenant');
+  const db = c.get('db');
+  const fileId = c.req.param('fileId');
+
+  fileIdSchema.parse(fileId);
+
+  const body: unknown = await c.req.json();
+  const { originalName } = renameFileSchema.parse(body);
+
+  const file = await db.renameFile(fileId, tenant.id, originalName);
 
   if (!file) {
     throw ApiError.notFound('File not found');

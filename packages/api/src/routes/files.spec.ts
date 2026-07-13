@@ -60,6 +60,7 @@ function createMockDb() {
     updateFileMetadata: vi.fn(),
     updateFileProcessingStatus: vi.fn(),
     updateFileSizeBytes: vi.fn(),
+    renameFile: vi.fn().mockResolvedValue(mockFile),
     createWorkspace: vi.fn(),
     getWorkspaceById: vi.fn(),
     listWorkspacesByTenant: vi.fn(),
@@ -83,7 +84,7 @@ function createMockDb() {
   };
 }
 
-function createMockStorage(): StorageAdapter {
+function createMockStorage() {
   return {
     put: vi.fn(),
     get: vi.fn().mockResolvedValue({
@@ -228,6 +229,138 @@ describe('file routes', () => {
       }, ENV);
 
       expect(db.getFileById).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
+    });
+  });
+
+  describe('PATCH /api/v1/files/:fileId', () => {
+    it('renames the file and returns the updated file info', async () => {
+      const renamed = { ...mockFile, originalName: 'voice-sample_max-mustermann_2026-07-08_ab12.webm' };
+      db.renameFile.mockResolvedValueOnce(renamed);
+
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ originalName: 'voice-sample_max-mustermann_2026-07-08_ab12.webm' }),
+        },
+        ENV,
+      );
+
+      expect(res.status).toBe(200);
+      const body: TestResponseBody = await res.json();
+      expect(body.originalName).toBe('voice-sample_max-mustermann_2026-07-08_ab12.webm');
+      expect(db.renameFile).toHaveBeenCalledWith(
+        FILE_ID,
+        TENANT_ID,
+        'voice-sample_max-mustermann_2026-07-08_ab12.webm',
+      );
+    });
+
+    it('never touches the storage adapter (metadata-only rename)', async () => {
+      await app.request(
+        `/api/v1/files/${FILE_ID}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ originalName: 'renamed.png' }),
+        },
+        ENV,
+      );
+
+      expect(storage.put).not.toHaveBeenCalled();
+      expect(storage.delete).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 when the file does not exist for this tenant', async () => {
+      db.renameFile.mockResolvedValueOnce(null);
+
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ originalName: 'renamed.png' }),
+        },
+        ENV,
+      );
+
+      expect(res.status).toBe(404);
+    });
+
+    it('rejects an empty originalName with 400', async () => {
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ originalName: '' }),
+        },
+        ENV,
+      );
+
+      expect(res.status).toBe(400);
+      expect(db.renameFile).not.toHaveBeenCalled();
+    });
+
+    it('rejects a name with a path separator with 400', async () => {
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ originalName: '../etc/passwd' }),
+        },
+        ENV,
+      );
+
+      expect(res.status).toBe(400);
+      expect(db.renameFile).not.toHaveBeenCalled();
+    });
+
+    it('rejects a malformed file id with 400', async () => {
+      const res = await app.request(
+        '/api/v1/files/not-a-uuid',
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ originalName: 'renamed.png' }),
+        },
+        ENV,
+      );
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 401 without auth header', async () => {
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ originalName: 'renamed.png' }),
+        },
+        ENV,
+      );
+      expect(res.status).toBe(401);
     });
   });
 
