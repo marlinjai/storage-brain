@@ -346,6 +346,17 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       .run();
   }
 
+  async renameFile(fileId: string, tenantId: string, originalName: string): Promise<StoredFile | null> {
+    const now = Date.now();
+    await this.db
+      .prepare(
+        'UPDATE files SET original_name = ?, updated_at = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL',
+      )
+      .bind(originalName, now, fileId, tenantId)
+      .run();
+    return this.getFileById(fileId, tenantId);
+  }
+
   // ============================================================================
   // Workspaces
   // ============================================================================

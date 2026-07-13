@@ -294,6 +294,59 @@ describe('D1DatabaseAdapter migrateFilesToWorkspace', () => {
   });
 });
 
+describe('D1DatabaseAdapter renameFile', () => {
+  let db: D1DatabaseAdapter;
+
+  const TENANT_A = 'tenant-rename-a';
+  const TENANT_B = 'tenant-rename-b';
+
+  beforeEach(async () => {
+    db = makeAdapter();
+    await db.createTenant({ id: TENANT_A, ...baseTenant, name: 'Tenant A' });
+    await db.createTenant({ id: TENANT_B, ...baseTenant, name: 'Tenant B' });
+    await db.createFile({
+      id: 'f-a',
+      tenantId: TENANT_A,
+      originalName: 'original.png',
+      storedPath: `tenants/${TENANT_A}/f-a.png`,
+      fileType: 'image/png',
+      sizeBytes: 100,
+      context: 'default',
+      tags: null,
+    });
+  });
+
+  it('renames a file and returns the updated row', async () => {
+    const result = await db.renameFile('f-a', TENANT_A, 'renamed.png');
+
+    expect(result?.originalName).toBe('renamed.png');
+    expect((await db.getFileById('f-a', TENANT_A))?.originalName).toBe('renamed.png');
+  });
+
+  it('is a no-op and returns null when the tenantId does not match (cross-tenant isolation)', async () => {
+    const result = await db.renameFile('f-a', TENANT_B, 'hijacked.png');
+
+    expect(result).toBeNull();
+    // The row is untouched — a real bug here (e.g. a dropped tenant_id
+    // guard) would let tenant B rename tenant A's file.
+    expect((await db.getFileById('f-a', TENANT_A))?.originalName).toBe('original.png');
+  });
+
+  it('returns null for a soft-deleted file', async () => {
+    await db.softDeleteFile('f-a', TENANT_A);
+
+    const result = await db.renameFile('f-a', TENANT_A, 'renamed.png');
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null for an unknown file id', async () => {
+    const result = await db.renameFile('does-not-exist', TENANT_A, 'renamed.png');
+
+    expect(result).toBeNull();
+  });
+});
+
 describe('D1DatabaseAdapter aggregateFileContexts', () => {
   let db: D1DatabaseAdapter;
 

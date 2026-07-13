@@ -15,6 +15,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Rename file** — new `PATCH /api/v1/files/:fileId` endpoint and SDK
+  `renameFile(fileId, originalName)` method (SDK `v0.10.0`). Updates a file's
+  display name only; the backing storage object keeps its original key, so
+  this is a metadata-only update with no re-upload or byte move.
 - **Permanent file URLs** (revocable via secret rotation) — new
   `GET /api/v1/files/:fileId/permanent-url` endpoint and SDK
   `getPermanentUrl(fileId)` method (SDK `v0.9.0`). Returns a fully-qualified

@@ -182,6 +182,50 @@ GET /api/v1/files/:fileId
 **Error Responses:**
 - `404` -- File not found or belongs to another tenant
 
+### Rename File
+
+Update a file's display name (`originalName`). Metadata-only: the backing storage object keeps its original key, so this never moves or re-uploads bytes.
+
+```
+PATCH /api/v1/files/:fileId
+```
+
+**Auth:** Tenant API key (Bearer token)
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `fileId` | UUID | File identifier |
+
+**Request Body:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `originalName` | string | New display name (1-255 chars, no path separators or control characters) |
+
+**Example Response (200):**
+
+```json
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "url": "/api/v1/files/a1b2c3d4-e5f6-7890-abcd-ef1234567890/download",
+  "originalName": "voice-sample_max-mustermann_2026-07-08_ab12.webm",
+  "fileType": "audio/webm",
+  "sizeBytes": 245000,
+  "context": "voice-sample",
+  "tags": { "familyId": "fam-1" },
+  "metadata": null,
+  "processingStatus": "completed",
+  "workspaceId": null,
+  "createdAt": "2026-02-28T10:30:00.000Z"
+}
+```
+
+**Error Responses:**
+- `400` -- Invalid `originalName` (empty, too long, or contains path separators / control characters)
+- `404` -- File not found or belongs to another tenant
+
 ### Delete File
 
 Soft-delete a file. The file record is marked as deleted but not immediately removed from storage.

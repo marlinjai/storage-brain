@@ -145,6 +145,34 @@ describe('StorageBrain SDK', () => {
     });
   });
 
+  describe('renameFile', () => {
+    it('makes PATCH request with the new originalName and returns the updated file', async () => {
+      const fileData = { id: 'file-1', originalName: 'voice-sample_max_2026-07-08_ab12.webm' };
+      mockFetch.mockResolvedValueOnce(jsonResponse(fileData));
+
+      const result = await client.renameFile('file-1', 'voice-sample_max_2026-07-08_ab12.webm');
+
+      expect(result).toEqual(fileData);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/files/file-1',
+        expect.objectContaining({
+          method: 'PATCH',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          }),
+          body: JSON.stringify({ originalName: 'voice-sample_max_2026-07-08_ab12.webm' }),
+        })
+      );
+    });
+
+    it('throws on 404', async () => {
+      mockFetch.mockResolvedValueOnce(errorResponse(404, 'FILE_NOT_FOUND', 'File not found'));
+
+      await expect(client.renameFile('missing', 'new-name.webm')).rejects.toThrow();
+    });
+  });
+
   describe('getSignedUrl', () => {
     it('passes expiresIn parameter', async () => {
       mockFetch.mockResolvedValueOnce(
