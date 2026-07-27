@@ -13,6 +13,7 @@ import { adminRoutes } from './routes/admin';
 import { workspaceRoutes } from './routes/workspaces';
 import { webhookRoutes } from './routes/webhooks';
 import { internalUploadRoutes } from './routes/internal-upload';
+import { internalErasureRoutes } from './routes/internal-erasure';
 import { errorHandler } from './middleware/error-handler';
 import { rateLimiter, tenantKeyFn } from './middleware/rate-limit';
 import { publicDownloadHandler } from './routes/public-download';
@@ -110,6 +111,12 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
   // Admin routes first (own auth middleware, must not be intercepted by tenant auth)
   app.use('/api/v1/admin/*', adminRateLimit);
   app.route('/api/v1/admin', adminRoutes);
+
+  // auth-brain GDPR erasure webhook consumer (company-isolation S4). Authenticated
+  // ONLY by its HMAC signature over the raw body: it intentionally bypasses the
+  // tenant Bearer middleware but never the signature. Registered before the tenant
+  // route groups so nothing intercepts it.
+  app.route('/api/v1/internal', internalErasureRoutes);
 
   // Tenant & workspace routes (tenant authMiddleware)
   app.use('/api/v1/tenant/*', apiRateLimit);

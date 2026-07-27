@@ -19,6 +19,8 @@ import type {
   ListTenantsInput,
   ListTenantsResult,
   UpdateTenantInput,
+  ErasureEventRecord,
+  RecordErasureEventInput,
   QuotaResponse,
   AllowedMimeType,
   UploadSessionStatus,
@@ -93,6 +95,35 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       .bind(authTenantId)
       .first();
     return result ? this.mapTenantRow(result) : null;
+  }
+
+  async findTenantsForErasure(
+    authTenantId: string | null,
+    authWorkspaceIds: string[]
+  ): Promise<Tenant[]> {
+    const conditions: string[] = [];
+    const params: string[] = [];
+
+    if (authTenantId) {
+      conditions.push('auth_tenant_id = ?');
+      params.push(authTenantId);
+    }
+    if (authWorkspaceIds.length > 0) {
+      const placeholders = authWorkspaceIds.map(() => '?').join(', ');
+      conditions.push(`auth_workspace_id IN (${placeholders})`);
+      params.push(...authWorkspaceIds);
+    }
+
+    // No selector -> nothing to erase (never a table scan).
+    if (conditions.length === 0) return [];
+
+    // OR of the two bindings; a row that satisfies both still appears once.
+    const result = await this.db
+      .prepare(`SELECT * FROM tenants WHERE ${conditions.join(' OR ')}`)
+      .bind(...params)
+      .all();
+
+    return result.results.map((row) => this.mapTenantRow(row));
   }
 
   async updateTenantApiKeyHash(tenantId: string, newHash: string, keyPrefix: string): Promise<boolean> {
@@ -263,6 +294,17 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       .first();
 
     return result ? this.mapFileRow(result) : null;
+  }
+
+  async getAllStoredPathsByTenant(tenantId: string): Promise<string[]> {
+    // Every file row for the tenant, including soft-deleted ones (deleted_at
+    // NOT filtered) so erasure purges tombstoned objects too.
+    const result = await this.db
+      .prepare('SELECT stored_path FROM files WHERE tenant_id = ?')
+      .bind(tenantId)
+      .all();
+
+    return (result.results as Array<{ stored_path: string }>).map((row) => row.stored_path);
   }
 
   async listFilesByTenant(tenantId: string, options: ListFilesInput): Promise<ListFilesResult> {
@@ -789,6 +831,36 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
          WHERE id = ?`
       )
       .bind(sizeBytes, now, workspaceId)
+      .run();
+  }
+
+  // ============================================================================
+  // Erasure webhook idempotency ledger
+  // ============================================================================
+
+  async getErasureEvent(eventId: string): Promise<ErasureEventRecord | null> {
+    const row = await this.db
+      .prepare('SELECT event_id, kind, processed_at FROM erasure_events WHERE event_id = ?')
+      .bind(eventId)
+      .first<{ event_id: string; kind: string; processed_at: number }>();
+
+    if (!row) return null;
+    return { eventId: row.event_id, kind: row.kind, processedAt: Number(row.processed_at) };
+  }
+
+  async recordErasureEvent(input: RecordErasureEventInput): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO erasure_events (event_id, kind, auth_tenant_id, matched_tenant_count, processed_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      .bind(
+        input.eventId,
+        input.kind,
+        input.authTenantId ?? null,
+        input.matchedTenantCount,
+        input.processedAt
+      )
       .run();
   }
 

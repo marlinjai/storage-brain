@@ -35,6 +35,15 @@ export interface Env {
    * auth-brain's verify endpoint, so the Worker needs no OpenFGA access.
    */
   AUTH_BRAIN_URL?: string;
+
+  /**
+   * HMAC signing secret for the auth-brain GDPR erasure webhook consumer
+   * (POST /api/v1/internal/erasure). Shared with auth-brain's registry entry
+   * for the `storage` app. FAIL-CLOSED: when unset the endpoint answers 500 and
+   * processes nothing, so a misconfiguration can never accept an unsigned or
+   * unverifiable erasure. Never logged.
+   */
+  STORAGE_ERASURE_WEBHOOK_SECRET?: string;
 }
 
 /**

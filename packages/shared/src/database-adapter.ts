@@ -118,6 +118,24 @@ export interface UpdateTenantInput {
   authTenantId?: string | null;
 }
 
+/** A processed GDPR erasure webhook delivery, keyed by its stable event id. */
+export interface ErasureEventRecord {
+  eventId: string;
+  kind: string;
+  processedAt: number;
+}
+
+export interface RecordErasureEventInput {
+  eventId: string;
+  /** 'user.erased' | 'tenant.erased'. */
+  kind: string;
+  /** The erased auth-brain company id, when the event carries one. */
+  authTenantId: string | null;
+  /** How many SB tenants this delivery matched and deleted. */
+  matchedTenantCount: number;
+  processedAt: number;
+}
+
 export interface DatabaseAdapter {
   // Tenant
   createTenant(input: CreateTenantInput): Promise<void>;
@@ -127,6 +145,13 @@ export interface DatabaseAdapter {
   getTenantByAuthWorkspaceId(authWorkspaceId: string): Promise<Tenant | null>;
   /** Resolve a storage tenant by its bound auth-brain COMPANY (tenant) id. */
   getTenantByAuthTenantId(authTenantId: string): Promise<Tenant | null>;
+  /**
+   * Resolve every storage tenant affected by a company erasure: bound to the
+   * company id (`auth_tenant_id`) OR to any of the given workspace ids
+   * (`auth_workspace_id`). Results are de-duplicated. A null company id and an
+   * empty workspace list match nothing (returns []).
+   */
+  findTenantsForErasure(authTenantId: string | null, authWorkspaceIds: string[]): Promise<Tenant[]>;
   updateTenantApiKeyHash(tenantId: string, newHash: string, keyPrefix: string): Promise<boolean>;
   listTenants(input: ListTenantsInput): Promise<ListTenantsResult>;
   updateTenant(tenantId: string, updates: UpdateTenantInput): Promise<Tenant | null>;
@@ -138,6 +163,12 @@ export interface DatabaseAdapter {
   getFileByIdUnscoped(fileId: string): Promise<StoredFile | null>;
   getFileByStoredPath(storedPath: string): Promise<StoredFile | null>;
   listFilesByTenant(tenantId: string, options: ListFilesInput): Promise<ListFilesResult>;
+  /**
+   * Every stored object key for a tenant, INCLUDING soft-deleted files, so an
+   * erasure can purge objects whose DB rows are only tombstoned. Ordering is
+   * unspecified.
+   */
+  getAllStoredPathsByTenant(tenantId: string): Promise<string[]>;
   softDeleteFile(fileId: string, tenantId: string): Promise<void>;
   updateFileMetadata(fileId: string, metadata: Record<string, unknown>, status: ProcessingStatus): Promise<void>;
   updateFileProcessingStatus(fileId: string, status: ProcessingStatus): Promise<void>;
@@ -189,6 +220,12 @@ export interface DatabaseAdapter {
   checkWorkspaceQuota(workspaceId: string, fileSizeBytes: number): Promise<QuotaCheckResult | null>;
   reserveWorkspaceQuota(workspaceId: string, sizeBytes: number): Promise<void>;
   releaseWorkspaceQuota(workspaceId: string, sizeBytes: number): Promise<void>;
+
+  // Erasure webhook idempotency ledger
+  /** Look up a previously-processed erasure delivery by its event id. */
+  getErasureEvent(eventId: string): Promise<ErasureEventRecord | null>;
+  /** Record an erasure delivery as processed (idempotency key = eventId). */
+  recordErasureEvent(input: RecordErasureEventInput): Promise<void>;
 
   // Migrations
   migrate(): Promise<void>;

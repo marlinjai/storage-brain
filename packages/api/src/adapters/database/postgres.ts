@@ -22,6 +22,8 @@ import type {
   ListTenantsInput,
   ListTenantsResult,
   UpdateTenantInput,
+  ErasureEventRecord,
+  RecordErasureEventInput,
   QuotaResponse,
   AllowedMimeType,
   UploadSessionStatus,
@@ -95,6 +97,25 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     const rows = await this.sql`SELECT * FROM tenants WHERE auth_tenant_id = ${authTenantId}`;
     const row = rows[0];
     return row ? this.mapTenantRow(row) : null;
+  }
+
+  async findTenantsForErasure(
+    authTenantId: string | null,
+    authWorkspaceIds: string[],
+  ): Promise<Tenant[]> {
+    const clauses: postgres.PendingQuery<postgres.Row[]>[] = [];
+    if (authTenantId) clauses.push(this.sql`auth_tenant_id = ${authTenantId}`);
+    if (authWorkspaceIds.length > 0) {
+      clauses.push(this.sql`auth_workspace_id = ANY(${authWorkspaceIds})`);
+    }
+
+    // No selector -> nothing to erase (never a table scan).
+    if (clauses.length === 0) return [];
+
+    // OR of the two bindings; a row satisfying both still appears once.
+    const where = clauses.reduce((acc, clause) => this.sql`${acc} OR ${clause}`);
+    const rows = await this.sql`SELECT * FROM tenants WHERE ${where}`;
+    return rows.map((row) => this.mapTenantRow(row));
   }
 
   async updateTenantApiKeyHash(tenantId: string, newHash: string, keyPrefix: string): Promise<boolean> {
@@ -225,6 +246,13 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     `;
     const row = rows[0];
     return row ? this.mapFileRow(row) : null;
+  }
+
+  async getAllStoredPathsByTenant(tenantId: string): Promise<string[]> {
+    // Every file row for the tenant, including soft-deleted ones (deleted_at NOT
+    // filtered) so erasure purges tombstoned objects too.
+    const rows = await this.sql`SELECT stored_path FROM files WHERE tenant_id = ${tenantId}`;
+    return rows.map((row) => row.stored_path as string);
   }
 
   async listFilesByTenant(tenantId: string, options: ListFilesInput): Promise<ListFilesResult> {
@@ -658,6 +686,30 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
       UPDATE workspaces
       SET used_bytes = GREATEST(0, used_bytes - ${sizeBytes}), updated_at = ${now}
       WHERE id = ${workspaceId}
+    `;
+  }
+
+  // ============================================================================
+  // Erasure webhook idempotency ledger
+  // ============================================================================
+
+  async getErasureEvent(eventId: string): Promise<ErasureEventRecord | null> {
+    const rows = await this.sql`
+      SELECT event_id, kind, processed_at FROM erasure_events WHERE event_id = ${eventId}
+    `;
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      eventId: row.event_id as string,
+      kind: row.kind as string,
+      processedAt: Number(row.processed_at),
+    };
+  }
+
+  async recordErasureEvent(input: RecordErasureEventInput): Promise<void> {
+    await this.sql`
+      INSERT INTO erasure_events (event_id, kind, auth_tenant_id, matched_tenant_count, processed_at)
+      VALUES (${input.eventId}, ${input.kind}, ${input.authTenantId ?? null}, ${input.matchedTenantCount}, ${input.processedAt})
     `;
   }
 

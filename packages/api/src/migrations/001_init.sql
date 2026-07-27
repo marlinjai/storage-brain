@@ -121,3 +121,16 @@ CREATE INDEX IF NOT EXISTS idx_upload_sessions_file_id ON upload_sessions(file_i
 CREATE INDEX IF NOT EXISTS idx_upload_sessions_tenant_id ON upload_sessions(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_upload_sessions_expires_at ON upload_sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_upload_sessions_status ON upload_sessions(status);
+
+-- Idempotency ledger for the auth-brain GDPR erasure webhook consumer
+-- (company-isolation S4, POST /api/v1/internal/erasure). Mirrors D1 migration
+-- 0008. One row per delivered event_id: its presence marks the delivery already
+-- fully processed, so a replay is a no-op ack. Holds ids + a processed timestamp
+-- only, NEVER the webhook body or signing secret. Idempotent for existing deploys.
+CREATE TABLE IF NOT EXISTS erasure_events (
+  event_id             TEXT PRIMARY KEY,
+  kind                 TEXT NOT NULL,
+  auth_tenant_id       TEXT,
+  matched_tenant_count INTEGER NOT NULL DEFAULT 0,
+  processed_at         BIGINT NOT NULL
+);
