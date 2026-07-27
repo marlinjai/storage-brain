@@ -37,8 +37,8 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     const now = Date.now();
     await this.db
       .prepare(
-        `INSERT INTO tenants (id, name, api_key_hash, key_prefix, quota_bytes, used_bytes, allowed_file_types, auth_workspace_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`
+        `INSERT INTO tenants (id, name, api_key_hash, key_prefix, quota_bytes, used_bytes, allowed_file_types, auth_workspace_id, auth_tenant_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`
       )
       .bind(
         input.id,
@@ -48,6 +48,7 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
         input.quotaBytes,
         JSON.stringify(input.allowedFileTypes),
         input.authWorkspaceId ?? null,
+        input.authTenantId ?? null,
         now,
         now
       )
@@ -82,6 +83,14 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     const result = await this.db
       .prepare('SELECT * FROM tenants WHERE auth_workspace_id = ?')
       .bind(authWorkspaceId)
+      .first();
+    return result ? this.mapTenantRow(result) : null;
+  }
+
+  async getTenantByAuthTenantId(authTenantId: string): Promise<Tenant | null> {
+    const result = await this.db
+      .prepare('SELECT * FROM tenants WHERE auth_tenant_id = ?')
+      .bind(authTenantId)
       .first();
     return result ? this.mapTenantRow(result) : null;
   }
@@ -157,6 +166,11 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     if (updates.authWorkspaceId !== undefined) {
       setClauses.push('auth_workspace_id = ?');
       params.push(updates.authWorkspaceId);
+    }
+
+    if (updates.authTenantId !== undefined) {
+      setClauses.push('auth_tenant_id = ?');
+      params.push(updates.authTenantId);
     }
 
     params.push(tenantId);
@@ -607,10 +621,10 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
 
     await this.db
       .prepare(
-        `INSERT INTO upload_sessions (id, file_id, presigned_url, expires_at, status, created_at)
-         VALUES (?, ?, ?, ?, 'pending', ?)`
+        `INSERT INTO upload_sessions (id, file_id, tenant_id, presigned_url, expires_at, status, created_at)
+         VALUES (?, ?, ?, ?, ?, 'pending', ?)`
       )
-      .bind(id, input.fileId, input.presignedUrl, input.expiresAt, now)
+      .bind(id, input.fileId, input.tenantId ?? null, input.presignedUrl, input.expiresAt, now)
       .run();
 
     return id;
@@ -803,6 +817,7 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
         ? (JSON.parse(row.allowed_file_types as string) as AllowedMimeType[])
         : null,
       authWorkspaceId: (row.auth_workspace_id as string) ?? null,
+      authTenantId: (row.auth_tenant_id as string) ?? null,
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,
     };
@@ -848,6 +863,7 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     return {
       id: row.id as string,
       fileId: row.file_id as string,
+      tenantId: (row.tenant_id as string) ?? null,
       presignedUrl: row.presigned_url as string,
       expiresAt: row.expires_at as number,
       status: row.status as UploadSessionStatus,

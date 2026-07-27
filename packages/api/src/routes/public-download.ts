@@ -4,6 +4,8 @@ import { ApiError } from '../middleware/error-handler';
 import { fileIdSchema, apiKeySchema } from '@storage-brain/shared';
 import { verifySignedToken, verifyPermanentToken } from '../services/signed-url';
 import { buildContentDisposition } from '../utils/content-disposition';
+import { authenticateApiKey } from '../middleware/auth';
+import { getAuthBrainClient } from '../lib/auth-brain';
 
 /**
  * Public download handler that accepts either:
@@ -68,17 +70,17 @@ export async function publicDownloadHandler(c: Context<AppEnv>) {
     originalName = file.originalName;
     sizeBytes = file.sizeBytes;
   } else if (authHeader?.startsWith('Bearer ')) {
-    // --- Bearer auth path (same as authMiddleware logic) ---
+    // --- Bearer auth path ---
+    // Runs the SAME compound auth as authMiddleware (legacy tenant key + both
+    // auth-brain classes + the storage app-grant door), not a legacy-only
+    // lookup, so auth-brain service-account keys can download too (finding 4).
     const apiKey = authHeader.slice(7);
     const parseResult = apiKeySchema.safeParse(apiKey);
     if (!parseResult.success) {
       throw ApiError.unauthorized('Invalid API key format');
     }
 
-    const tenant = await db.getTenantByApiKey(apiKey);
-    if (!tenant) {
-      throw ApiError.unauthorized('Invalid API key');
-    }
+    const tenant = await authenticateApiKey(db, getAuthBrainClient(c.env), apiKey);
 
     const file = await db.getFileById(fileId, tenant.id);
     if (!file) {

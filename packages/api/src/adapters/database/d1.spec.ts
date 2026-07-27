@@ -135,6 +135,107 @@ describe('D1DatabaseAdapter auth_workspace_id', () => {
   });
 });
 
+describe('D1DatabaseAdapter auth_tenant_id (company binding)', () => {
+  let db: D1DatabaseAdapter;
+
+  beforeEach(() => {
+    db = makeAdapter();
+  });
+
+  it('migrations 0006/0007 apply and round-trip authTenantId on create', async () => {
+    await db.createTenant({ id: 'c1', ...baseTenant, authTenantId: 'company-1' });
+
+    const tenant = await db.getTenantById('c1');
+    expect(tenant?.authTenantId).toBe('company-1');
+    // Existing bindings unaffected.
+    expect(tenant?.authWorkspaceId).toBeNull();
+  });
+
+  it('a tenant created without authTenantId maps to null (no regression)', async () => {
+    await db.createTenant({ id: 'c2', ...baseTenant, name: 'NoCompany' });
+    expect((await db.getTenantById('c2'))?.authTenantId).toBeNull();
+  });
+
+  it('getTenantByAuthTenantId hits and misses', async () => {
+    await db.createTenant({ id: 'c3', ...baseTenant, name: 'Bound', authTenantId: 'company-3' });
+
+    expect((await db.getTenantByAuthTenantId('company-3'))?.id).toBe('c3');
+    expect(await db.getTenantByAuthTenantId('company-missing')).toBeNull();
+  });
+
+  it('updateTenant sets and clears authTenantId', async () => {
+    await db.createTenant({ id: 'c4', ...baseTenant, name: 'Updatable' });
+
+    const set = await db.updateTenant('c4', { authTenantId: 'company-4' });
+    expect(set?.authTenantId).toBe('company-4');
+    expect((await db.getTenantByAuthTenantId('company-4'))?.id).toBe('c4');
+
+    const cleared = await db.updateTenant('c4', { authTenantId: null });
+    expect(cleared?.authTenantId).toBeNull();
+    expect(await db.getTenantByAuthTenantId('company-4')).toBeNull();
+  });
+
+  it('enforces uniqueness of a non-null auth_tenant_id (a company maps to one tenant)', async () => {
+    await db.createTenant({ id: 'c5', ...baseTenant, name: 'First', authTenantId: 'company-shared' });
+
+    await expect(
+      db.createTenant({ id: 'c6', ...baseTenant, name: 'Second', authTenantId: 'company-shared' })
+    ).rejects.toThrow();
+  });
+
+  it('allows multiple tenants with a null auth_tenant_id (partial index)', async () => {
+    await db.createTenant({ id: 'c7', ...baseTenant, name: 'NullA' });
+    await db.createTenant({ id: 'c8', ...baseTenant, name: 'NullB' });
+
+    expect((await db.getTenantById('c7'))?.authTenantId).toBeNull();
+    expect((await db.getTenantById('c8'))?.authTenantId).toBeNull();
+  });
+});
+
+describe('D1DatabaseAdapter upload_sessions tenant stamping', () => {
+  let db: D1DatabaseAdapter;
+  const TENANT = 'tenant-upl';
+  const FILE = 'file-upl';
+
+  beforeEach(async () => {
+    db = makeAdapter();
+    await db.createTenant({ id: TENANT, ...baseTenant, name: 'Upload Tenant' });
+    await db.createFile({
+      id: FILE,
+      tenantId: TENANT,
+      originalName: 'x.png',
+      storedPath: `tenants/${TENANT}/${FILE}.png`,
+      fileType: 'image/png',
+      sizeBytes: 10,
+      context: 'default',
+      tags: null,
+    });
+  });
+
+  it('stamps and round-trips the owning tenant on the session', async () => {
+    await db.createUploadSession({
+      fileId: FILE,
+      tenantId: TENANT,
+      presignedUrl: '/_internal/upload/x',
+      expiresAt: Date.now() + 1000,
+    });
+
+    const session = await db.getUploadSessionByFileId(FILE);
+    expect(session?.tenantId).toBe(TENANT);
+  });
+
+  it('leaves tenantId null when not stamped (backfillable, no regression)', async () => {
+    await db.createUploadSession({
+      fileId: FILE,
+      presignedUrl: '/_internal/upload/x',
+      expiresAt: Date.now() + 1000,
+    });
+
+    const session = await db.getUploadSessionByFileId(FILE);
+    expect(session?.tenantId).toBeNull();
+  });
+});
+
 describe('D1DatabaseAdapter migrateFilesToWorkspace', () => {
   let db: D1DatabaseAdapter;
 

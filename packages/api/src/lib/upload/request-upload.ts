@@ -111,9 +111,11 @@ export async function requestUpload(params: RequestUploadParams): Promise<Upload
   const uploadToken = await generateUploadToken(storedPath, expiresAt, urlSigningSecret);
   const presignedUrl = `/_internal/upload/${encodeURIComponent(storedPath)}?token=${uploadToken}&expires=${expiresAt}`;
 
-  // Create upload session
+  // Create upload session, stamped with the owning tenant so the token-only
+  // upload route can scope its lookups (company-isolation S1, finding 7).
   await db.createUploadSession({
     fileId,
+    tenantId: tenant.id,
     presignedUrl,
     expiresAt,
   });
