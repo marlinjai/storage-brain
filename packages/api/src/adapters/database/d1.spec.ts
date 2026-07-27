@@ -534,3 +534,106 @@ describe('D1DatabaseAdapter aggregateFileContexts', () => {
     expect(result).toEqual([]);
   });
 });
+
+describe('D1DatabaseAdapter erasure ledger + resolution (migration 0008)', () => {
+  let db: D1DatabaseAdapter;
+
+  beforeEach(() => {
+    db = makeAdapter();
+  });
+
+  it('migration 0008 applies: an erasure event round-trips and is a miss until recorded', async () => {
+    expect(await db.getErasureEvent('evt-1')).toBeNull();
+
+    await db.recordErasureEvent({
+      eventId: 'evt-1',
+      kind: 'tenant.erased',
+      authTenantId: 'company-1',
+      matchedTenantCount: 2,
+      processedAt: 1_700_000_000_000,
+    });
+
+    const record = await db.getErasureEvent('evt-1');
+    expect(record).toEqual({ eventId: 'evt-1', kind: 'tenant.erased', processedAt: 1_700_000_000_000 });
+  });
+
+  it('enforces idempotency: re-recording the same event_id rejects (PRIMARY KEY)', async () => {
+    await db.recordErasureEvent({
+      eventId: 'evt-dup',
+      kind: 'user.erased',
+      authTenantId: null,
+      matchedTenantCount: 0,
+      processedAt: 1,
+    });
+    await expect(
+      db.recordErasureEvent({
+        eventId: 'evt-dup',
+        kind: 'user.erased',
+        authTenantId: null,
+        matchedTenantCount: 0,
+        processedAt: 2,
+      })
+    ).rejects.toThrow();
+  });
+
+  it('findTenantsForErasure resolves by company id OR workspace id, without duplicating a both-match', async () => {
+    await db.createTenant({ id: 'sb-1', ...baseTenant, name: 'By company', authTenantId: 'company-1' });
+    await db.createTenant({
+      id: 'sb-2',
+      ...baseTenant,
+      name: 'By workspace',
+      authWorkspaceId: 'auth-ws-2',
+    });
+    await db.createTenant({
+      id: 'sb-both',
+      ...baseTenant,
+      name: 'By both',
+      authTenantId: 'company-both',
+      authWorkspaceId: 'auth-ws-both',
+    });
+    await db.createTenant({ id: 'sb-other', ...baseTenant, name: 'Unrelated', authTenantId: 'company-x' });
+
+    const byCompany = await db.findTenantsForErasure('company-1', []);
+    expect(byCompany.map((t) => t.id)).toEqual(['sb-1']);
+
+    const byWorkspace = await db.findTenantsForErasure(null, ['auth-ws-2']);
+    expect(byWorkspace.map((t) => t.id)).toEqual(['sb-2']);
+
+    const both = await db.findTenantsForErasure('company-both', ['auth-ws-both']);
+    expect(both.map((t) => t.id)).toEqual(['sb-both']); // one row, not two
+
+    const combined = await db.findTenantsForErasure('company-1', ['auth-ws-2']);
+    expect(combined.map((t) => t.id).sort()).toEqual(['sb-1', 'sb-2']);
+  });
+
+  it('findTenantsForErasure returns [] when there is no selector', async () => {
+    await db.createTenant({ id: 'sb-1', ...baseTenant, name: 'X', authTenantId: 'company-1' });
+    expect(await db.findTenantsForErasure(null, [])).toEqual([]);
+  });
+
+  it('getAllStoredPathsByTenant includes soft-deleted files and excludes other tenants', async () => {
+    await db.createTenant({ id: 'sb-1', ...baseTenant, name: 'A' });
+    await db.createTenant({ id: 'sb-2', ...baseTenant, name: 'B' });
+
+    const mkFile = async (tenantId: string, id: string, deleted = false): Promise<void> => {
+      await db.createFile({
+        id,
+        tenantId,
+        originalName: `${id}.png`,
+        storedPath: `tenants/${tenantId}/${id}.png`,
+        fileType: 'image/png',
+        sizeBytes: 1,
+        context: 'default',
+        tags: null,
+      });
+      if (deleted) await db.softDeleteFile(id, tenantId);
+    };
+
+    await mkFile('sb-1', 'live');
+    await mkFile('sb-1', 'tombstoned', true);
+    await mkFile('sb-2', 'other');
+
+    const paths = await db.getAllStoredPathsByTenant('sb-1');
+    expect(paths.sort()).toEqual(['tenants/sb-1/live.png', 'tenants/sb-1/tombstoned.png']);
+  });
+});

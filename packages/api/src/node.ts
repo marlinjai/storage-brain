@@ -52,6 +52,9 @@ function main(): void {
       // OpenFGA check is folded into auth-brain's verify endpoint, so this is
       // the only auth-brain config the server needs.
       AUTH_BRAIN_URL: process.env.AUTH_BRAIN_URL,
+      // auth-brain GDPR erasure webhook secret (optional at boot; the endpoint
+      // fails closed with a 500 if a delivery arrives while it is unset).
+      STORAGE_ERASURE_WEBHOOK_SECRET: process.env.STORAGE_ERASURE_WEBHOOK_SECRET,
     },
     isReady: () => ready,
   });
