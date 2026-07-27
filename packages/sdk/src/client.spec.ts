@@ -51,14 +51,22 @@ describe('StorageBrain SDK', () => {
   });
 
   describe('withWorkspace', () => {
-    it('returns a new instance scoped to the workspace', async () => {
+    it('returns a new instance that scopes list/upload calls via the workspaceId query param', async () => {
+      const scoped = client.withWorkspace('ws-123');
+      mockFetch.mockResolvedValueOnce(jsonResponse({ files: [], nextCursor: null, total: 0 }));
+      await scoped.listFiles();
+
+      const url = mockFetch.mock.calls[0]![0] as string;
+      expect(url).toContain('workspaceId=ws-123');
+    });
+
+    it('does NOT send the unread X-Workspace-Id header (S3, finding 6)', async () => {
       const scoped = client.withWorkspace('ws-123');
       mockFetch.mockResolvedValueOnce(jsonResponse({ id: 'f1' }));
       await scoped.getFile('f1');
 
-      const call = mockFetch.mock.calls[0]!;
-      const headers = call[1].headers;
-      expect(headers['X-Workspace-Id']).toBe('ws-123');
+      const headers = mockFetch.mock.calls[0]![1].headers as Record<string, string>;
+      expect(headers['X-Workspace-Id']).toBeUndefined();
     });
   });
 

@@ -116,7 +116,7 @@ Base URL: `https://storage-brain-api.marlin-pohl.workers.dev` (managed) or `http
 | Method | Path | Description |
 |--------|------|-------------|
 | `PUT` | `/_internal/upload/*` | Internal upload endpoint (receives file bytes) |
-| `POST` | `/webhooks/r2-upload-complete` | R2 event notification callback |
+| `POST` | `/webhooks/r2-upload-complete` | R2 event notification callback. Requires an HMAC-SHA256 signature of the raw body in `X-Webhook-Signature`, keyed by `R2_WEBHOOK_SIGNING_SECRET`; the internal R2-event queue consumer is the signer. |
 
 ## SDK Usage
 
@@ -257,7 +257,8 @@ pnpm format            # Format
 |------|-------|-------------|
 | `ENVIRONMENT` | `wrangler.toml` / env | `development`, `staging`, or `production` |
 | `ADMIN_API_KEY` | Secret / env | Admin bearer token for tenant management |
-| `URL_SIGNING_SECRET` | Secret / env | HMAC key for signed download URLs. Rotating this secret invalidates every existing signed and permanent file URL — that is the revocation mechanism. |
+| `URL_SIGNING_SECRET` | Secret / env | Root HMAC key for signed download URLs. Per-tenant keys are derived from it via `HKDF(URL_SIGNING_SECRET, tenantId)`; rotating the root invalidates every derived signed/permanent/upload URL; that is the revocation mechanism. |
+| `R2_WEBHOOK_SIGNING_SECRET` | Secret / env | HMAC-SHA256 key for the `POST /webhooks/r2-upload-complete` signature (`X-Webhook-Signature`). Must be at least 16 chars; the route fails closed (500) when unset. |
 | `PUBLIC_BASE_URL` | env | Fully-qualified public origin (e.g. `https://api.storage-brain.example.com`) used to build shareable file URLs. Set this in production so links don't leak internal hostnames. Defaults to the inbound request host. |
 | `DB` | Binding | D1 database (Workers only) |
 | `BUCKET` | Binding | R2 bucket (Workers only) |

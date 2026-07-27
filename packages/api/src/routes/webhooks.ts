@@ -1,18 +1,61 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../env';
-import { sendWebhook } from '../services/webhook';
+import {
+  sendWebhook,
+  verifyWebhookSignature,
+  MIN_WEBHOOK_SECRET_LENGTH,
+} from '../services/webhook';
 import type { FileResponse } from '@storage-brain/shared';
 
 export const webhookRoutes = new Hono<AppEnv>();
 
 /**
  * POST /webhooks/r2-upload-complete
- * Called by R2 when a file upload completes
- * Note: R2 event notifications must be configured to call this endpoint
+ *
+ * Caller (finding 3): our own R2 event-notification pipeline. R2 does not POST
+ * to HTTP endpoints directly; it delivers object-created events to a
+ * Cloudflare Queue, and a queue-consumer Worker we control forwards each event
+ * to this route. Because that consumer is internal and holds our secrets, it
+ * CAN sign, so we gate on a real signature rather than a shared bearer token:
+ * the consumer computes HMAC-SHA256 over the exact raw request body with
+ * `R2_WEBHOOK_SIGNING_SECRET` and sends the lowercase hex digest in the
+ * `X-Webhook-Signature` header.
+ *
+ * Fail-closed contract:
+ *   - env unset / secret shorter than MIN_WEBHOOK_SECRET_LENGTH -> 500 (misconfig)
+ *   - missing or invalid signature                             -> 401
+ * Only a request whose signature verifies against the raw body is processed.
  */
 webhookRoutes.post('/r2-upload-complete', async (c) => {
   const db = c.get('db');
-  const body: unknown = await c.req.json();
+
+  // --- Signature gate (must run before any body parsing / side effects) ---
+  const signingSecret = c.env.R2_WEBHOOK_SIGNING_SECRET;
+  if (!signingSecret || signingSecret.length < MIN_WEBHOOK_SECRET_LENGTH) {
+    // Misconfiguration, not a caller error: never process an unsigned webhook.
+    console.error('R2 webhook rejected: signing secret unset or too short');
+    return c.json({ error: 'Webhook signing is not configured' }, 500);
+  }
+
+  // Read the RAW body exactly as sent; the HMAC is computed over these bytes,
+  // so we must not re-serialize before verifying.
+  const rawBody = await c.req.text();
+  const signature = c.req.header('X-Webhook-Signature');
+  if (!signature) {
+    return c.json({ error: 'Missing webhook signature' }, 401);
+  }
+
+  const signatureValid = await verifyWebhookSignature(rawBody, signature, signingSecret);
+  if (!signatureValid) {
+    return c.json({ error: 'Invalid webhook signature' }, 401);
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return c.json({ error: 'Invalid webhook payload' }, 400);
+  }
 
   // R2 event notification payload structure
   // https://developers.cloudflare.com/r2/buckets/event-notifications/

@@ -15,6 +15,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Signed R2 upload webhook** (company isolation S3, finding 3):
+  `POST /webhooks/r2-upload-complete` now requires an HMAC-SHA256 signature over
+  the raw request body in the `X-Webhook-Signature` header, keyed by the new
+  `R2_WEBHOOK_SIGNING_SECRET` env var. The signer is our internal R2
+  event-notification queue consumer. Fails closed: 401 on a missing/invalid
+  signature, 500 when the secret is unset or shorter than 16 chars.
+- **Per-tenant URL signing keys** (company isolation S3, finding 5): signed,
+  permanent, and upload URL tokens are now signed with a key derived via
+  `HKDF(URL_SIGNING_SECRET, tenantId)` instead of the raw global secret, so a
+  single tenant's URLs can be revoked without touching others. Backward
+  compatible: during a deprecation window (`ACCEPT_LEGACY_GLOBAL_SIGNATURES` in
+  `services/signed-url.ts`) verification still accepts signatures minted with
+  the legacy global secret, so no live URL breaks. New tokens are minted
+  derived-only.
 - **Rename file** — new `PATCH /api/v1/files/:fileId` endpoint and SDK
   `renameFile(fileId, originalName)` method (SDK `v0.10.0`). Updates a file's
   display name only; the backing storage object keeps its original key, so
@@ -35,6 +49,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Node.js self-hosting support with Docker
 
 ### Changed
+- **SDK `v0.11.0`**: the client no longer sends the `X-Workspace-Id` header
+  (company isolation S3, finding 6). The server never read it, and an SB
+  workspace is a quota/grouping unit inside a company (explicitly not an auth
+  boundary), so enforcing it server-side would invent a boundary the model
+  rejects. Workspace scoping is still carried by the `workspaceId` query param
+  on file/upload calls; server behaviour is unchanged. The `X-Workspace-Id`
+  CORS allow-header is left in place (harmless, and CORS is out of scope for
+  this slice).
 - `public-download.ts` now accepts permanent tokens (`?token=...&expires=0&tid=...`)
   alongside the existing time-limited signed-URL form. Existing signed URLs
   continue to work unchanged.

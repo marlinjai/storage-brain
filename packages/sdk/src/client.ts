@@ -472,9 +472,14 @@ export class StorageBrain {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.apiKey}`,
         };
-        if (this.workspaceId) {
-          headers['X-Workspace-Id'] = this.workspaceId;
-        }
+        // Note (S3, finding 6): we intentionally do NOT send `X-Workspace-Id`.
+        // The server never read it, and an SB workspace is a quota/grouping unit
+        // INSIDE a company, explicitly not an auth boundary (company isolation is
+        // enforced by tenant scoping). Adding server-side enforcement of this
+        // header would invent a boundary the model rejects; removing the unread
+        // header is the less-breaking choice, and the server's behaviour is
+        // unchanged. Workspace is still carried where it actually matters: as the
+        // `workspaceId` query param on file/upload calls.
 
         const response = await fetch(url, {
           method,
