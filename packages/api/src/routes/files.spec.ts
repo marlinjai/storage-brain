@@ -587,6 +587,80 @@ describe('file routes', () => {
     });
   });
 
+  describe('rate-limit bucketing (gallery fan-out)', () => {
+    const AUTH = { Authorization: 'Bearer sk_live_test123' };
+
+    // A gallery render asks for one signed URL per tile. Keyed per-tenant, a
+    // whole product's users share one bucket, so > 100 in a window must not 429.
+    it('meters signed-url on the generous gallery bucket, not the 100/60s API bucket', async () => {
+      for (let i = 0; i < 150; i++) {
+        const res = await app.request(`/api/v1/files/${FILE_ID}/signed-url`, { headers: AUTH }, ENV);
+        expect(res.status).toBe(200);
+      }
+    });
+
+    it('meters permanent-url on the generous gallery bucket', async () => {
+      for (let i = 0; i < 150; i++) {
+        const res = await app.request(`/api/v1/files/${FILE_ID}/permanent-url`, { headers: AUTH }, ENV);
+        expect(res.status).toBe(200);
+      }
+    });
+
+    // The same fan-out volume against a genuine API operation still gets cut off
+    // at the 100/60s budget — proving the two routes are on different buckets.
+    it('still meters a genuine API operation (files list) on the 100/60s bucket', async () => {
+      let sawRateLimit = false;
+      for (let i = 0; i < 150; i++) {
+        const res = await app.request('/api/v1/files', { headers: AUTH }, ENV);
+        if (res.status === 429) {
+          sawRateLimit = true;
+          break;
+        }
+        expect(res.status).toBe(200);
+      }
+      expect(sawRateLimit).toBe(true);
+    });
+
+    it('leaves the existing /download bucketing unchanged (generous bucket)', async () => {
+      const expiresAt = Date.now() + 60_000;
+      const token = await generateSignedToken(FILE_ID, TENANT_ID, expiresAt, ENV.URL_SIGNING_SECRET);
+
+      for (let i = 0; i < 150; i++) {
+        const res = await app.request(
+          `/api/v1/files/${FILE_ID}/download?token=${token}&expires=${expiresAt}&tid=${TENANT_ID}`,
+          { method: 'GET' },
+          ENV,
+        );
+        expect(res.status).toBe(200);
+      }
+    });
+
+    it('keeps rate-limit buckets isolated between tenants', async () => {
+      // Exhaust tenant A's 100/60s API bucket.
+      let aRateLimited = false;
+      for (let i = 0; i < 150; i++) {
+        const res = await app.request(
+          '/api/v1/files',
+          { headers: { Authorization: 'Bearer sk_live_tenantA' } },
+          ENV,
+        );
+        if (res.status === 429) {
+          aRateLimited = true;
+          break;
+        }
+      }
+      expect(aRateLimited).toBe(true);
+
+      // Tenant B is a distinct bucket and is unaffected.
+      const bRes = await app.request(
+        '/api/v1/files',
+        { headers: { Authorization: 'Bearer sk_live_tenantB' } },
+        ENV,
+      );
+      expect(bRes.status).toBe(200);
+    });
+  });
+
   describe('DELETE /api/v1/files/:fileId', () => {
     it('soft deletes a file', async () => {
       const res = await app.request(`/api/v1/files/${FILE_ID}`, {

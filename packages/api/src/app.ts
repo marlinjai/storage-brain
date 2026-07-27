@@ -124,15 +124,25 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
   app.route('/api/v1/tenant', tenantRoutes);
   app.route('/api/v1/workspaces', workspaceRoutes);
 
-  // Public download route (token-based auth, no Bearer required). Registered
-  // before fileRoutes so it matches first, and before the broad /files API
-  // limiter so it is metered only by the generous download bucket (a gallery
-  // load of N files must not exhaust the 100/60s API-operation budget).
+  // Per-file URL vending on the generous download bucket. A gallery render fans
+  // these out one-per-file (download bytes, plus signed-url / permanent-url to
+  // mint the link for each tile), so a single page of N files must not exhaust
+  // the 100/60s API-operation budget. Mounted before the broad /files limiter
+  // (and, for /download, before fileRoutes) so the specific route matches first.
+  // The public download route additionally uses token-based auth (no Bearer).
   app.use('/api/v1/files/:fileId/download', downloadRateLimit);
   app.get('/api/v1/files/:fileId/download', publicDownloadHandler);
+  app.use('/api/v1/files/:fileId/signed-url', downloadRateLimit);
+  app.use('/api/v1/files/:fileId/permanent-url', downloadRateLimit);
 
-  // Remaining /files API operations (list, signed-url, permanent-url, delete)
-  app.use('/api/v1/files/*', apiRateLimit);
+  // Remaining /files API operations (list, get, rename, delete) — genuine
+  // API operations, not per-file URL vending — stay on the 100/60s bucket.
+  // Matched by single-segment patterns (bare collection + one :fileId segment)
+  // so the two-segment vending/download routes mounted above are NOT also
+  // caught here: a broad /files/* wildcard would double-meter them onto the
+  // 100/60s budget and re-introduce the gallery-load 429s.
+  app.use('/api/v1/files', apiRateLimit);
+  app.use('/api/v1/files/:fileId', apiRateLimit);
 
   // Data routes (all use tenant authMiddleware)
   app.use('/api/v1/upload/*', apiRateLimit);
