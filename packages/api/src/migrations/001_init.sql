@@ -37,8 +37,22 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- Bind a tenant to an auth-brain COMPANY (tenant) for company isolation (S1).
+-- Nullable + idempotent for existing deployments; backfilled during migration.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'tenants' AND column_name = 'auth_tenant_id'
+  ) THEN
+    ALTER TABLE tenants ADD COLUMN auth_tenant_id TEXT;
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_tenants_api_key_hash ON tenants(api_key_hash);
 CREATE INDEX IF NOT EXISTS idx_tenants_auth_workspace ON tenants(auth_workspace_id);
+-- A company maps to at most one storage tenant: unique among non-null (live) rows.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_auth_tenant
+  ON tenants(auth_tenant_id) WHERE auth_tenant_id IS NOT NULL;
 
 -- Workspaces
 CREATE TABLE IF NOT EXISTS workspaces (
@@ -85,12 +99,25 @@ CREATE INDEX IF NOT EXISTS idx_files_workspace ON files(workspace_id);
 CREATE TABLE IF NOT EXISTS upload_sessions (
   id              TEXT PRIMARY KEY,
   file_id         TEXT NOT NULL REFERENCES files(id),
+  tenant_id       TEXT,
   presigned_url   TEXT NOT NULL,
   expires_at      BIGINT NOT NULL,
   status          TEXT NOT NULL DEFAULT 'pending',
   created_at      BIGINT NOT NULL
 );
 
+-- Stamp the owning tenant onto upload sessions (nullable, backfillable) so the
+-- token-only upload route can scope lookups. Idempotent for existing deployments.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'upload_sessions' AND column_name = 'tenant_id'
+  ) THEN
+    ALTER TABLE upload_sessions ADD COLUMN tenant_id TEXT;
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_upload_sessions_file_id ON upload_sessions(file_id);
+CREATE INDEX IF NOT EXISTS idx_upload_sessions_tenant_id ON upload_sessions(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_upload_sessions_expires_at ON upload_sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_upload_sessions_status ON upload_sessions(status);

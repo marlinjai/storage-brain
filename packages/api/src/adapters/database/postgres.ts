@@ -56,8 +56,8 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
   async createTenant(input: CreateTenantInput): Promise<void> {
     const now = Date.now();
     await this.sql`
-      INSERT INTO tenants (id, name, api_key_hash, key_prefix, quota_bytes, used_bytes, allowed_file_types, auth_workspace_id, created_at, updated_at)
-      VALUES (${input.id}, ${input.name}, ${input.apiKeyHash}, ${input.keyPrefix}, ${input.quotaBytes}, 0, ${JSON.stringify(input.allowedFileTypes)}, ${input.authWorkspaceId ?? null}, ${now}, ${now})
+      INSERT INTO tenants (id, name, api_key_hash, key_prefix, quota_bytes, used_bytes, allowed_file_types, auth_workspace_id, auth_tenant_id, created_at, updated_at)
+      VALUES (${input.id}, ${input.name}, ${input.apiKeyHash}, ${input.keyPrefix}, ${input.quotaBytes}, 0, ${JSON.stringify(input.allowedFileTypes)}, ${input.authWorkspaceId ?? null}, ${input.authTenantId ?? null}, ${now}, ${now})
     `;
   }
 
@@ -87,6 +87,12 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
 
   async getTenantByAuthWorkspaceId(authWorkspaceId: string): Promise<Tenant | null> {
     const rows = await this.sql`SELECT * FROM tenants WHERE auth_workspace_id = ${authWorkspaceId}`;
+    const row = rows[0];
+    return row ? this.mapTenantRow(row) : null;
+  }
+
+  async getTenantByAuthTenantId(authTenantId: string): Promise<Tenant | null> {
+    const rows = await this.sql`SELECT * FROM tenants WHERE auth_tenant_id = ${authTenantId}`;
     const row = rows[0];
     return row ? this.mapTenantRow(row) : null;
   }
@@ -160,6 +166,9 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     }
     if (updates.authWorkspaceId !== undefined) {
       sets.push(this.sql`auth_workspace_id = ${updates.authWorkspaceId}`);
+    }
+    if (updates.authTenantId !== undefined) {
+      sets.push(this.sql`auth_tenant_id = ${updates.authTenantId}`);
     }
 
     const setClause = sets.reduce((acc, s) => this.sql`${acc}, ${s}`);
@@ -507,8 +516,8 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     const id = crypto.randomUUID();
     const now = Date.now();
     await this.sql`
-      INSERT INTO upload_sessions (id, file_id, presigned_url, expires_at, status, created_at)
-      VALUES (${id}, ${input.fileId}, ${input.presignedUrl}, ${input.expiresAt}, ${'pending'}, ${now})
+      INSERT INTO upload_sessions (id, file_id, tenant_id, presigned_url, expires_at, status, created_at)
+      VALUES (${id}, ${input.fileId}, ${input.tenantId ?? null}, ${input.presignedUrl}, ${input.expiresAt}, ${'pending'}, ${now})
     `;
     return id;
   }
@@ -680,6 +689,7 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
         ? (JSON.parse(row.allowed_file_types as string) as AllowedMimeType[])
         : null,
       authWorkspaceId: (row.auth_workspace_id as string) ?? null,
+      authTenantId: (row.auth_tenant_id as string) ?? null,
       createdAt: Number(row.created_at),
       updatedAt: Number(row.updated_at),
     };
@@ -727,6 +737,7 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     return {
       id: row.id as string,
       fileId: row.file_id as string,
+      tenantId: (row.tenant_id as string) ?? null,
       presignedUrl: row.presigned_url as string,
       expiresAt: Number(row.expires_at),
       status: row.status as UploadSessionStatus,

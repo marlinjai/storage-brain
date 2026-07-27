@@ -17,6 +17,7 @@ const mockTenant: Tenant = {
   apiKeyHash: 'hashed',
   keyPrefix: 'sk_live_test',
   authWorkspaceId: null,
+  authTenantId: null,
   quotaBytes: 500 * 1024 * 1024,
   usedBytes: 100 * 1024 * 1024,
   allowedFileTypes: ['image/png', 'application/pdf'],

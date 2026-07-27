@@ -1,79 +1,37 @@
-import { describe, it, expect, vi } from 'vitest';
-import { createStorageAuthBrainClient } from './auth-brain';
+import { describe, it, expect } from 'vitest';
+import { getAuthBrainClient } from './auth-brain';
+import type { Env } from '../env';
 
-// These tests exercise the REAL fetch contract inside createStorageAuthBrainClient
-// (the middleware tests mock the client, so they never hit these shapes). This is
-// the layer where a wrong endpoint/body would pass mocked middleware tests but
-// fail against live auth-brain, so it is asserted explicitly here.
+// The verify transport itself now lives in @marlinjai/auth-brain-sdk
+// (verifyApiKey), which the SDK tests cover. What remains local is the
+// factory: it must skip auth-brain entirely when unconfigured, and hand back a
+// verify-capable client (cached per base URL) when configured.
 
-function jsonResponse(status: number, body: unknown): Response {
+function env(overrides: Partial<Env> = {}): Env {
   return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: () => Promise.resolve(body),
-  } as unknown as Response;
+    ENVIRONMENT: 'development',
+    URL_SIGNING_SECRET: 'secret',
+    DB: {} as never,
+    BUCKET: {} as never,
+    ...overrides,
+  };
 }
 
-describe('createStorageAuthBrainClient.verifyApiKey', () => {
-  it('POSTs /api/verify/api-key with { api_key } in the body and no Authorization header', async () => {
-    const principal = {
-      type: 'service_account',
-      id: 'sa-1',
-      scope: { type: 'workspace', id: 'ws-1' },
-      role: 'member',
-    };
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(200, { principal }));
-    const client = createStorageAuthBrainClient({ baseUrl: 'https://auth.test', fetchImpl });
-
-    const result = await client.verifyApiKey('sk_live_abc');
-
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const call = fetchImpl.mock.calls[0];
-    expect(call).toBeDefined();
-    const url = call?.[0];
-    const init = call?.[1];
-    expect(url).toBe('https://auth.test/api/verify/api-key');
-    expect(init.method).toBe('POST');
-    expect(JSON.parse(init.body)).toEqual({ api_key: 'sk_live_abc' });
-    // The key goes in the body, NOT an Authorization header.
-    expect(init.headers.Authorization).toBeUndefined();
-    expect(result?.principal.scope).toEqual({ type: 'workspace', id: 'ws-1' });
+describe('getAuthBrainClient', () => {
+  it('returns null when AUTH_BRAIN_URL is unset (degradation: legacy keys only)', () => {
+    expect(getAuthBrainClient(env())).toBeNull();
   });
 
-  it('sends the folded check block when provided and surfaces authorization', async () => {
-    const principal = {
-      type: 'service_account',
-      id: 'sa-1',
-      scope: { type: 'workspace', id: 'ws-1' },
-      role: 'member',
-    };
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(200, { principal, authorization: { allowed: true } }));
-    const client = createStorageAuthBrainClient({ baseUrl: 'https://auth.test', fetchImpl });
-
-    const result = await client.verifyApiKey('sk_live_abc', { requirement: 'workspace.member' });
-
-    const call = fetchImpl.mock.calls[0];
-    expect(call).toBeDefined();
-    expect(JSON.parse(call?.[1].body)).toEqual({
-      api_key: 'sk_live_abc',
-      check: { requirement: 'workspace.member' },
-    });
-    expect(result?.authorization).toEqual({ allowed: true });
+  it('returns a verify-capable client when AUTH_BRAIN_URL is set', () => {
+    const client = getAuthBrainClient(env({ AUTH_BRAIN_URL: 'https://auth.example' }));
+    expect(client).not.toBeNull();
+    expect(typeof client?.verifyApiKey).toBe('function');
   });
 
-  it('omits the check block entirely when not provided', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(401, { error: { code: 'unauthorized' } }));
-    const client = createStorageAuthBrainClient({ baseUrl: 'https://auth.test', fetchImpl });
-    await client.verifyApiKey('sk_live_abc');
-    const call = fetchImpl.mock.calls[0];
-    expect(JSON.parse(call?.[1].body)).toEqual({ api_key: 'sk_live_abc' });
-  });
-
-  it('returns null on 401 (bad/expired/revoked/unknown or unresolvable check target)', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(401, { error: { code: 'unauthorized' } }));
-    const client = createStorageAuthBrainClient({ baseUrl: 'https://auth.test', fetchImpl });
-    expect(await client.verifyApiKey('sk_live_bad')).toBeNull();
+  it('caches the client per base URL', () => {
+    const url = 'https://auth.cache-test.example';
+    const a = getAuthBrainClient(env({ AUTH_BRAIN_URL: url }));
+    const b = getAuthBrainClient(env({ AUTH_BRAIN_URL: url }));
+    expect(a).toBe(b);
   });
 });

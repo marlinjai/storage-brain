@@ -18,10 +18,18 @@ export interface Tenant extends BaseTenant {
   allowedFileTypes: AllowedMimeType[] | null;
   /**
    * Optional binding to an auth-brain workspace (one workspace per tenant).
-   * Nullable: existing tenants predate this plumbing. Laid down for future
-   * per-tenant authorization; not yet used to filter access.
+   * Nullable: existing tenants predate this plumbing. Kept working during the
+   * company-isolation migration alongside the newer company binding below.
    */
   authWorkspaceId: string | null;
+  /**
+   * Optional binding to an auth-brain COMPANY (tenant), the platform-identity
+   * end-state (company-isolation S1). A `tenant`-scoped auth-brain key resolves
+   * to this Storage Brain tenant via `authTenantId`. Nullable: existing tenants
+   * predate this plumbing and are backfilled during the migration. Unique among
+   * non-null rows (a company maps to at most one storage tenant).
+   */
+  authTenantId: string | null;
 }
 
 /**
@@ -81,6 +89,13 @@ export interface FileMetadata {
 export interface UploadSession {
   id: string;
   fileId: string;
+  /**
+   * Owning Storage Brain tenant, stamped by the upload-request route so the
+   * token-only upload path can be scoped instead of relying on unscoped
+   * file/session lookups. Nullable: sessions created before this column was
+   * added (backfillable).
+   */
+  tenantId: string | null;
   presignedUrl: string;
   expiresAt: number;
   status: UploadSessionStatus;

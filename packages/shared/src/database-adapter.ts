@@ -20,6 +20,8 @@ export interface CreateTenantInput {
   quotaBytes: number;
   allowedFileTypes: AllowedMimeType[] | null;
   authWorkspaceId?: string;
+  /** auth-brain COMPANY (tenant) this storage tenant maps to (company-isolation S1). */
+  authTenantId?: string;
 }
 
 export interface CreateFileInput {
@@ -67,6 +69,8 @@ export interface CreateUploadSessionInput {
   fileId: string;
   presignedUrl: string;
   expiresAt: number;
+  /** Owning tenant, stamped so the token-only upload route can scope lookups. */
+  tenantId?: string;
 }
 
 /** Selector for which of a tenant's files to migrate — by tag or by explicit IDs. */
@@ -111,6 +115,7 @@ export interface UpdateTenantInput {
   quotaBytes?: number;
   allowedFileTypes?: AllowedMimeType[] | null;
   authWorkspaceId?: string | null;
+  authTenantId?: string | null;
 }
 
 export interface DatabaseAdapter {
@@ -120,6 +125,8 @@ export interface DatabaseAdapter {
   getTenantByName(name: string): Promise<Tenant | null>;
   getTenantById(id: string): Promise<Tenant | null>;
   getTenantByAuthWorkspaceId(authWorkspaceId: string): Promise<Tenant | null>;
+  /** Resolve a storage tenant by its bound auth-brain COMPANY (tenant) id. */
+  getTenantByAuthTenantId(authTenantId: string): Promise<Tenant | null>;
   updateTenantApiKeyHash(tenantId: string, newHash: string, keyPrefix: string): Promise<boolean>;
   listTenants(input: ListTenantsInput): Promise<ListTenantsResult>;
   updateTenant(tenantId: string, updates: UpdateTenantInput): Promise<Tenant | null>;
