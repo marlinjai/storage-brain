@@ -1,6 +1,55 @@
 import type { WebhookPayload, FileResponse } from '@storage-brain/shared';
 import { RETRY_CONFIG } from '@storage-brain/shared';
 
+/**
+ * Minimum length for `R2_WEBHOOK_SIGNING_SECRET`. A too-short secret is treated
+ * as a misconfiguration (the route fails closed with 500), not a runtime auth
+ * failure, so a weak secret can never silently protect the webhook.
+ */
+export const MIN_WEBHOOK_SECRET_LENGTH = 16;
+
+/** HMAC-SHA256 over `rawBody` with `secret`, returned as a lowercase hex digest. */
+export async function signWebhookBody(rawBody: string, secret: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(rawBody));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Verify a webhook's hex `signature` against HMAC-SHA256(rawBody, secret) using
+ * `crypto.subtle.verify`, which compares in constant time (no early-exit byte
+ * comparison). Returns false for a malformed hex signature rather than throwing.
+ */
+export async function verifyWebhookSignature(
+  rawBody: string,
+  signature: string,
+  secret: string
+): Promise<boolean> {
+  if (!/^[0-9a-f]+$/i.test(signature) || signature.length % 2 !== 0) {
+    return false;
+  }
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['verify']
+  );
+  const sigBytes = new Uint8Array(signature.length / 2);
+  for (let i = 0; i < signature.length; i += 2) {
+    sigBytes[i / 2] = parseInt(signature.substring(i, i + 2), 16);
+  }
+  return crypto.subtle.verify('HMAC', key, sigBytes, enc.encode(rawBody));
+}
+
 interface WebhookInput {
   fileId: string;
   tenantId: string;

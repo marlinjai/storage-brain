@@ -4,11 +4,32 @@ import {
   verifySignedToken,
   generatePermanentToken,
   verifyPermanentToken,
+  generateUploadToken,
+  verifyUploadToken,
 } from './signed-url';
 
 const SECRET = 'test-signing-secret';
 const FILE_ID = '550e8400-e29b-41d4-a716-446655440000';
 const TENANT_ID = '660e8400-e29b-41d4-a716-446655440001';
+const OTHER_TENANT_ID = '770e8400-e29b-41d4-a716-446655440002';
+
+/**
+ * Recompute a signature the LEGACY way: raw global secret as the HMAC key
+ * (no per-tenant HKDF). Simulates a token minted before finding-5 derivation,
+ * so we can assert the deprecation-window verify path still accepts it.
+ */
+async function legacyHmacHex(secret: string, data: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(data));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 describe('signed-url service', () => {
   afterEach(() => {
@@ -209,6 +230,64 @@ describe('signed-url service', () => {
 
       const valid = await verifyPermanentToken(FILE_ID, TENANT_ID, timeLimited, SECRET);
       expect(valid).toBe(false);
+    });
+  });
+
+  // --- S3 finding 5: per-tenant HKDF derivation + legacy backward compat ---
+  describe('per-tenant key derivation (finding 5)', () => {
+    it('mints signed tokens derived-only (not equal to the legacy global-secret signature)', async () => {
+      const expiresAt = Date.now() + 3600_000;
+      const derived = await generateSignedToken(FILE_ID, TENANT_ID, expiresAt, SECRET);
+      const legacy = await legacyHmacHex(SECRET, `${TENANT_ID}:${FILE_ID}:${expiresAt}`);
+
+      expect(derived).not.toBe(legacy);
+    });
+
+    it('accepts the new DERIVED signed token', async () => {
+      const expiresAt = Date.now() + 3600_000;
+      const token = await generateSignedToken(FILE_ID, TENANT_ID, expiresAt, SECRET);
+
+      expect(await verifySignedToken(FILE_ID, TENANT_ID, expiresAt, token, SECRET)).toBe(true);
+    });
+
+    it('accepts a LEGACY global-secret signed token during the deprecation window', async () => {
+      const expiresAt = Date.now() + 3600_000;
+      const legacy = await legacyHmacHex(SECRET, `${TENANT_ID}:${FILE_ID}:${expiresAt}`);
+
+      expect(await verifySignedToken(FILE_ID, TENANT_ID, expiresAt, legacy, SECRET)).toBe(true);
+    });
+
+    it('rejects a derived signed token minted for another tenant (cross-tenant)', async () => {
+      const expiresAt = Date.now() + 3600_000;
+      const tokenForOther = await generateSignedToken(FILE_ID, OTHER_TENANT_ID, expiresAt, SECRET);
+
+      // Same file + secret, but the token was minted for OTHER_TENANT_ID.
+      expect(await verifySignedToken(FILE_ID, TENANT_ID, expiresAt, tokenForOther, SECRET)).toBe(false);
+    });
+
+    it('accepts DERIVED and LEGACY permanent tokens, rejects cross-tenant', async () => {
+      const derived = await generatePermanentToken(FILE_ID, TENANT_ID, SECRET);
+      const legacy = await legacyHmacHex(SECRET, `${TENANT_ID}:${FILE_ID}:permanent`);
+      const otherTenant = await generatePermanentToken(FILE_ID, OTHER_TENANT_ID, SECRET);
+
+      expect(await verifyPermanentToken(FILE_ID, TENANT_ID, derived, SECRET)).toBe(true);
+      expect(await verifyPermanentToken(FILE_ID, TENANT_ID, legacy, SECRET)).toBe(true);
+      expect(await verifyPermanentToken(FILE_ID, TENANT_ID, otherTenant, SECRET)).toBe(false);
+    });
+
+    it('accepts DERIVED and LEGACY upload tokens, rejects cross-tenant', async () => {
+      const expiresAt = Date.now() + 3600_000;
+      const path = `tenants/${TENANT_ID}/files/${FILE_ID}/photo.png`;
+      const otherPath = `tenants/${OTHER_TENANT_ID}/files/${FILE_ID}/photo.png`;
+
+      const derived = await generateUploadToken(path, expiresAt, SECRET);
+      const legacy = await legacyHmacHex(SECRET, `upload:${path}:${expiresAt}`);
+      // A token derived for OTHER_TENANT_ID's path must not verify for this path.
+      const otherTenantToken = await generateUploadToken(otherPath, expiresAt, SECRET);
+
+      expect(await verifyUploadToken(path, expiresAt, derived, SECRET)).toBe(true);
+      expect(await verifyUploadToken(path, expiresAt, legacy, SECRET)).toBe(true);
+      expect(await verifyUploadToken(path, expiresAt, otherTenantToken, SECRET)).toBe(false);
     });
   });
 });
