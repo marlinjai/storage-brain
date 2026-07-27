@@ -19,6 +19,17 @@ export interface Env {
   URL_SIGNING_SECRET: string;
 
   /**
+   * HMAC-SHA256 secret for the R2 upload-complete webhook (S3, finding 3).
+   * The R2 event-notification queue consumer (an internal Worker we control)
+   * signs the raw JSON body with this secret and sends the hex digest in the
+   * `X-Webhook-Signature` header; the route rejects any request whose signature
+   * does not verify. OPTIONAL at the type level so unrelated tests boot without
+   * it, but the route fails closed with a 500 when it is unset (never processes
+   * an unsigned webhook). Must be at least MIN_WEBHOOK_SECRET_LENGTH chars.
+   */
+  R2_WEBHOOK_SIGNING_SECRET?: string;
+
+  /**
    * Fully-qualified public base URL (e.g. https://api.storage-brain.lumitra.co).
    * Used to construct shareable permanent file URLs so they don't leak internal
    * Docker hostnames (e.g. http://api/...). If unset, falls back to deriving

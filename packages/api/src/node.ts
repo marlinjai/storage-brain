@@ -44,6 +44,10 @@ function main(): void {
       URL_SIGNING_SECRET: required('URL_SIGNING_SECRET'),
       ENVIRONMENT: (process.env.ENVIRONMENT as 'development' | 'staging' | 'production') ?? 'production',
       PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL,
+      // HMAC secret for the R2 upload-complete webhook. Optional at boot, but
+      // the route fails closed (500) until it is set, so provide it in any
+      // environment that receives R2 upload-complete callbacks.
+      R2_WEBHOOK_SIGNING_SECRET: process.env.R2_WEBHOOK_SIGNING_SECRET,
       // auth-brain machine-auth (optional; absent -> legacy-only auth). The
       // OpenFGA check is folded into auth-brain's verify endpoint, so this is
       // the only auth-brain config the server needs.

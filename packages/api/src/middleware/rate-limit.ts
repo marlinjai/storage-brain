@@ -58,6 +58,14 @@ export const tenantKeyFn = (c: Context<AppEnv>): string => {
  */
 export function rateLimiter(options: RateLimitOptions) {
   const { windowMs, max, keyFn = DEFAULT_KEY_FN } = options;
+  // HORIZONTAL-SCALE CAVEAT (recon finding 11): this Map is per-process. Counts
+  // are NOT shared across instances, so running more than one API replica (or a
+  // rolling deploy overlapping two containers) multiplies the effective limit
+  // by the instance count and lets a client exceed `max` by hitting different
+  // instances. Correct for the current single-instance Coolify/Hetzner
+  // deployment; before scaling out horizontally, move this store to a shared
+  // backend (e.g. Redis/Durable Object) keyed the same way. Left in-memory
+  // deliberately for now; no infra change in this slice.
   const store = new Map<string, RateLimitEntry>();
 
   // Periodic cleanup: remove expired entries every 60s
