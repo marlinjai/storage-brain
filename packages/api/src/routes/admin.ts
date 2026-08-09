@@ -434,21 +434,40 @@ adminRoutes.get('/tenants/:tenantId/files/:fileId/signed-url', async (c) => {
 
 /**
  * DELETE /api/v1/admin/tenants/:tenantId/files/:fileId
- * Soft-delete a file for a tenant
+ * Delete a tenant's file: remove the binary from storage, release quota,
+ * and soft-delete the DB row (kept as an audit trail).
  */
 adminRoutes.delete('/tenants/:tenantId/files/:fileId', async (c) => {
   const db = c.get('db');
+  const storage = c.get('storage');
   const tenantId = c.req.param('tenantId');
   const fileId = c.req.param('fileId');
 
   fileIdSchema.parse(fileId);
 
+  // getFileById returns null for already-deleted files, so a repeat DELETE
+  // 404s instead of double-releasing quota
   const file = await db.getFileById(fileId, tenantId);
   if (!file) {
     throw ApiError.notFound('File not found');
   }
 
+  // Delete the binary from storage. Best-effort, mirroring tenant deletion:
+  // an object that is already gone must not block the DB cleanup.
+  try {
+    await storage.delete(file.storedPath);
+  } catch {
+    // Best-effort deletion: continue even if storage delete fails
+  }
+
+  // Soft delete the row (deleted_at stays set for the audit trail)
   await db.softDeleteFile(fileId, tenantId);
+
+  // Release the bytes at tenant level, and at workspace level if assigned
+  await db.releaseQuota(tenantId, file.sizeBytes);
+  if (file.workspaceId) {
+    await db.releaseWorkspaceQuota(file.workspaceId, file.sizeBytes);
+  }
 
   return c.json({ success: true });
 });

@@ -662,7 +662,39 @@ describe('file routes', () => {
   });
 
   describe('DELETE /api/v1/files/:fileId', () => {
-    it('soft deletes a file', async () => {
+    it('soft deletes the row, deletes the binary, and releases tenant quota', async () => {
+      const res = await app.request(`/api/v1/files/${FILE_ID}`, {
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer sk_live_test123' },
+      }, ENV);
+
+      expect(res.status).toBe(200);
+      const body: TestResponseBody = await res.json();
+      expect(body.success).toBe(true);
+      expect(storage.delete).toHaveBeenCalledWith(mockFile.storedPath);
+      expect(db.softDeleteFile).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
+      expect(db.releaseQuota).toHaveBeenCalledWith(TENANT_ID, mockFile.sizeBytes);
+      // File has no workspace, so no workspace-level release
+      expect(db.releaseWorkspaceQuota).not.toHaveBeenCalled();
+    });
+
+    it('also releases workspace quota when the file belongs to a workspace', async () => {
+      const workspaceId = '770e8400-e29b-41d4-a716-446655440002';
+      db.getFileById.mockResolvedValueOnce({ ...mockFile, workspaceId });
+
+      const res = await app.request(`/api/v1/files/${FILE_ID}`, {
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer sk_live_test123' },
+      }, ENV);
+
+      expect(res.status).toBe(200);
+      expect(db.releaseQuota).toHaveBeenCalledWith(TENANT_ID, mockFile.sizeBytes);
+      expect(db.releaseWorkspaceQuota).toHaveBeenCalledWith(workspaceId, mockFile.sizeBytes);
+    });
+
+    it('still completes the DB cleanup when the storage delete fails', async () => {
+      storage.delete.mockRejectedValueOnce(new Error('object already gone'));
+
       const res = await app.request(`/api/v1/files/${FILE_ID}`, {
         method: 'DELETE',
         headers: { Authorization: 'Bearer sk_live_test123' },
@@ -672,9 +704,10 @@ describe('file routes', () => {
       const body: TestResponseBody = await res.json();
       expect(body.success).toBe(true);
       expect(db.softDeleteFile).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
+      expect(db.releaseQuota).toHaveBeenCalledWith(TENANT_ID, mockFile.sizeBytes);
     });
 
-    it('returns 404 if file not found', async () => {
+    it('returns 404 if file not found and touches neither storage nor quota', async () => {
       db.getFileById.mockResolvedValueOnce(null);
 
       const res = await app.request(`/api/v1/files/${FILE_ID}`, {
@@ -682,6 +715,9 @@ describe('file routes', () => {
         headers: { Authorization: 'Bearer sk_live_test123' },
       }, ENV);
       expect(res.status).toBe(404);
+      expect(storage.delete).not.toHaveBeenCalled();
+      expect(db.softDeleteFile).not.toHaveBeenCalled();
+      expect(db.releaseQuota).not.toHaveBeenCalled();
     });
   });
 });
