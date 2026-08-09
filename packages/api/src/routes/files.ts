@@ -153,25 +153,42 @@ fileRoutes.patch('/:fileId', async (c) => {
 
 /**
  * DELETE /api/v1/files/:fileId
- * Soft delete a file
+ * Delete a file: remove the binary from storage, release quota, and
+ * soft-delete the DB row (kept as an audit trail).
  */
 fileRoutes.delete('/:fileId', async (c) => {
   const tenant = c.get('tenant');
   const db = c.get('db');
+  const storage = c.get('storage');
   const fileId = c.req.param('fileId');
 
   // Validate file ID
   fileIdSchema.parse(fileId);
 
-  // Fetch file to verify ownership
+  // Fetch file to verify ownership (returns null for already-deleted files,
+  // so a repeat DELETE 404s instead of double-releasing quota)
   const file = await db.getFileById(fileId, tenant.id);
 
   if (!file) {
     throw ApiError.notFound('File not found');
   }
 
-  // Soft delete
+  // Delete the binary from storage. Best-effort, mirroring tenant deletion:
+  // an object that is already gone must not block the DB cleanup.
+  try {
+    await storage.delete(file.storedPath);
+  } catch {
+    // Best-effort deletion: continue even if storage delete fails
+  }
+
+  // Soft delete the row (deleted_at stays set for the audit trail)
   await db.softDeleteFile(fileId, tenant.id);
+
+  // Release the bytes at tenant level, and at workspace level if assigned
+  await db.releaseQuota(tenant.id, file.sizeBytes);
+  if (file.workspaceId) {
+    await db.releaseWorkspaceQuota(file.workspaceId, file.sizeBytes);
+  }
 
   return c.json({ success: true });
 });

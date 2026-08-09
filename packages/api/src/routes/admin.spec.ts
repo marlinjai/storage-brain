@@ -91,13 +91,15 @@ interface TestResponseBody {
 
 describe('admin routes', () => {
   let db: ReturnType<typeof createMockDb>;
+  let storage: ReturnType<typeof createMockStorage>;
   let app: ReturnType<typeof createApp>;
 
   beforeEach(() => {
     db = createMockDb();
+    storage = createMockStorage();
     app = createApp({
       db: db as unknown as DatabaseAdapter,
-      storage: createMockStorage() as unknown as StorageAdapter,
+      storage: storage as unknown as StorageAdapter,
     });
   });
 
@@ -392,6 +394,79 @@ describe('admin routes', () => {
       }, ENV);
 
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe('DELETE /api/v1/admin/tenants/:tenantId/files/:fileId', () => {
+    const FILE_ID = '660e8400-e29b-41d4-a716-446655440001';
+    const mockFile = {
+      id: FILE_ID,
+      tenantId: 'tenant-123',
+      workspaceId: null as string | null,
+      originalName: 'photo.png',
+      storedPath: `tenants/tenant-123/files/${FILE_ID}/photo.png`,
+      fileType: 'image/png',
+      sizeBytes: 2048,
+      deletedAt: null,
+    };
+
+    it('soft deletes the row, deletes the binary, and releases tenant quota', async () => {
+      db.getFileById.mockResolvedValueOnce(mockFile);
+
+      const res = await app.request(`/api/v1/admin/tenants/tenant-123/files/${FILE_ID}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+      }, ENV);
+
+      expect(res.status).toBe(200);
+      const body = await res.json<TestResponseBody>();
+      expect(body.success).toBe(true);
+      expect(storage.delete).toHaveBeenCalledWith(mockFile.storedPath);
+      expect(db.softDeleteFile).toHaveBeenCalledWith(FILE_ID, 'tenant-123');
+      expect(db.releaseQuota).toHaveBeenCalledWith('tenant-123', mockFile.sizeBytes);
+      expect(db.releaseWorkspaceQuota).not.toHaveBeenCalled();
+    });
+
+    it('also releases workspace quota when the file belongs to a workspace', async () => {
+      const workspaceId = '770e8400-e29b-41d4-a716-446655440002';
+      db.getFileById.mockResolvedValueOnce({ ...mockFile, workspaceId });
+
+      const res = await app.request(`/api/v1/admin/tenants/tenant-123/files/${FILE_ID}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+      }, ENV);
+
+      expect(res.status).toBe(200);
+      expect(db.releaseQuota).toHaveBeenCalledWith('tenant-123', mockFile.sizeBytes);
+      expect(db.releaseWorkspaceQuota).toHaveBeenCalledWith(workspaceId, mockFile.sizeBytes);
+    });
+
+    it('still completes the DB cleanup when the storage delete fails', async () => {
+      db.getFileById.mockResolvedValueOnce(mockFile);
+      storage.delete.mockRejectedValueOnce(new Error('object already gone'));
+
+      const res = await app.request(`/api/v1/admin/tenants/tenant-123/files/${FILE_ID}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+      }, ENV);
+
+      expect(res.status).toBe(200);
+      expect(db.softDeleteFile).toHaveBeenCalledWith(FILE_ID, 'tenant-123');
+      expect(db.releaseQuota).toHaveBeenCalledWith('tenant-123', mockFile.sizeBytes);
+    });
+
+    it('returns 404 for unknown file and touches neither storage nor quota', async () => {
+      db.getFileById.mockResolvedValueOnce(null);
+
+      const res = await app.request(`/api/v1/admin/tenants/tenant-123/files/${FILE_ID}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+      }, ENV);
+
+      expect(res.status).toBe(404);
+      expect(storage.delete).not.toHaveBeenCalled();
+      expect(db.softDeleteFile).not.toHaveBeenCalled();
+      expect(db.releaseQuota).not.toHaveBeenCalled();
     });
   });
 

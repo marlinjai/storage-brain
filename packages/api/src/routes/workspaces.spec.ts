@@ -76,7 +76,7 @@ function createMockDb() {
   };
 }
 
-function createMockStorage(): StorageAdapter {
+function createMockStorage() {
   return { put: vi.fn(), get: vi.fn(), delete: vi.fn(), exists: vi.fn(), head: vi.fn() };
 }
 
@@ -87,13 +87,15 @@ interface TestResponseBody {
 
 describe('workspace routes', () => {
   let db: ReturnType<typeof createMockDb>;
+  let storage: ReturnType<typeof createMockStorage>;
   let app: ReturnType<typeof createApp>;
 
   beforeEach(() => {
     db = createMockDb();
+    storage = createMockStorage();
     app = createApp({
       db: db as unknown as DatabaseAdapter,
-      storage: createMockStorage() as unknown as StorageAdapter,
+      storage: storage as unknown as StorageAdapter,
     });
   });
 
@@ -200,10 +202,10 @@ describe('workspace routes', () => {
   });
 
   describe('DELETE /api/v1/workspaces/:workspaceId', () => {
-    it('deletes workspace and releases quota', async () => {
+    it('deletes workspace, deletes binaries from storage, and releases quota', async () => {
       db.getActiveFilesByWorkspace.mockResolvedValueOnce([
-        { sizeBytes: 500 },
-        { sizeBytes: 300 },
+        { sizeBytes: 500, storedPath: `tenants/${TENANT_ID}/files/f1/a.png` },
+        { sizeBytes: 300, storedPath: `tenants/${TENANT_ID}/files/f2/b.pdf` },
       ]);
 
       const res = await app.request(`/api/v1/workspaces/${WORKSPACE_ID}`, {
@@ -212,9 +214,29 @@ describe('workspace routes', () => {
       }, ENV);
 
       expect(res.status).toBe(200);
+      expect(storage.delete).toHaveBeenCalledTimes(2);
+      expect(storage.delete).toHaveBeenCalledWith(`tenants/${TENANT_ID}/files/f1/a.png`);
+      expect(storage.delete).toHaveBeenCalledWith(`tenants/${TENANT_ID}/files/f2/b.pdf`);
       expect(db.softDeleteFilesByWorkspace).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
       expect(db.releaseWorkspaceQuota).toHaveBeenCalledWith(WORKSPACE_ID, 800);
       expect(db.releaseQuota).toHaveBeenCalledWith(TENANT_ID, 800);
+      expect(db.deleteWorkspace).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
+    });
+
+    it('still deletes the workspace when a storage delete fails', async () => {
+      db.getActiveFilesByWorkspace.mockResolvedValueOnce([
+        { sizeBytes: 500, storedPath: `tenants/${TENANT_ID}/files/f1/a.png` },
+      ]);
+      storage.delete.mockRejectedValueOnce(new Error('object already gone'));
+
+      const res = await app.request(`/api/v1/workspaces/${WORKSPACE_ID}`, {
+        method: 'DELETE',
+        headers: { Authorization: 'Bearer sk_live_test123' },
+      }, ENV);
+
+      expect(res.status).toBe(200);
+      expect(db.softDeleteFilesByWorkspace).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
+      expect(db.releaseQuota).toHaveBeenCalledWith(TENANT_ID, 500);
       expect(db.deleteWorkspace).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
     });
 

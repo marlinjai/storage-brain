@@ -139,6 +139,7 @@ workspaceRoutes.patch('/:workspaceId', async (c) => {
 workspaceRoutes.delete('/:workspaceId', async (c) => {
   const tenant = c.get('tenant');
   const db = c.get('db');
+  const storage = c.get('storage');
   const workspaceId = c.req.param('workspaceId');
 
   uuidSchema.parse(workspaceId);
@@ -152,6 +153,16 @@ workspaceRoutes.delete('/:workspaceId', async (c) => {
   // Get active files to calculate total bytes to release
   const activeFiles = await db.getActiveFilesByWorkspace(workspaceId, tenant.id);
   const totalBytes = activeFiles.reduce((sum, f) => sum + f.sizeBytes, 0);
+
+  // Delete the binaries from storage. Best-effort, mirroring tenant deletion:
+  // an object that is already gone must not block the DB cleanup.
+  for (const file of activeFiles) {
+    try {
+      await storage.delete(file.storedPath);
+    } catch {
+      // Best-effort deletion: continue even if storage delete fails
+    }
+  }
 
   // Soft-delete all files in the workspace
   await db.softDeleteFilesByWorkspace(workspaceId, tenant.id);
