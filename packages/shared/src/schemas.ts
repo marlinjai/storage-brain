@@ -81,7 +81,11 @@ export const createTenantSchema = z.object({
   name: z.string().min(1).max(100),
   quotaBytes: z.number().int().positive().optional(),
   allowedFileTypes: z.array(fileTypeSchema).optional(), // null/undefined = accept any type
-  authWorkspaceId: z.string().min(1).max(255).optional(), // optional auth-brain workspace binding
+  // auth-brain bindings. Tenant binding is the default for company-wide storage;
+  // workspace binding is reserved for project isolation (one company, several
+  // storage tenants). See docs/plans/2026-08-13-tenant-scope-rebinding.md.
+  authWorkspaceId: z.string().min(1).max(255).optional(),
+  authTenantId: z.string().min(1).max(255).optional(),
 });
 
 export type CreateTenantSchema = z.infer<typeof createTenantSchema>;
@@ -93,7 +97,10 @@ export const updateTenantSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   quotaBytes: z.number().int().positive().optional(),
   allowedFileTypes: z.array(fileTypeSchema).nullable().optional(),
+  // Nullable so a rebind can explicitly clear the old binding
+  // (authWorkspaceId: null + authTenantId: <id> makes the binding unambiguous).
   authWorkspaceId: z.string().min(1).max(255).nullable().optional(),
+  authTenantId: z.string().min(1).max(255).nullable().optional(),
 });
 
 export type UpdateTenantSchema = z.infer<typeof updateTenantSchema>;

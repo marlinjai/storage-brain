@@ -104,6 +104,7 @@ adminRoutes.post('/tenants', async (c) => {
     quotaBytes,
     allowedFileTypes,
     authWorkspaceId: validatedBody.authWorkspaceId,
+    authTenantId: validatedBody.authTenantId,
   });
 
   return c.json(

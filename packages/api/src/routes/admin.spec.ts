@@ -148,6 +148,22 @@ describe('admin routes', () => {
       expect(db.createTenant).toHaveBeenCalledTimes(1);
     });
 
+    it('creates a tenant bound to an auth-brain tenant (the company-wide default binding)', async () => {
+      const res = await app.request('/api/v1/admin/tenants', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${ADMIN_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: 'Lola Storage', authTenantId: 'auth-tenant-lola' }),
+      }, ENV);
+
+      expect(res.status).toBe(201);
+      expect(db.createTenant).toHaveBeenCalledWith(
+        expect.objectContaining({ authTenantId: 'auth-tenant-lola', authWorkspaceId: undefined })
+      );
+    });
+
     it('rejects duplicate tenant name', async () => {
       db.getTenantByName.mockResolvedValueOnce({ id: 'existing', name: 'Existing' });
 
@@ -309,6 +325,28 @@ describe('admin routes', () => {
       expect(res.status).toBe(200);
       const body = await res.json<TestResponseBody>();
       expect(body.quotaBytes).toBe(1024);
+    });
+
+    it('rebinds a tenant from workspace to tenant scope (authTenantId set, authWorkspaceId cleared)', async () => {
+      const rebound = { ...mockTenant, authWorkspaceId: null, authTenantId: 'auth-tenant-1' };
+      db.updateTenant.mockResolvedValueOnce(rebound);
+
+      const res = await app.request('/api/v1/admin/tenants/tenant-123', {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${ADMIN_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ authTenantId: 'auth-tenant-1', authWorkspaceId: null }),
+      }, ENV);
+
+      expect(res.status).toBe(200);
+      // Both fields pass through: the new binding is set and the old one is
+      // explicitly nulled in the same call, so the binding is never ambiguous.
+      expect(db.updateTenant).toHaveBeenCalledWith('tenant-123', {
+        authTenantId: 'auth-tenant-1',
+        authWorkspaceId: null,
+      });
     });
 
     it('returns 404 if tenant not found', async () => {
