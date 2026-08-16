@@ -33,6 +33,36 @@ this is a data migration plus one small route gap, not an architecture change.
   tenant-scoped service account and retiring the old one, not by mutating the
   scope of a live principal (zero-downtime, revocable, auditable).
 
+## Reality update (2026-08-16)
+
+Executed the additive half, verified against production:
+
+- The `storage` grant already sat at TENANT level on lola-stories, so step 1
+  needed no change.
+- A tenant-scoped service account `agentic-os-ops` exists per company in
+  auth-brain (created for the platform migration, role `admin`), and a separate
+  `lola-stories-api-tenant` account exists for this rebinding.
+- The Storage Brain tenant `lola-stories` now carries `authTenantId` (set via
+  the machine admin API). The workspace binding was left in place on purpose:
+  both lookup paths are legal, so the tenant binding is additive and carries no
+  cutover risk.
+- The route gap this plan named is closed: `authTenantId` is accepted on tenant
+  create and update since `3bbedff`.
+
+STILL OPEN, and it is the only thing left here: the CONSUMER KEY CUTOVER.
+Marlin must issue a key for the tenant-scoped service account in the
+auth.lumitra.co companies page, store it as `STORAGE_BRAIN_API_KEY` in the
+lola-stories Infisical project, redeploy the lola API, then revoke the old
+workspace-scoped key and verify it 401s. This step is blocked for automation
+by an organization boundary: the secrets proxy machine identity cannot write
+into that Infisical organization, so no agent can move that value. There is
+also one orphaned key on `lola-stories-api-tenant` from an automated attempt
+whose plaintext was discarded; revoke it in the same pass (it has never been
+used).
+
+Only after the cutover: null out `auth_workspace_id` for that tenant so the
+binding is unambiguous, and update the auth-brain consuming-apps registry row.
+
 ## Steps per company (first: lola-stories)
 
 1. auth-brain `/admin/apps`: ensure the company holds the `storage` grant at
