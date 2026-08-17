@@ -4,6 +4,7 @@ import { ApiError } from '../middleware/error-handler';
 import { fileIdSchema, apiKeySchema } from '@storage-brain/shared';
 import { verifySignedToken, verifyPermanentToken } from '../services/signed-url';
 import { buildContentDisposition } from '../utils/content-disposition';
+import { parseRangeHeader } from '../utils/range';
 import { authenticateApiKey } from '../middleware/auth';
 import { getAuthBrainClient } from '../lib/auth-brain';
 
@@ -95,8 +96,25 @@ export async function publicDownloadHandler(c: Context<AppEnv>) {
     throw ApiError.unauthorized('Missing authorization. Provide Bearer token or signed URL parameters.');
   }
 
+  // Resolve any Range request BEFORE touching storage, using the size from the
+  // database row: an unsatisfiable range is answered without an object read.
+  const rangeRequest = parseRangeHeader(c.req.header('Range'), sizeBytes);
+  if (rangeRequest.kind === 'unsatisfiable') {
+    return new Response(null, {
+      status: 416,
+      headers: {
+        'Content-Range': `bytes */${sizeBytes}`,
+        'Accept-Ranges': 'bytes',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  }
+
   // Fetch from storage
-  const object = await storage.get(storedPath);
+  const object = await storage.get(
+    storedPath,
+    rangeRequest.kind === 'range' ? rangeRequest.range : undefined,
+  );
   if (!object) {
     throw ApiError.notFound('File not found in storage');
   }
@@ -106,8 +124,19 @@ export async function publicDownloadHandler(c: Context<AppEnv>) {
   const headers = new Headers();
   headers.set('Content-Type', fileType);
   headers.set('Content-Disposition', buildContentDisposition(disposition, originalName));
-  headers.set('Content-Length', sizeBytes.toString());
   headers.set('Accept-Ranges', 'bytes');
+
+  // Only claim 206 when the STORAGE LAYER actually served a partial body. An
+  // adapter that ignored the range leaves `object.range` unset, and we answer a
+  // truthful 200 with the whole object rather than a 206 whose Content-Range
+  // does not describe the bytes we are sending.
+  const served = object.range;
+  if (served) {
+    headers.set('Content-Range', `bytes ${served.start}-${served.end}/${served.total}`);
+    headers.set('Content-Length', (served.end - served.start + 1).toString());
+  } else {
+    headers.set('Content-Length', sizeBytes.toString());
+  }
 
   // Explicit cross-origin embedding headers so audio/video/image elements on
   // other origins can load this file. CORS headers are added by the global
@@ -129,5 +158,5 @@ export async function publicDownloadHandler(c: Context<AppEnv>) {
     );
   }
 
-  return new Response(object.body, { status: 200, headers });
+  return new Response(object.body, { status: served ? 206 : 200, headers });
 }

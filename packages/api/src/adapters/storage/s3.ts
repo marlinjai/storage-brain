@@ -11,6 +11,7 @@ import type {
   StorageObject,
   PutOptions,
   GetResult,
+  ByteRange,
   PresignedUrlOptions,
 } from '@storage-brain/shared';
 
@@ -83,22 +84,33 @@ export class S3StorageAdapter implements StorageAdapter {
     };
   }
 
-  async get(key: string): Promise<GetResult | null> {
+  async get(key: string, range?: ByteRange): Promise<GetResult | null> {
     try {
       const command = new GetObjectCommand({
         Bucket: this.bucket,
         Key: key,
+        // RFC 9110 byte range. An open-ended request is `bytes=<start>-`.
+        ...(range ? { Range: `bytes=${range.start}-${range.end ?? ''}` } : {}),
       });
 
       const result = await this.client.send(command);
 
       if (!result.Body) return null;
 
+      // Trust the RESPONSE, not the request: `range` is reported only when S3
+      // actually answered with a partial body (206 + Content-Range). If it
+      // ignored the header, ContentRange is absent and the caller correctly
+      // treats this as a whole-object response.
+      const served = parseContentRange(result.ContentRange);
+
       return {
         body: result.Body.transformToWebStream(),
         contentType: result.ContentType ?? 'application/octet-stream',
-        size: result.ContentLength ?? 0,
+        // On a partial read ContentLength is the length of the SLICE, so the
+        // total has to come from Content-Range.
+        size: served?.total ?? result.ContentLength ?? 0,
         etag: result.ETag?.replace(/"/g, ''),
+        ...(served ? { range: served } : {}),
       };
     } catch (err: unknown) {
       if (isNoSuchKey(err)) return null;
@@ -191,4 +203,20 @@ function isNotFound(err: unknown): boolean {
         (err as { $metadata: { httpStatusCode?: number } }).$metadata
           .httpStatusCode === 404))
   );
+}
+
+/**
+ * Parse an S3 `Content-Range: bytes <start>-<end>/<total>` response header.
+ *
+ * Returns null for an absent or unparseable header, and for the `*` total form,
+ * so a caller can never mistake an unknown range for a served one.
+ */
+function parseContentRange(
+  header: string | undefined
+): { start: number; end: number; total: number } | null {
+  if (!header) return null;
+  const match = /^bytes\s+(\d+)-(\d+)\/(\d+)$/.exec(header.trim());
+  if (!match) return null;
+  const [, start, end, total] = match;
+  return { start: Number(start), end: Number(end), total: Number(total) };
 }
