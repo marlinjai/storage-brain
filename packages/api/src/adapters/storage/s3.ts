@@ -114,6 +114,12 @@ export class S3StorageAdapter implements StorageAdapter {
       };
     } catch (err: unknown) {
       if (isNoSuchKey(err)) return null;
+      // The route decides satisfiability from the SIZE ON THE DATABASE ROW. If
+      // that has drifted from the object actually in the bucket, S3 rejects the
+      // range and this would surface as a 500 on an ordinary video request,
+      // which is a miserable thing to debug. Fall back to reading the whole
+      // object and report no range, so the caller answers a truthful 200.
+      if (isInvalidRange(err) && range) return this.get(key);
       throw err;
     }
   }
@@ -219,4 +225,17 @@ function parseContentRange(
   if (!match) return null;
   const [, start, end, total] = match;
   return { start: Number(start), end: Number(end), total: Number(total) };
+}
+
+
+function isInvalidRange(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'name' in err &&
+    ((err as { name: string }).name === 'InvalidRange' ||
+      ('$metadata' in err &&
+        typeof (err as Record<string, unknown>).$metadata === 'object' &&
+        (err as { $metadata: { httpStatusCode?: number } }).$metadata.httpStatusCode === 416))
+  );
 }

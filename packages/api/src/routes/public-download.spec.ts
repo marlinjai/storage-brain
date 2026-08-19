@@ -300,3 +300,67 @@ describe('public download: byte ranges', () => {
     expect(getSpy).toHaveBeenCalledWith(expect.any(String), undefined);
   });
 });
+
+// Caching and CORS on partial responses. Both were found reviewing the range
+// change before merge, not in production.
+describe('public download: partial-response headers', () => {
+  let db: ReturnType<typeof createMockDb>;
+
+  function rangeAwareStorage(): StorageAdapter {
+    return {
+      put: vi.fn(),
+      get: vi.fn((_key: string, range?: { start: number; end?: number }) =>
+        Promise.resolve({
+          body: new ReadableStream(),
+          contentType: 'image/png',
+          size: 2048,
+          ...(range ? { range: { start: range.start, end: range.end ?? 2047, total: 2048 } } : {}),
+        }),
+      ),
+      delete: vi.fn(),
+      exists: vi.fn(),
+      head: vi.fn(),
+    } as unknown as StorageAdapter;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+  });
+
+  async function permanentUrlRequest(headers: Record<string, string> = {}) {
+    const { generatePermanentToken } = await import('../services/signed-url');
+    const tok = await generatePermanentToken(FILE_A, TENANT_A, ENV.URL_SIGNING_SECRET);
+    const app = createApp({ db: db as unknown as DatabaseAdapter, storage: rangeAwareStorage() });
+    return app.request(
+      `/api/v1/files/${FILE_A}/download?token=${tok}&expires=0&tid=${TENANT_A}`,
+      { headers },
+      ENV,
+    );
+  }
+
+  it('does not mark a 206 immutable, even on a permanent URL', async () => {
+    // `immutable` claims the whole representation never changes. On a partial
+    // response that is a lie about a slice, and a naive cache could later serve
+    // the fragment as the entire file.
+    const res = await permanentUrlRequest({ Range: 'bytes=0-99' });
+
+    expect(res.status).toBe(206);
+    expect(res.headers.get('Cache-Control')).not.toContain('immutable');
+  });
+
+  it('still marks a full permanent response immutable', async () => {
+    const res = await permanentUrlRequest();
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toContain('immutable');
+  });
+
+  it('exposes Content-Range on a 416 so a cross-origin caller can read the real size', async () => {
+    const res = await permanentUrlRequest({ Range: 'bytes=99999-' });
+
+    expect(res.status).toBe(416);
+    expect(res.headers.get('Content-Range')).toBe('bytes */2048');
+    expect(res.headers.get('Access-Control-Expose-Headers') ?? '').toContain('Content-Range');
+  });
+});
