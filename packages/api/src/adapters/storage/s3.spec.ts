@@ -185,3 +185,79 @@ describe('S3StorageAdapter', () => {
     });
   });
 });
+
+describe('S3StorageAdapter range reads', () => {
+  let adapter: StorageAdapter;
+
+  beforeEach(() => {
+    mockSend.mockReset();
+    adapter = new S3StorageAdapter({
+      bucket: 'test-bucket',
+      region: 'us-east-1',
+      credentials: { accessKeyId: 'key', secretAccessKey: 'secret' },
+    });
+  });
+
+  function body() {
+    return { transformToWebStream: () => new ReadableStream() };
+  }
+
+  it('sends a bytes range and reports what S3 actually served', async () => {
+    mockSend.mockResolvedValueOnce({
+      Body: body(),
+      ContentType: 'video/mp4',
+      ContentLength: 100,
+      ContentRange: 'bytes 0-99/5000',
+    });
+
+    const res = await adapter.get('k', { start: 0, end: 99 });
+
+    // The TOTAL comes from Content-Range; ContentLength is only the slice.
+    expect(res!.size).toBe(5000);
+    expect(res!.range).toEqual({ start: 0, end: 99, total: 5000 });
+  });
+
+  it('reports no range when S3 ignored the request', async () => {
+    // Then the caller must answer a truthful 200, not a 206.
+    mockSend.mockResolvedValueOnce({ Body: body(), ContentType: 'video/mp4', ContentLength: 5000 });
+
+    const res = await adapter.get('k', { start: 0, end: 99 });
+
+    expect(res!.range).toBeUndefined();
+    expect(res!.size).toBe(5000);
+  });
+
+  it('sends an open-ended range without a trailing end', async () => {
+    mockSend.mockResolvedValueOnce({
+      Body: body(),
+      ContentType: 'video/mp4',
+      ContentRange: 'bytes 100-4999/5000',
+    });
+
+    await adapter.get('k', { start: 100 });
+
+    expect((mockSend.mock.calls[0]![0] as { input: { Range?: string } }).input.Range).toBe('bytes=100-');
+  });
+
+  it('falls back to the whole object when S3 rejects the range', async () => {
+    // The route decides satisfiability from the database row's size. If that has
+    // drifted from the bucket, an InvalidRange would otherwise surface as a 500
+    // on an ordinary video request.
+    const invalidRange = Object.assign(new Error('InvalidRange'), { name: 'InvalidRange' });
+    mockSend.mockRejectedValueOnce(invalidRange);
+    mockSend.mockResolvedValueOnce({ Body: body(), ContentType: 'video/mp4', ContentLength: 10 });
+
+    const res = await adapter.get('k', { start: 99999 });
+
+    expect(res!.range).toBeUndefined();
+    expect(res!.size).toBe(10);
+    // Second call carries no Range header at all.
+    expect((mockSend.mock.calls[1]![0] as { input: { Range?: string } }).input.Range).toBeUndefined();
+  });
+
+  it('still propagates a non-range error', async () => {
+    mockSend.mockRejectedValueOnce(Object.assign(new Error('boom'), { name: 'InternalError' }));
+
+    await expect(adapter.get('k', { start: 0, end: 9 })).rejects.toThrow('boom');
+  });
+});
