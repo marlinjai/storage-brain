@@ -1,6 +1,6 @@
 ---
 type: plan
-status: draft
+status: in-progress
 date: 2026-07-27
 title: Storage-brain company isolation (platform identity end-state)
 summary: Align storage-brain with the platform model: storage tenants keyed to auth-brain COMPANIES, company-scoped machine keys accepted, an app_grants door, the shared five-app key split per company, and the token/webhook hygiene the recon surfaced. Pre-launch gate item 11.
@@ -54,3 +54,17 @@ Company A's key cannot list, read, download, or delete company B's files (positi
 - Physical bucket separation (path-prefix + SQL scoping stays; revisit with real customer volume).
 - Per-workspace keys inside a company (the 2026-04-06 draft stays superseded).
 - Dashboard per-company views beyond the deferred follow-up.
+
+## Reality update (2026-09-10)
+
+S1 (company-scoped keys), S3 (webhook HMAC signing, per-tenant URL key derivation, dropping
+the unread `X-Workspace-Id`), and S4 (GDPR erasure webhook consumer) are all shipped:
+`packages/api/src/middleware/auth.ts` accepts `tenant`-scoped auth-brain keys per S1,
+`packages/api/src/routes/webhooks.ts` verifies an HMAC signature per S3 (pull request #19),
+`packages/api/src/routes/internal-erasure.ts` consumes the signed erasure webhook per S4
+(pull request #20), and the rate-limit bucketing fix landed as pull request #21. S2's file
+audit found the tenant split already correct except one leftover: 361 orphaned `kie-input`
+files (371 MB) in lola-stories' tenant from a borrowed-key window, recommended for deletion
+but not yet acted on (still needs Marlin's go, listed on the roadmap). The one item
+explicitly deferred rather than shipped is the dashboard per-company `can()` filtering
+(item 6, "recorded, not scheduled").

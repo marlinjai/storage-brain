@@ -1,6 +1,6 @@
 ---
 type: plan
-status: decided
+status: in-progress
 title: "Rebind Storage Brain tenants from auth_workspace_id to auth_tenant_id"
 summary: "Company-wide storage binds to the auth-brain tenant, not to the invisible default Main workspace. Rebind existing SB tenants and rescope the consuming service accounts to tenant scope; workspace binding stays available only for real project isolation."
 date: 2026-08-13

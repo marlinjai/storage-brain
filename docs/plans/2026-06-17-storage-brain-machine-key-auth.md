@@ -1,6 +1,6 @@
 ---
 type: plan
-status: done
+status: completed
 title: "Spec: Storage Brain machine auth via auth-brain service-account keys (slice 2B)"
 summary: "The Storage Brain Worker API accepts auth-brain-issued service-account keys (verifyApiKey -> can) for machine callers, alongside the existing legacy tenant api_key_hash path (fallback). First cut supports workspace-scoped keys only, mapped 1:1 to an SB tenant via auth_workspace_id; broader (tenant/tenant_group) scopes are explicitly deferred."
 date: 2026-06-17
@@ -90,3 +90,12 @@ pre-provisioning.
 - Per-tenant `can()` filtering in the dashboard (separate slice, best after provisioning).
 - Removing the legacy `api_key_hash` path.
 - Physical centralization / dropping SB's own tenants+workspaces (workstream 4).
+
+## Reality update (2026-09-10)
+
+Shipped: commit `4ab2ef6`, pull request #9 ("authenticate machine callers via auth-brain
+workspace keys, storage-brain slice 2B"). `packages/api/src/middleware/auth.ts` and
+`packages/api/src/lib/auth-brain.ts` carry the `verifyApiKey` path described here. Since
+then, the later company-isolation plan (`docs/plans/2026-07-27-company-isolation.md`, its
+S1 slice) extended this same middleware to also accept `tenant`-scoped auth-brain keys,
+which this plan explicitly deferred.

@@ -1,6 +1,6 @@
 ---
 type: plan
-status: done
+status: completed
 title: "Spec: Storage Brain dashboard auth via auth-brain session (slice 2A)"
 summary: "Dashboard humans authenticate via auth-brain's lumitra_session + verifySession + can(platform.admin), with the legacy admin-key iron-session kept as a transitional fallback. Backend API credential moves to a server-side env var. Adds the auth_workspace_id tenant binding as plumbing for future per-tenant authz. Machine/service-account-key auth on the API worker is explicitly deferred."
 date: 2026-06-16
@@ -137,3 +137,11 @@ Edit:
 - Upload UI (slice 3). Per-tenant `can()` filtering of the file/tenant lists.
 - Removing the legacy admin-key login or the `api_key_hash` tenant path.
 - Physical centralization / dropping SB's own tenants/workspaces (workstream 4).
+
+## Reality update (2026-09-10)
+
+Shipped as spec'd: commits `34f534c` (seed spec), `35301d1` (implementation), `e77dd5e`
+(pull request #6, "authenticate via auth-brain session (storage-brain slice 2A)"). The
+dashboard's human login now goes through auth-brain's `lumitra_session`, with the legacy
+admin-key path kept as fallback, matching the roadmap's "In Progress" line, which is now
+stale and is corrected in this same commit.
