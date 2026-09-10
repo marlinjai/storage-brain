@@ -60,10 +60,13 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
   // other origins via <audio>/<video>/<img> tags. Without this, Chrome blocks
   // the response with ERR_BLOCKED_BY_RESPONSE.NotSameOrigin even when CORS
   // headers are present.
-  app.use('*', secureHeaders({
-    xFrameOptions: false,
-    crossOriginResourcePolicy: 'cross-origin',
-  }));
+  app.use(
+    '*',
+    secureHeaders({
+      xFrameOptions: false,
+      crossOriginResourcePolicy: 'cross-origin',
+    })
+  );
   app.use('*', requestId());
   app.use('*', logger());
   app.use(

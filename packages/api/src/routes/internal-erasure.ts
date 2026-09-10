@@ -28,9 +28,7 @@ internalErasureRoutes.post('/erasure', async (c) => {
   const secret = c.env.STORAGE_ERASURE_WEBHOOK_SECRET;
   // Fail closed: an unconfigured secret can never become an accepted erasure.
   if (!secret) {
-    console.error(
-      '[erasure] STORAGE_ERASURE_WEBHOOK_SECRET is not configured; rejecting delivery'
-    );
+    console.error('[erasure] STORAGE_ERASURE_WEBHOOK_SECRET is not configured; rejecting delivery');
     throw ApiError.internal('Erasure webhook secret is not configured');
   }
 

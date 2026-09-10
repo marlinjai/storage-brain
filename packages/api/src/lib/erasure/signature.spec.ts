@@ -7,7 +7,8 @@ import {
 } from './signature';
 
 const SECRET = 'erasure-signing-secret';
-const BODY = '{"event_id":"evt-1","kind":"tenant.erased","user_id":"u-1","tenant_id":"c-1","requested_at":"2026-07-27T00:00:00.000Z"}';
+const BODY =
+  '{"event_id":"evt-1","kind":"tenant.erased","user_id":"u-1","tenant_id":"c-1","requested_at":"2026-07-27T00:00:00.000Z"}';
 
 describe('erasure signature', () => {
   it('signs as sha256=<hex> and round-trips through verify', async () => {

@@ -126,7 +126,11 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     return result.results.map((row) => this.mapTenantRow(row));
   }
 
-  async updateTenantApiKeyHash(tenantId: string, newHash: string, keyPrefix: string): Promise<boolean> {
+  async updateTenantApiKeyHash(
+    tenantId: string,
+    newHash: string,
+    keyPrefix: string
+  ): Promise<boolean> {
     const result = await this.db
       .prepare('UPDATE tenants SET api_key_hash = ?, key_prefix = ?, updated_at = ? WHERE id = ?')
       .bind(newHash, keyPrefix, Date.now(), tenantId)
@@ -223,20 +227,11 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       .bind(tenantId)
       .run();
 
-    await this.db
-      .prepare('DELETE FROM files WHERE tenant_id = ?')
-      .bind(tenantId)
-      .run();
+    await this.db.prepare('DELETE FROM files WHERE tenant_id = ?').bind(tenantId).run();
 
-    await this.db
-      .prepare('DELETE FROM workspaces WHERE tenant_id = ?')
-      .bind(tenantId)
-      .run();
+    await this.db.prepare('DELETE FROM workspaces WHERE tenant_id = ?').bind(tenantId).run();
 
-    const result = await this.db
-      .prepare('DELETE FROM tenants WHERE id = ?')
-      .bind(tenantId)
-      .run();
+    const result = await this.db.prepare('DELETE FROM tenants WHERE id = ?').bind(tenantId).run();
 
     return (result.meta.changes ?? 0) > 0;
   }
@@ -347,9 +342,7 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     const total = countResult?.count ?? 0;
 
     const filesResult = await this.db
-      .prepare(
-        `SELECT * FROM files WHERE ${whereClause} ORDER BY created_at DESC LIMIT ?`
-      )
+      .prepare(`SELECT * FROM files WHERE ${whereClause} ORDER BY created_at DESC LIMIT ?`)
       .bind(...params, limit + 1)
       .all();
 
@@ -402,11 +395,15 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       .run();
   }
 
-  async renameFile(fileId: string, tenantId: string, originalName: string): Promise<StoredFile | null> {
+  async renameFile(
+    fileId: string,
+    tenantId: string,
+    originalName: string
+  ): Promise<StoredFile | null> {
     const now = Date.now();
     await this.db
       .prepare(
-        'UPDATE files SET original_name = ?, updated_at = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL',
+        'UPDATE files SET original_name = ?, updated_at = ? WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL'
       )
       .bind(originalName, now, fileId, tenantId)
       .run();
@@ -494,9 +491,7 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     params.push(workspaceId, tenantId);
 
     await this.db
-      .prepare(
-        `UPDATE workspaces SET ${setClauses.join(', ')} WHERE id = ? AND tenant_id = ?`
-      )
+      .prepare(`UPDATE workspaces SET ${setClauses.join(', ')} WHERE id = ? AND tenant_id = ?`)
       .bind(...params)
       .run();
 
@@ -594,7 +589,9 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     // Release bytes from each source workspace the files are leaving.
     for (const [source, bytes] of sourceReleases) {
       await this.db
-        .prepare('UPDATE workspaces SET used_bytes = MAX(0, used_bytes - ?), updated_at = ? WHERE id = ?')
+        .prepare(
+          'UPDATE workspaces SET used_bytes = MAX(0, used_bytes - ?), updated_at = ? WHERE id = ?'
+        )
         .bind(bytes, now, source)
         .run();
     }
@@ -705,7 +702,12 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     const availableBytes = result.quota_bytes - result.used_bytes;
     const hasCapacity = availableBytes >= fileSizeBytes;
 
-    return { hasCapacity, quotaBytes: result.quota_bytes, usedBytes: result.used_bytes, availableBytes };
+    return {
+      hasCapacity,
+      quotaBytes: result.quota_bytes,
+      usedBytes: result.used_bytes,
+      availableBytes,
+    };
   }
 
   async reserveQuota(tenantId: string, sizeBytes: number): Promise<void> {
@@ -801,7 +803,12 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     const availableBytes = result.quota_bytes - result.used_bytes;
     const hasCapacity = availableBytes >= fileSizeBytes;
 
-    return { hasCapacity, quotaBytes: result.quota_bytes, usedBytes: result.used_bytes, availableBytes };
+    return {
+      hasCapacity,
+      quotaBytes: result.quota_bytes,
+      usedBytes: result.used_bytes,
+      availableBytes,
+    };
   }
 
   async reserveWorkspaceQuota(workspaceId: string, sizeBytes: number): Promise<void> {
@@ -906,7 +913,9 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       sizeBytes: row.size_bytes as number,
       context: (row.context as string) ?? null,
       tags: row.tags ? (JSON.parse(row.tags as string) as Record<string, string>) : null,
-      metadata: row.metadata ? (JSON.parse(row.metadata as string) as Record<string, unknown>) : null,
+      metadata: row.metadata
+        ? (JSON.parse(row.metadata as string) as Record<string, unknown>)
+        : null,
       processingStatus: row.processing_status as ProcessingStatus,
       webhookUrl: (row.webhook_url as string) ?? null,
       createdAt: row.created_at as number,

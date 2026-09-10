@@ -43,7 +43,7 @@ export class S3StorageAdapter implements StorageAdapter {
   async put(
     key: string,
     data: ReadableStream | ArrayBuffer,
-    options: PutOptions,
+    options: PutOptions
   ): Promise<StorageObject> {
     // S3 SDK needs Buffer/Uint8Array; convert ReadableStream if needed
     let body: Uint8Array;
@@ -158,10 +158,7 @@ export class S3StorageAdapter implements StorageAdapter {
     }
   }
 
-  async getPresignedUploadUrl(
-    key: string,
-    options: PresignedUrlOptions,
-  ): Promise<string> {
+  async getPresignedUploadUrl(key: string, options: PresignedUrlOptions): Promise<string> {
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: key,
@@ -173,10 +170,7 @@ export class S3StorageAdapter implements StorageAdapter {
     });
   }
 
-  async getPresignedDownloadUrl(
-    key: string,
-    options: PresignedUrlOptions,
-  ): Promise<string> {
+  async getPresignedDownloadUrl(key: string, options: PresignedUrlOptions): Promise<string> {
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
@@ -206,8 +200,7 @@ function isNotFound(err: unknown): boolean {
       (err as { name: string }).name === 'NoSuchKey' ||
       ('$metadata' in err &&
         typeof (err as Record<string, unknown>).$metadata === 'object' &&
-        (err as { $metadata: { httpStatusCode?: number } }).$metadata
-          .httpStatusCode === 404))
+        (err as { $metadata: { httpStatusCode?: number } }).$metadata.httpStatusCode === 404))
   );
 }
 
@@ -226,7 +219,6 @@ function parseContentRange(
   const [, start, end, total] = match;
   return { start: Number(start), end: Number(end), total: Number(total) };
 }
-
 
 function isInvalidRange(err: unknown): boolean {
   return (

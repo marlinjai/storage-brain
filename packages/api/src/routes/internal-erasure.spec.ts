@@ -199,7 +199,12 @@ describe('POST /api/v1/internal/erasure — tenant.erased cascade', () => {
     h = makeHarness();
     // Company A: matched by auth_tenant_id. Two live files + one soft-deleted +
     // a workspace + an upload session.
-    await h.db.createTenant({ id: 'sb-A', name: 'Company A', ...baseTenant, authTenantId: 'company-A' });
+    await h.db.createTenant({
+      id: 'sb-A',
+      name: 'Company A',
+      ...baseTenant,
+      authTenantId: 'company-A',
+    });
     await h.db.createWorkspace({ id: 'ws-A', tenantId: 'sb-A', name: 'WS A', slug: 'ws-a' });
     await seedFile(h.db, 'sb-A', 'a-1', { workspaceId: 'ws-A' });
     await seedFile(h.db, 'sb-A', 'a-2');
@@ -221,7 +226,12 @@ describe('POST /api/v1/internal/erasure — tenant.erased cascade', () => {
     await seedFile(h.db, 'sb-W', 'w-1');
 
     // Company B: an unrelated bystander. Must survive untouched.
-    await h.db.createTenant({ id: 'sb-B', name: 'Company B', ...baseTenant, authTenantId: 'company-B' });
+    await h.db.createTenant({
+      id: 'sb-B',
+      name: 'Company B',
+      ...baseTenant,
+      authTenantId: 'company-B',
+    });
     await seedFile(h.db, 'sb-B', 'b-1');
   });
 
@@ -324,7 +334,12 @@ describe('POST /api/v1/internal/erasure — user.erased', () => {
   let h: Harness;
   beforeEach(async () => {
     h = makeHarness();
-    await h.db.createTenant({ id: 'sb-U', name: 'Company U', ...baseTenant, authTenantId: 'company-U' });
+    await h.db.createTenant({
+      id: 'sb-U',
+      name: 'Company U',
+      ...baseTenant,
+      authTenantId: 'company-U',
+    });
     await seedFile(h.db, 'sb-U', 'u-file-1');
   });
 

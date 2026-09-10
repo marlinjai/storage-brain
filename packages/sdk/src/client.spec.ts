@@ -90,17 +90,13 @@ describe('StorageBrain SDK', () => {
     });
 
     it('throws on 404', async () => {
-      mockFetch.mockResolvedValueOnce(
-        errorResponse(404, 'FILE_NOT_FOUND', 'File not found')
-      );
+      mockFetch.mockResolvedValueOnce(errorResponse(404, 'FILE_NOT_FOUND', 'File not found'));
 
       await expect(client.getFile('missing')).rejects.toThrow();
     });
 
     it('throws on 401', async () => {
-      mockFetch.mockResolvedValueOnce(
-        errorResponse(401, 'UNAUTHORIZED', 'Invalid API key')
-      );
+      mockFetch.mockResolvedValueOnce(errorResponse(401, 'UNAUTHORIZED', 'Invalid API key'));
 
       await expect(client.getFile('f1')).rejects.toThrow();
     });
@@ -216,16 +212,11 @@ describe('StorageBrain SDK', () => {
       expect(result).toEqual(response);
       const url = mockFetch.mock.calls[0]![0] as string;
       expect(url).toBe('https://api.example.com/api/v1/files/f1/permanent-url');
-      expect(mockFetch).toHaveBeenCalledWith(
-        url,
-        expect.objectContaining({ method: 'GET' }),
-      );
+      expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ method: 'GET' }));
     });
 
     it('throws on 404', async () => {
-      mockFetch.mockResolvedValueOnce(
-        errorResponse(404, 'FILE_NOT_FOUND', 'File not found'),
-      );
+      mockFetch.mockResolvedValueOnce(errorResponse(404, 'FILE_NOT_FOUND', 'File not found'));
 
       await expect(client.getPermanentUrl('missing')).rejects.toThrow();
     });
@@ -233,7 +224,12 @@ describe('StorageBrain SDK', () => {
 
   describe('getQuota', () => {
     it('returns quota info', async () => {
-      const quota = { quotaBytes: 500000, usedBytes: 1000, availableBytes: 499000, usagePercent: 0 };
+      const quota = {
+        quotaBytes: 500000,
+        usedBytes: 1000,
+        availableBytes: 499000,
+        usagePercent: 0,
+      };
       mockFetch.mockResolvedValueOnce(jsonResponse(quota));
 
       const result = await client.getQuota();

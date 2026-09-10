@@ -41,8 +41,14 @@ describe('KNOWN_FILE_TYPES', () => {
     expect(KNOWN_FILE_TYPES['model/gltf+json']).toEqual({ extension: 'gltf', category: 'model' });
     expect(KNOWN_FILE_TYPES['model/obj']).toEqual({ extension: 'obj', category: 'model' });
     expect(KNOWN_FILE_TYPES['model/stl']).toEqual({ extension: 'stl', category: 'model' });
-    expect(KNOWN_FILE_TYPES['model/vnd.usdz+zip']).toEqual({ extension: 'usdz', category: 'model' });
-    expect(KNOWN_FILE_TYPES['application/vnd.ms-fbx']).toEqual({ extension: 'fbx', category: 'model' });
+    expect(KNOWN_FILE_TYPES['model/vnd.usdz+zip']).toEqual({
+      extension: 'usdz',
+      category: 'model',
+    });
+    expect(KNOWN_FILE_TYPES['application/vnd.ms-fbx']).toEqual({
+      extension: 'fbx',
+      category: 'model',
+    });
   });
 });
 

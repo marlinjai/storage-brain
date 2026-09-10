@@ -52,7 +52,9 @@ function makeStore(seed: {
       state.transactions++;
       const tx: RepointTx = {
         listActiveFileIds: (tenantId) =>
-          Promise.resolve(files.filter((f) => f.tenantId === tenantId && !f.deleted).map((f) => f.id)),
+          Promise.resolve(
+            files.filter((f) => f.tenantId === tenantId && !f.deleted).map((f) => f.id)
+          ),
         moveFiles: (from, to) => Promise.resolve(move(files, from, to)),
         moveWorkspaces: (from, to) => Promise.resolve(move(workspaces, from, to)),
         moveUploadSessions: (from, to) => Promise.resolve(move(uploadSessions, from, to)),
@@ -124,11 +126,22 @@ describe('repointTenants', () => {
 
     const [result] = await repointTenants(store, [{ from: 'old', to: 'new' }]);
 
-    expect(result).toMatchObject({ from: 'old', to: 'new', files: 2, workspaces: 1, uploadSessions: 2 });
+    expect(result).toMatchObject({
+      from: 'old',
+      to: 'new',
+      files: 2,
+      workspaces: 1,
+      uploadSessions: 2,
+    });
     // Untouched tenant stays put.
     expect(store.files.find((f) => f.id === 'f3')?.tenantId).toBe('other');
     // Moved rows now carry the new tenant.
-    expect(store.files.filter((f) => f.tenantId === 'new').map((f) => f.id).sort()).toEqual(['f1', 'f2']);
+    expect(
+      store.files
+        .filter((f) => f.tenantId === 'new')
+        .map((f) => f.id)
+        .sort()
+    ).toEqual(['f1', 'f2']);
     expect(store.transactions).toBe(1);
   });
 
@@ -181,7 +194,14 @@ describe('repointTenants', () => {
 describe('formatRepointResults', () => {
   it('prints per-table counts and the broken permanent-URL ids', () => {
     const out = formatRepointResults([
-      { from: 'old', to: 'new', files: 2, workspaces: 1, uploadSessions: 3, brokenPermanentUrlFileIds: ['f1', 'f2'] },
+      {
+        from: 'old',
+        to: 'new',
+        files: 2,
+        workspaces: 1,
+        uploadSessions: 3,
+        brokenPermanentUrlFileIds: ['f1', 'f2'],
+      },
     ]);
 
     expect(out).toContain('old -> new');
@@ -193,7 +213,14 @@ describe('formatRepointResults', () => {
 
   it('says "none" when nothing broke', () => {
     const out = formatRepointResults([
-      { from: 'old', to: 'new', files: 0, workspaces: 0, uploadSessions: 0, brokenPermanentUrlFileIds: [] },
+      {
+        from: 'old',
+        to: 'new',
+        files: 0,
+        workspaces: 0,
+        uploadSessions: 0,
+        brokenPermanentUrlFileIds: [],
+      },
     ]);
     expect(out).toContain('permanent URLs broken: none');
   });

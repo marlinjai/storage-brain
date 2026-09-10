@@ -33,7 +33,9 @@ const DEFAULT_MAX_RETRIES = 3;
 type UploadResponse = { processingStatus?: string; metadata?: Record<string, unknown> };
 
 /** Shape of an API error envelope returned on non-2xx responses. */
-type ApiErrorBody = { error?: { code?: string; message?: string; details?: Record<string, unknown> } };
+type ApiErrorBody = {
+  error?: { code?: string; message?: string; details?: Record<string, unknown> };
+};
 
 /**
  * Storage Brain SDK Client
@@ -119,10 +121,16 @@ export class StorageBrain {
     onProgress?.(10);
 
     // Upload file to presigned URL
-    await this.uploadToPresignedUrl(handshake.presignedUrl, file, fileType, (progress) => {
-      // Map upload progress to 10-90%
-      onProgress?.(10 + Math.round(progress * 0.8));
-    }, signal);
+    await this.uploadToPresignedUrl(
+      handshake.presignedUrl,
+      file,
+      fileType,
+      (progress) => {
+        // Map upload progress to 10-90%
+        onProgress?.(10 + Math.round(progress * 0.8));
+      },
+      signal
+    );
 
     onProgress?.(90);
 
@@ -195,10 +203,7 @@ export class StorageBrain {
       if (error instanceof StorageBrainError) {
         throw error;
       }
-      throw new UploadError(
-        'Failed to upload file',
-        error instanceof Error ? error : undefined
-      );
+      throw new UploadError('Failed to upload file', error instanceof Error ? error : undefined);
     }
   }
 
@@ -383,7 +388,10 @@ export class StorageBrain {
    * Get a time-limited signed URL for unauthenticated file download
    */
   async getSignedUrl(fileId: string, expiresIn = 3600): Promise<SignedUrlInfo> {
-    return this.request<SignedUrlInfo>('GET', `/api/v1/files/${fileId}/signed-url?expiresIn=${expiresIn}`);
+    return this.request<SignedUrlInfo>(
+      'GET',
+      `/api/v1/files/${fileId}/signed-url?expiresIn=${expiresIn}`
+    );
   }
 
   /**
@@ -455,11 +463,7 @@ export class StorageBrain {
   /**
    * Make an authenticated API request with retry logic
    */
-  private async request<T>(
-    method: string,
-    path: string,
-    body?: unknown
-  ): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     let lastError: Error | undefined;
 
@@ -495,7 +499,7 @@ export class StorageBrain {
           throw parseApiError(response.status, errorBody);
         }
 
-        return await response.json() as T;
+        return (await response.json()) as T;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
 
@@ -515,10 +519,7 @@ export class StorageBrain {
       }
     }
 
-    throw new NetworkError(
-      `Request failed after ${this.maxRetries} attempts`,
-      lastError
-    );
+    throw new NetworkError(`Request failed after ${this.maxRetries} attempts`, lastError);
   }
 }
 

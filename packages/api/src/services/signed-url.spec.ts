@@ -262,7 +262,9 @@ describe('signed-url service', () => {
       const tokenForOther = await generateSignedToken(FILE_ID, OTHER_TENANT_ID, expiresAt, SECRET);
 
       // Same file + secret, but the token was minted for OTHER_TENANT_ID.
-      expect(await verifySignedToken(FILE_ID, TENANT_ID, expiresAt, tokenForOther, SECRET)).toBe(false);
+      expect(await verifySignedToken(FILE_ID, TENANT_ID, expiresAt, tokenForOther, SECRET)).toBe(
+        false
+      );
     });
 
     it('accepts DERIVED and LEGACY permanent tokens, rejects cross-tenant', async () => {

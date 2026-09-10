@@ -1,18 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { verifySession, can, cookieGet, getSessionMock, authBrainClientMock } = vi.hoisted(
-  () => {
-    const verifySessionFn = vi.fn();
-    const canFn = vi.fn();
-    return {
-      verifySession: verifySessionFn,
-      can: canFn,
-      cookieGet: vi.fn(),
-      getSessionMock: vi.fn(),
-      authBrainClientMock: { verifySession: verifySessionFn, can: canFn },
-    };
-  }
-);
+const { verifySession, can, cookieGet, getSessionMock, authBrainClientMock } = vi.hoisted(() => {
+  const verifySessionFn = vi.fn();
+  const canFn = vi.fn();
+  return {
+    verifySession: verifySessionFn,
+    can: canFn,
+    cookieGet: vi.fn(),
+    getSessionMock: vi.fn(),
+    authBrainClientMock: { verifySession: verifySessionFn, can: canFn },
+  };
+});
 
 vi.mock('next/headers', () => ({
   cookies: () => Promise.resolve({ get: cookieGet }),

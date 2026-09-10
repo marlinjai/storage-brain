@@ -21,9 +21,8 @@ export const erasureWebhookPayloadSchema = z.object({
 });
 
 // Compile-time guard: the parsed output must be assignable to the shared type.
-type _ParsedIsPayload = z.infer<typeof erasureWebhookPayloadSchema> extends ErasureWebhookPayload
-  ? true
-  : never;
+type _ParsedIsPayload =
+  z.infer<typeof erasureWebhookPayloadSchema> extends ErasureWebhookPayload ? true : never;
 const _assertParsedIsPayload: _ParsedIsPayload = true;
 void _assertParsedIsPayload;
 

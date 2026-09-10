@@ -158,7 +158,10 @@ describe('uploadFile', () => {
 
     it('tenant quota exceeded (with byte details)', async () => {
       mockFetch.mockResolvedValueOnce(
-        jsonResponse({ code: 'QUOTA_EXCEEDED', details: { usedBytes: 1048576, quotaBytes: 2097152 } }, 403)
+        jsonResponse(
+          { code: 'QUOTA_EXCEEDED', details: { usedBytes: 1048576, quotaBytes: 2097152 } },
+          403
+        )
       );
       await expect(uploadFile({ tenantId: 't1', file: makeFile() })).rejects.toThrowError(
         /Storage full: 1\.0 MB\/2\.0 MB\./

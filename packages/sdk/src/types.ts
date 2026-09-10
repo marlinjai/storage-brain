@@ -1,7 +1,4 @@
-import type {
-  AllowedMimeType,
-  ProcessingStatus,
-} from './constants';
+import type { AllowedMimeType, ProcessingStatus } from './constants';
 
 // ============================================================================
 // Shared Types (inlined from @storage-brain/shared)

@@ -71,7 +71,11 @@ describe('POST /webhooks/r2-upload-complete signature gate', () => {
     app = createApp({ db: db as unknown as DatabaseAdapter, storage: createMockStorage() });
   });
 
-  function post(body: string, headers: Record<string, string>, env: typeof ENV | Record<string, unknown> = ENV) {
+  function post(
+    body: string,
+    headers: Record<string, string>,
+    env: typeof ENV | Record<string, unknown> = ENV
+  ) {
     return app.request(
       '/webhooks/r2-upload-complete',
       { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body },

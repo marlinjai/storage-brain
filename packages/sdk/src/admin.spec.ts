@@ -42,14 +42,20 @@ describe('StorageBrainAdmin SDK', () => {
       void a.listTenants();
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/admin/tenants',
-        expect.anything(),
+        expect.anything()
       );
     });
   });
 
   describe('createTenant', () => {
     it('creates a tenant and returns result', async () => {
-      const result = { id: 't1', name: 'Acme', apiKey: 'sk_live_abc', quotaBytes: 500, allowedFileTypes: ['image/png'] };
+      const result = {
+        id: 't1',
+        name: 'Acme',
+        apiKey: 'sk_live_abc',
+        quotaBytes: 500,
+        allowedFileTypes: ['image/png'],
+      };
       mockFetch.mockResolvedValueOnce(jsonResponse(result, 201));
 
       const tenant = await admin.createTenant({ name: 'Acme' });
@@ -61,7 +67,7 @@ describe('StorageBrainAdmin SDK', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ name: 'Acme' }),
-        }),
+        })
       );
     });
 
@@ -86,7 +92,7 @@ describe('StorageBrainAdmin SDK', () => {
       expect(response.total).toBe(1);
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/admin/tenants',
-        expect.anything(),
+        expect.anything()
       );
     });
 
@@ -97,7 +103,7 @@ describe('StorageBrainAdmin SDK', () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/admin/tenants?limit=5&cursor=abc',
-        expect.anything(),
+        expect.anything()
       );
     });
   });
@@ -112,7 +118,7 @@ describe('StorageBrainAdmin SDK', () => {
       expect(result.id).toBe('t1');
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/admin/tenants/t1',
-        expect.objectContaining({ method: 'GET' }),
+        expect.objectContaining({ method: 'GET' })
       );
     });
 
@@ -136,7 +142,7 @@ describe('StorageBrainAdmin SDK', () => {
         expect.objectContaining({
           method: 'PATCH',
           body: JSON.stringify({ name: 'Updated' }),
-        }),
+        })
       );
     });
   });
@@ -149,7 +155,7 @@ describe('StorageBrainAdmin SDK', () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/admin/tenants/t1',
-        expect.objectContaining({ method: 'DELETE' }),
+        expect.objectContaining({ method: 'DELETE' })
       );
     });
   });
@@ -164,7 +170,7 @@ describe('StorageBrainAdmin SDK', () => {
       expect(response.apiKey).toBe('sk_live_new');
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/admin/tenants/t1/regenerate-key',
-        expect.objectContaining({ method: 'POST' }),
+        expect.objectContaining({ method: 'POST' })
       );
     });
   });
@@ -190,7 +196,7 @@ describe('StorageBrainAdmin SDK', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(input),
-        }),
+        })
       );
       const headers = mockFetch.mock.calls[0]![1].headers;
       expect(headers.Authorization).toBe('Bearer admin-secret');
@@ -198,11 +204,11 @@ describe('StorageBrainAdmin SDK', () => {
 
     it('propagates API errors (e.g. 400 invalid file type)', async () => {
       mockFetch.mockResolvedValueOnce(
-        errorResponse(400, 'INVALID_FILE_TYPE', "File type 'image/png' is not allowed"),
+        errorResponse(400, 'INVALID_FILE_TYPE', "File type 'image/png' is not allowed")
       );
 
       await expect(
-        admin.requestTenantUpload('t1', { fileName: 'a.png', fileType: 'image/png' }),
+        admin.requestTenantUpload('t1', { fileName: 'a.png', fileType: 'image/png' })
       ).rejects.toThrow();
     });
   });

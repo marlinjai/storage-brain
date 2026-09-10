@@ -65,7 +65,9 @@ function createMockDb() {
     releaseQuota: vi.fn(),
     getQuotaUsage: vi.fn(),
     recalculateQuota: vi.fn(),
-    checkWorkspaceQuota: vi.fn().mockResolvedValue({ hasCapacity: true, quotaBytes: 100, usedBytes: 0 }),
+    checkWorkspaceQuota: vi
+      .fn()
+      .mockResolvedValue({ hasCapacity: true, quotaBytes: 100, usedBytes: 0 }),
     reserveWorkspaceQuota: vi.fn(),
     releaseWorkspaceQuota: vi.fn(),
     migrate: vi.fn(),
@@ -149,7 +151,11 @@ describe('requestUpload (shared helper)', () => {
   });
 
   it('rejects when workspace quota is exceeded', async () => {
-    db.checkWorkspaceQuota.mockResolvedValueOnce({ hasCapacity: false, quotaBytes: 10, usedBytes: 10 });
+    db.checkWorkspaceQuota.mockResolvedValueOnce({
+      hasCapacity: false,
+      quotaBytes: 10,
+      usedBytes: 10,
+    });
 
     await expect(
       requestUpload({
@@ -208,8 +214,14 @@ describe('tenant vs admin upload-request parity', () => {
       name: 'disallowed MIME',
       body: validBody,
       setup: () => {
-        db.getTenantByApiKey.mockResolvedValue({ ...mockTenant, allowedFileTypes: ['application/pdf'] });
-        db.getTenantById.mockResolvedValue({ ...mockTenant, allowedFileTypes: ['application/pdf'] });
+        db.getTenantByApiKey.mockResolvedValue({
+          ...mockTenant,
+          allowedFileTypes: ['application/pdf'],
+        });
+        db.getTenantById.mockResolvedValue({
+          ...mockTenant,
+          allowedFileTypes: ['application/pdf'],
+        });
       },
     },
     { name: 'too large', body: { ...validBody, fileSizeBytes: 200 * 1024 * 1024 } },
@@ -217,7 +229,12 @@ describe('tenant vs admin upload-request parity', () => {
       name: 'tenant quota exceeded',
       body: validBody,
       setup: () => {
-        db.checkQuota.mockResolvedValue({ hasCapacity: false, quotaBytes: 100, usedBytes: 100, availableBytes: 0 });
+        db.checkQuota.mockResolvedValue({
+          hasCapacity: false,
+          quotaBytes: 100,
+          usedBytes: 100,
+          availableBytes: 0,
+        });
       },
     },
     {

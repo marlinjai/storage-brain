@@ -54,7 +54,13 @@ export async function publicDownloadHandler(c: Context<AppEnv>) {
         throw ApiError.unauthorized('Invalid expires parameter');
       }
 
-      const valid = await verifySignedToken(fileId, tenantId, expiresAt, token, c.env.URL_SIGNING_SECRET);
+      const valid = await verifySignedToken(
+        fileId,
+        tenantId,
+        expiresAt,
+        token,
+        c.env.URL_SIGNING_SECRET
+      );
       if (!valid) {
         throw ApiError.unauthorized('Invalid or expired download token');
       }
@@ -93,7 +99,9 @@ export async function publicDownloadHandler(c: Context<AppEnv>) {
     originalName = file.originalName;
     sizeBytes = file.sizeBytes;
   } else {
-    throw ApiError.unauthorized('Missing authorization. Provide Bearer token or signed URL parameters.');
+    throw ApiError.unauthorized(
+      'Missing authorization. Provide Bearer token or signed URL parameters.'
+    );
   }
 
   // Resolve any Range request BEFORE touching storage, using the size from the
@@ -116,7 +124,7 @@ export async function publicDownloadHandler(c: Context<AppEnv>) {
   // Fetch from storage
   const object = await storage.get(
     storedPath,
-    rangeRequest.kind === 'range' ? rangeRequest.range : undefined,
+    rangeRequest.kind === 'range' ? rangeRequest.range : undefined
   );
   if (!object) {
     throw ApiError.notFound('File not found in storage');

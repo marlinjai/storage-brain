@@ -44,10 +44,7 @@ describe('sendWebhook', () => {
     expect(result).toBe(true);
     expect(mockFetch).toHaveBeenCalledTimes(1);
 
-    const [url, options] = mockFetch.mock.calls[0] as [
-      string,
-      { method: string; body: string },
-    ];
+    const [url, options] = mockFetch.mock.calls[0] as [string, { method: string; body: string }];
     expect(url).toBe('https://example.com/webhook');
     expect(options.method).toBe('POST');
 
@@ -60,9 +57,7 @@ describe('sendWebhook', () => {
   });
 
   it('retries on failure and succeeds', async () => {
-    mockFetch
-      .mockResolvedValueOnce({ ok: false, status: 500 })
-      .mockResolvedValueOnce({ ok: true });
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 500 }).mockResolvedValueOnce({ ok: true });
 
     const p = sendWebhook({
       fileId: 'file-1',
@@ -130,9 +125,7 @@ describe('sendWebhook', () => {
       event: 'file.uploaded',
     });
 
-    const body = JSON.parse(
-      (mockFetch.mock.calls[0] as [string, { body: string }])[1].body
-    );
+    const body = JSON.parse((mockFetch.mock.calls[0] as [string, { body: string }])[1].body);
     expect(body.workspaceId).toBe('ws-1');
   });
 });

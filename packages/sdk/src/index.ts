@@ -35,10 +35,7 @@ export {
 } from './errors';
 
 // Constants and types from constants
-export type {
-  AllowedMimeType,
-  ProcessingStatus,
-} from './constants';
+export type { AllowedMimeType, ProcessingStatus } from './constants';
 
 export {
   KNOWN_FILE_TYPES,
