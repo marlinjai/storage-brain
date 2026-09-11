@@ -1,13 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { S3StorageAdapter } from './s3';
 import type { StorageAdapter } from '@storage-brain/shared';
 
 const mockSend = vi.fn();
+const s3ClientConfigs: unknown[] = [];
 
 vi.mock('@aws-sdk/client-s3', () => {
   return {
     S3Client: class MockS3Client {
       send = mockSend;
+      constructor(config: unknown) {
+        s3ClientConfigs.push(config);
+      }
     },
     PutObjectCommand: class MockPutObjectCommand {
       constructor(public input: unknown) {}
@@ -33,10 +38,51 @@ describe('S3StorageAdapter', () => {
 
   beforeEach(() => {
     mockSend.mockReset();
+    s3ClientConfigs.length = 0;
     adapter = new S3StorageAdapter({
       bucket: 'test-bucket',
       region: 'us-east-1',
       credentials: { accessKeyId: 'key', secretAccessKey: 'secret' },
+    });
+  });
+
+  describe('request handler (incident 2026-09-11: a hung R2 connection never freed its socket)', () => {
+    it('gives the S3 client a request handler with real timeouts, not the default (no timeout at all)', () => {
+      expect(s3ClientConfigs).toHaveLength(1);
+      const config = s3ClientConfigs[0] as { requestHandler?: NodeHttpHandler };
+      expect(config.requestHandler).toBeInstanceOf(NodeHttpHandler);
+
+      // NodeHttpHandler keeps its resolved config on `.metadata`... in practice
+      // the config object handed to the constructor is the source of truth we
+      // actually control, so assert against it directly rather than reaching
+      // into the handler's internals.
+      const handler = config.requestHandler as unknown as {
+        configProvider: Promise<{
+          connectionTimeout?: number;
+          requestTimeout?: number;
+          httpsAgent?: { maxSockets?: number };
+        }>;
+      };
+      return handler.configProvider.then((resolved) => {
+        expect(resolved.connectionTimeout).toBe(5_000);
+        expect(resolved.requestTimeout).toBe(30_000);
+        expect(resolved.httpsAgent?.maxSockets).toBe(300);
+      });
+    });
+
+    it('reuses one request handler across every S3StorageAdapter instance', () => {
+      new S3StorageAdapter({
+        bucket: 'other-bucket',
+        region: 'us-east-1',
+        credentials: { accessKeyId: 'key2', secretAccessKey: 'secret2' },
+      });
+
+      expect(s3ClientConfigs).toHaveLength(2);
+      const configs = s3ClientConfigs as { requestHandler?: NodeHttpHandler }[];
+      // Sharing one handler (and its underlying agent/socket pool) across
+      // adapters is deliberate: a per-instance handler would give each new
+      // adapter its OWN 300-socket allowance, defeating the point of a cap.
+      expect(configs[0]!.requestHandler).toBe(configs[1]!.requestHandler);
     });
   });
 
@@ -191,6 +237,7 @@ describe('S3StorageAdapter range reads', () => {
 
   beforeEach(() => {
     mockSend.mockReset();
+    s3ClientConfigs.length = 0;
     adapter = new S3StorageAdapter({
       bucket: 'test-bucket',
       region: 'us-east-1',
