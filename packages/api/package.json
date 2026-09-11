@@ -21,6 +21,7 @@
     "@marlinjai/auth-brain-sdk": "^1.3.0",
     "@marlinjai/auth-brain-shared": "^1.4.0",
     "@marlinjai/brain-core": "^0.2.1",
+    "@smithy/node-http-handler": "^4.4.12",
     "@storage-brain/shared": "workspace:*",
     "hono": "^4.0.0",
     "postgres": "^3.4.5",

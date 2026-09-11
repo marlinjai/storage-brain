@@ -23,6 +23,14 @@ date: 2026-04-09
 
 ## Completed
 
+- **2026-09-11 incident fix** — The S3 client (`packages/api/src/adapters/storage/s3.ts`) had
+  no request timeout, so a hung connection to R2 (Cloudflare's S3-compatible object storage
+  backend) never freed its socket. Every download queued behind the wedged pool
+  (`@smithy/node-http-handler:WARN - socket usage at capacity=50 and 691 additional requests
+  are enqueued`, growing with no completions), breaking every image load across every product
+  on Storage Brain until the container was restarted. Fixed: a shared `NodeHttpHandler` with a
+  5s connection timeout, 30s request timeout, and 300-socket cap, so a hung request now fails
+  and frees its socket instead of blocking forever.
 - **v0.5.0** — Multi-tenant workspaces, workspace quotas, workspace-scoped file listing
 - **v0.4.0** — Removed processing pipeline (OCR, thumbnails) — Storage Brain is now storage-only
 - **v0.3.0** — Self-hosting with Docker, S3 + Postgres adapters, admin SDK
