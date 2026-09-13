@@ -1,0 +1,77 @@
+# Publishes @marlinjai/storage-brain-sdk (the only public package in this
+# monorepo) to npm via npm Trusted Publishing (OIDC): no NPM_TOKEN, the id-token
+# below is the credential. Same mechanism as email-mcp and studio-mcp.
+#
+# Release: bump packages/sdk/package.json, merge, then
+#   git tag sdk-v<version> <merge commit> && git push origin sdk-v<version>
+# The plain v* tags in this repo mark service releases, not SDK versions, which
+# is why the SDK gets its own tag prefix. A version is permanent on npm, so the
+# tag must point at main.
+#
+# ONE-TIME npm-side setup (done by a human on npmjs.com, because it is an
+# account-level trust grant): in the package's Settings, add a Trusted
+# Publisher pointing at this repository (marlinjai/storage-brain), workflow
+# `.github/workflows/publish.yml`, no environment. Until that exists a publish
+# fails with a 404 on the PUT.
+name: Publish SDK to npm
+
+on:
+  push:
+    tags:
+      - 'sdk-v*'
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write # required for npm Trusted Publishing (OIDC); no NPM_TOKEN needed
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+      # Trusted Publishing needs npm CLI >= 11.5.1; the bundled one is older.
+      - run: npm install -g npm@latest
+      - run: pnpm install --frozen-lockfile
+      # Only the SDK: the root build also builds the API worker and the Next
+      # dashboard, which this job does not need.
+      - run: pnpm --filter @marlinjai/storage-brain-sdk build
+      - run: pnpm --filter @marlinjai/storage-brain-sdk typecheck
+
+      - name: Refuse a tag that does not match the package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          pkg="$(node -p "require('./packages/sdk/package.json').version")"
+          tag="${GITHUB_REF_NAME#sdk-v}"
+          if [ "$pkg" != "$tag" ]; then
+            echo "tag sdk-v$tag does not match packages/sdk version $pkg" >&2
+            exit 1
+          fi
+
+      - name: Skip if this version is already on npm
+        id: check
+        working-directory: packages/sdk
+        run: |
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "$name@$version is already on npm, nothing to publish"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The SDK's only internal dependency (@marlinjai/brain-core) is a real
+      # caret range, not workspace:, so a plain npm publish from the package
+      # directory is correct here. npm (not pnpm) performs the OIDC exchange.
+      # This repository is public, so npm attaches provenance automatically.
+      - name: Publish
+        if: steps.check.outputs.publish == 'true'
+        working-directory: packages/sdk
+        run: npm publish --access public
