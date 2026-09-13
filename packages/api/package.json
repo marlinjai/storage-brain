@@ -20,7 +20,7 @@
     "@hono/node-server": "^1.13.0",
     "@marlinjai/auth-brain-sdk": "^1.3.0",
     "@marlinjai/auth-brain-shared": "^1.4.0",
-    "@marlinjai/brain-core": "^0.2.1",
+    "@marlinjai/brain-core": "^1.0.0",
     "@smithy/node-http-handler": "^4.4.12",
     "@storage-brain/shared": "workspace:*",
     "hono": "^4.0.0",

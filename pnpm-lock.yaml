@@ -60,8 +60,8 @@ importers:
         specifier: ^1.4.0
         version: 1.4.0
       '@marlinjai/brain-core':
-        specifier: ^0.2.1
-        version: 0.2.1(hono@4.12.0)(zod@3.25.76)
+        specifier: ^1.0.0
+        version: 1.0.0(hono@4.12.0)(zod@3.25.76)
       '@smithy/node-http-handler':
         specifier: ^4.4.12
         version: 4.4.12
@@ -146,8 +146,8 @@ importers:
   packages/sdk:
     dependencies:
       '@marlinjai/brain-core':
-        specifier: ^0.1.0
-        version: 0.1.0(hono@4.12.0)(zod@3.25.76)
+        specifier: ^1.0.0
+        version: 1.0.0(hono@4.12.0)(zod@4.3.6)
     devDependencies:
       tsup:
         specifier: ^8.0.1
@@ -159,8 +159,8 @@ importers:
   packages/shared:
     dependencies:
       '@marlinjai/brain-core':
-        specifier: ^0.1.0
-        version: 0.1.0(hono@4.12.0)(zod@3.25.76)
+        specifier: ^1.0.0
+        version: 1.0.0(hono@4.12.0)(zod@3.25.76)
       zod:
         specifier: ^3.22.4
         version: 3.25.76
@@ -1361,8 +1361,8 @@ packages:
   '@marlinjai/auth-brain-shared@1.4.0':
     resolution: {integrity: sha512-8JNJYnJOvHB4ZqX7XoKjKD2LNBAiD/VxZxptIqLTy/Ja9lNDmcKP0WtY30jXhTOFO/Cc986CE8U2gs0dn+Yv7Q==}
 
-  '@marlinjai/brain-core@0.1.0':
-    resolution: {integrity: sha512-1Ot/3uDM4Ewf18dlzgkAterIa2H5o8+V7IaknR5L4odI+zgMlPPtQ8CbjxU8Z/JnhwF3R+dqIxW+k/o0ithZPg==}
+  '@marlinjai/brain-core@0.2.1':
+    resolution: {integrity: sha512-lWLkn+X0ovN8RqIhz64BO86ECGWXs7wmc5youCb0PFJbvpWPTgELB9S+vTs/TLDPTShXc7KYoHr7UyCBYHBGVw==}
     peerDependencies:
       hono: ^4.0.0
       zod: ^3.22.4
@@ -1372,11 +1372,11 @@ packages:
       zod:
         optional: true
 
-  '@marlinjai/brain-core@0.2.1':
-    resolution: {integrity: sha512-lWLkn+X0ovN8RqIhz64BO86ECGWXs7wmc5youCb0PFJbvpWPTgELB9S+vTs/TLDPTShXc7KYoHr7UyCBYHBGVw==}
+  '@marlinjai/brain-core@1.0.0':
+    resolution: {integrity: sha512-NSnglYHVE4oo6H2X0iZdz5ZSOHAZoj90U8ATS6SfAA2dbOvmi+nqRtBvyCVIbywWK5uHhBDdCSSyQDrGRsmhiQ==}
     peerDependencies:
       hono: ^4.0.0
-      zod: ^3.22.4
+      zod: ^3.22.4 || ^4.0.0
     peerDependenciesMeta:
       hono:
         optional: true
@@ -5834,15 +5834,20 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
-  '@marlinjai/brain-core@0.1.0(hono@4.12.0)(zod@3.25.76)':
-    optionalDependencies:
-      hono: 4.12.0
-      zod: 3.25.76
-
   '@marlinjai/brain-core@0.2.1(hono@4.12.0)(zod@3.25.76)':
     optionalDependencies:
       hono: 4.12.0
       zod: 3.25.76
+
+  '@marlinjai/brain-core@1.0.0(hono@4.12.0)(zod@3.25.76)':
+    optionalDependencies:
+      hono: 4.12.0
+      zod: 3.25.76
+
+  '@marlinjai/brain-core@1.0.0(hono@4.12.0)(zod@4.3.6)':
+    optionalDependencies:
+      hono: 4.12.0
+      zod: 4.3.6
 
   '@marlinjai/clearify@1.11.1(@types/node@20.19.33)(@types/react@19.2.14)(jiti@2.6.1)(lightningcss@1.32.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(rollup@4.57.1)(tsx@4.21.0)(yaml@2.8.2)':
     dependencies:
