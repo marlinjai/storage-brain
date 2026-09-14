@@ -6,6 +6,7 @@ import {
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import type {
   StorageAdapter,
   StorageObject,
@@ -26,6 +27,23 @@ export interface S3StorageAdapterConfig {
   forcePathStyle?: boolean;
 }
 
+// The default Node HTTP handler has no timeout at all, so a request R2 (or
+// any S3-compatible backend) never answers hangs the socket FOREVER: it never
+// errors, never frees, and never retries. Once enough of those pile up, every
+// socket in the pool (default cap 50) is wedged and every new download queues
+// behind them with no way out (`@smithy/node-http-handler:WARN - socket usage
+// at capacity=... and N additional requests are enqueued`, incident
+// 2026-09-11: the queue grew past 690 with nothing completing until the
+// container was restarted). A timeout turns a silent hang into a normal,
+// retryable failure, which is what makes 300 concurrent sockets safe instead
+// of 300 ways to wedge.
+const REQUEST_HANDLER = new NodeHttpHandler({
+  connectionTimeout: 5_000,
+  requestTimeout: 30_000,
+  socketAcquisitionWarningTimeout: 5_000,
+  httpsAgent: { maxSockets: 300 },
+});
+
 export class S3StorageAdapter implements StorageAdapter {
   private client: S3Client;
   private bucket: string;
@@ -37,6 +55,7 @@ export class S3StorageAdapter implements StorageAdapter {
       endpoint: config.endpoint,
       credentials: config.credentials,
       forcePathStyle: config.forcePathStyle ?? !!config.endpoint,
+      requestHandler: REQUEST_HANDLER,
     });
   }
 
