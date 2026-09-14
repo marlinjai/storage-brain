@@ -14,10 +14,7 @@ interface FilesPage<T> {
   nextCursor?: string;
 }
 
-export function useFiles<T = unknown>(
-  tenantId: string | undefined,
-  filters?: UseFilesFilters
-) {
+export function useFiles<T = unknown>(tenantId: string | undefined, filters?: UseFilesFilters) {
   const getKey = (pageIndex: number, previousPageData: FilesPage<T> | null) => {
     if (!tenantId) return null;
     // Reached the end: the previous page returned no cursor.
@@ -37,10 +34,13 @@ export function useFiles<T = unknown>(
     return `/api/tenants/${tenantId}/files${query ? `?${query}` : ''}`;
   };
 
-  const { data, error, isLoading, size, setSize, mutate } =
-    useSWRInfinite<FilesPage<T>, Error>(getKey, fetcher, {
+  const { data, error, isLoading, size, setSize, mutate } = useSWRInfinite<FilesPage<T>, Error>(
+    getKey,
+    fetcher,
+    {
       revalidateFirstPage: false,
-    });
+    }
+  );
 
   const pages = data ?? [];
   const files = pages.flatMap((p) => p.files ?? []);

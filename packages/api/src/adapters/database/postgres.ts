@@ -101,7 +101,7 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
 
   async findTenantsForErasure(
     authTenantId: string | null,
-    authWorkspaceIds: string[],
+    authWorkspaceIds: string[]
   ): Promise<Tenant[]> {
     const clauses: postgres.PendingQuery<postgres.Row[]>[] = [];
     if (authTenantId) clauses.push(this.sql`auth_tenant_id = ${authTenantId}`);
@@ -118,7 +118,11 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     return rows.map((row) => this.mapTenantRow(row));
   }
 
-  async updateTenantApiKeyHash(tenantId: string, newHash: string, keyPrefix: string): Promise<boolean> {
+  async updateTenantApiKeyHash(
+    tenantId: string,
+    newHash: string,
+    keyPrefix: string
+  ): Promise<boolean> {
     const now = Date.now();
     const result = await this.sql`
       UPDATE tenants SET api_key_hash = ${newHash}, key_prefix = ${keyPrefix}, updated_at = ${now} WHERE id = ${tenantId}
@@ -139,7 +143,8 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
       }
 
       if (cursorTimestamp > 0) {
-        const countRows = await this.sql`SELECT COUNT(*)::int as count FROM tenants WHERE created_at < ${cursorTimestamp}`;
+        const countRows = await this
+          .sql`SELECT COUNT(*)::int as count FROM tenants WHERE created_at < ${cursorTimestamp}`;
         const total = (countRows[0]?.count as number) ?? 0;
 
         const tenantRows = await this.sql`
@@ -176,14 +181,15 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
 
   async updateTenant(tenantId: string, updates: UpdateTenantInput): Promise<Tenant | null> {
     const now = Date.now();
-    const sets: postgres.PendingQuery<postgres.Row[]>[] = [
-      this.sql`updated_at = ${now}`,
-    ];
+    const sets: postgres.PendingQuery<postgres.Row[]>[] = [this.sql`updated_at = ${now}`];
 
     if (updates.name !== undefined) sets.push(this.sql`name = ${updates.name}`);
     if (updates.quotaBytes !== undefined) sets.push(this.sql`quota_bytes = ${updates.quotaBytes}`);
     if (updates.allowedFileTypes !== undefined) {
-      sets.push(this.sql`allowed_file_types = ${updates.allowedFileTypes ? JSON.stringify(updates.allowedFileTypes) : null}`);
+      sets.push(
+        this
+          .sql`allowed_file_types = ${updates.allowedFileTypes ? JSON.stringify(updates.allowedFileTypes) : null}`
+      );
     }
     if (updates.authWorkspaceId !== undefined) {
       sets.push(this.sql`auth_workspace_id = ${updates.authWorkspaceId}`);
@@ -277,9 +283,7 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
       }
     }
 
-    const where = conditions.reduce(
-      (acc, cond) => this.sql`${acc} AND ${cond}`,
-    );
+    const where = conditions.reduce((acc, cond) => this.sql`${acc} AND ${cond}`);
 
     const countRows = await this.sql`SELECT COUNT(*)::int as count FROM files WHERE ${where}`;
     const total = (countRows[0]?.count as number) ?? 0;
@@ -309,7 +313,7 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
   async updateFileMetadata(
     fileId: string,
     metadata: Record<string, unknown>,
-    status: ProcessingStatus,
+    status: ProcessingStatus
   ): Promise<void> {
     const now = Date.now();
     await this.sql`
@@ -332,7 +336,11 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     `;
   }
 
-  async renameFile(fileId: string, tenantId: string, originalName: string): Promise<StoredFile | null> {
+  async renameFile(
+    fileId: string,
+    tenantId: string,
+    originalName: string
+  ): Promise<StoredFile | null> {
     const now = Date.now();
     await this.sql`
       UPDATE files SET original_name = ${originalName}, updated_at = ${now}
@@ -383,16 +391,15 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
   async updateWorkspace(
     workspaceId: string,
     tenantId: string,
-    updates: UpdateWorkspaceInput,
+    updates: UpdateWorkspaceInput
   ): Promise<Workspace | null> {
     const now = Date.now();
-    const sets: postgres.PendingQuery<postgres.Row[]>[] = [
-      this.sql`updated_at = ${now}`,
-    ];
+    const sets: postgres.PendingQuery<postgres.Row[]>[] = [this.sql`updated_at = ${now}`];
 
     if (updates.name !== undefined) sets.push(this.sql`name = ${updates.name}`);
     if (updates.quotaBytes !== undefined) sets.push(this.sql`quota_bytes = ${updates.quotaBytes}`);
-    if (updates.metadata !== undefined) sets.push(this.sql`metadata = ${JSON.stringify(updates.metadata)}`);
+    if (updates.metadata !== undefined)
+      sets.push(this.sql`metadata = ${JSON.stringify(updates.metadata)}`);
 
     const setClause = sets.reduce((acc, s) => this.sql`${acc}, ${s}`);
 
@@ -425,7 +432,7 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
   }
 
   async migrateFilesToWorkspace(
-    input: MigrateFilesToWorkspaceInput,
+    input: MigrateFilesToWorkspaceInput
   ): Promise<MigrateFilesToWorkspaceResult> {
     const { tenantId, workspaceId, filter, onlyUnassigned } = input;
 
@@ -508,7 +515,7 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
 
   async aggregateFileContexts(
     tenantId: string,
-    workspaceId?: string,
+    workspaceId?: string
   ): Promise<FileContextAggregate[]> {
     const conditions: postgres.PendingQuery<postgres.Row[]>[] = [
       this.sql`tenant_id = ${tenantId}`,
@@ -650,7 +657,7 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
 
   async checkWorkspaceQuota(
     workspaceId: string,
-    fileSizeBytes: number,
+    fileSizeBytes: number
   ): Promise<QuotaCheckResult | null> {
     const rows = await this.sql`
       SELECT quota_bytes, used_bytes FROM workspaces WHERE id = ${workspaceId}

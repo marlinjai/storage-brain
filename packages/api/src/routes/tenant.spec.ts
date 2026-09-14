@@ -96,9 +96,13 @@ describe('tenant routes', () => {
 
   describe('GET /api/v1/tenant/quota', () => {
     it('returns quota usage', async () => {
-      const res = await app.request('/api/v1/tenant/quota', {
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/tenant/quota',
+        {
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body = await res.json<TestResponseBody>();
@@ -115,9 +119,13 @@ describe('tenant routes', () => {
 
   describe('GET /api/v1/tenant/info', () => {
     it('returns tenant info', async () => {
-      const res = await app.request('/api/v1/tenant/info', {
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/tenant/info',
+        {
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body = await res.json<TestResponseBody>();

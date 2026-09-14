@@ -9,11 +9,9 @@
  */
 export function buildContentDisposition(
   disposition: 'inline' | 'attachment',
-  filename: string,
+  filename: string
 ): string {
-  const asciiFallback = filename
-    .replace(/[^\x20-\x7E]/g, '_')
-    .replace(/["\\]/g, '_');
+  const asciiFallback = filename.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
   const encoded = encodeURIComponent(filename).replace(/['()]/g, escape);
   return `${disposition}; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
 }

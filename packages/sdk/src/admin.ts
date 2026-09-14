@@ -1,9 +1,5 @@
 import { RETRY_CONFIG } from './constants';
-import {
-  StorageBrainError,
-  NetworkError,
-  parseApiError,
-} from './errors';
+import { StorageBrainError, NetworkError, parseApiError } from './errors';
 import type { AllowedMimeType } from './constants';
 
 const DEFAULT_BASE_URL = 'https://api.storage-brain.lumitra.co';
@@ -11,7 +7,9 @@ const DEFAULT_TIMEOUT = 30000;
 const DEFAULT_MAX_RETRIES = 3;
 
 /** Shape of an API error envelope returned on non-2xx responses. */
-type ApiErrorBody = { error?: { code?: string; message?: string; details?: Record<string, unknown> } };
+type ApiErrorBody = {
+  error?: { code?: string; message?: string; details?: Record<string, unknown> };
+};
 
 // ============================================================================
 // Admin Types
@@ -178,9 +176,7 @@ export interface AdminUploadHandshake {
 }
 
 /** Selector for a bulk workspace migration — by tag or by explicit file IDs. */
-export type MigrateFilesFilter =
-  | { tag: { key: string; value: string } }
-  | { fileIds: string[] };
+export type MigrateFilesFilter = { tag: { key: string; value: string } } | { fileIds: string[] };
 
 export interface MigrateFilesToWorkspaceInput {
   /** Target workspace; must belong to the tenant. */
@@ -291,10 +287,7 @@ export class StorageBrainAdmin {
   }
 
   async getTenantFile(tenantId: string, fileId: string): Promise<AdminFileInfo> {
-    return this.request<AdminFileInfo>(
-      'GET',
-      `/api/v1/admin/tenants/${tenantId}/files/${fileId}`
-    );
+    return this.request<AdminFileInfo>('GET', `/api/v1/admin/tenants/${tenantId}/files/${fileId}`);
   }
 
   async getTenantFileSignedUrl(
@@ -320,9 +313,7 @@ export class StorageBrainAdmin {
     );
   }
 
-  async listTenantWorkspaces(
-    tenantId: string
-  ): Promise<{ workspaces: AdminWorkspace[] }> {
+  async listTenantWorkspaces(tenantId: string): Promise<{ workspaces: AdminWorkspace[] }> {
     return this.request<{ workspaces: AdminWorkspace[] }>(
       'GET',
       `/api/v1/admin/tenants/${tenantId}/workspaces`
@@ -341,10 +332,7 @@ export class StorageBrainAdmin {
   }
 
   async getTenantQuota(tenantId: string): Promise<QuotaInfo> {
-    return this.request<QuotaInfo>(
-      'GET',
-      `/api/v1/admin/tenants/${tenantId}/quota`
-    );
+    return this.request<QuotaInfo>('GET', `/api/v1/admin/tenants/${tenantId}/quota`);
   }
 
   /**

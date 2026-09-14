@@ -46,16 +46,11 @@ export class QuotaExceededError extends BaseQuotaExceededError {
  * Invalid file type error
  */
 export class InvalidFileTypeError extends StorageBrainError {
-  constructor(
-    fileType: string,
-    allowedTypes?: string[]
-  ) {
-    super(
-      `File type '${fileType}' is not allowed`,
-      'INVALID_FILE_TYPE',
-      400,
-      { fileType, allowedTypes }
-    );
+  constructor(fileType: string, allowedTypes?: string[]) {
+    super(`File type '${fileType}' is not allowed`, 'INVALID_FILE_TYPE', 400, {
+      fileType,
+      allowedTypes,
+    });
     this.name = 'InvalidFileTypeError';
   }
 }
@@ -64,10 +59,7 @@ export class InvalidFileTypeError extends StorageBrainError {
  * File too large error
  */
 export class FileTooLargeError extends StorageBrainError {
-  constructor(
-    fileSize: number,
-    maxSize: number
-  ) {
+  constructor(fileSize: number, maxSize: number) {
     super(
       `File size ${fileSize} bytes exceeds maximum of ${maxSize} bytes`,
       'FILE_TOO_LARGE',
@@ -98,7 +90,10 @@ export class NetworkError extends BaseNetworkError {}
  * Upload error - file upload failed
  */
 export class UploadError extends StorageBrainError {
-  constructor(message: string, public originalError?: Error) {
+  constructor(
+    message: string,
+    public originalError?: Error
+  ) {
     super(message, 'UPLOAD_ERROR', undefined, { originalError: originalError?.message });
     this.name = 'UploadError';
   }
@@ -133,13 +128,12 @@ export function parseApiError(
         details?.allowedTypes as string[]
       );
     case 'FILE_TOO_LARGE':
-      return new FileTooLargeError(
-        details?.fileSize as number,
-        details?.maxSize as number
-      );
+      return new FileTooLargeError(details?.fileSize as number, details?.maxSize as number);
     case 'FILE_NOT_FOUND':
     case 'NOT_FOUND':
-      return new FileNotFoundError(details?.fileId as string ?? 'unknown') as unknown as StorageBrainError;
+      return new FileNotFoundError(
+        (details?.fileId as string) ?? 'unknown'
+      ) as unknown as StorageBrainError;
     case 'VALIDATION_ERROR':
       return new ValidationError(
         message ?? 'Validation failed',

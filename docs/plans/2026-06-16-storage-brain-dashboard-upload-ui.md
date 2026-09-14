@@ -1,6 +1,6 @@
 ---
 type: plan
-status: done
+status: completed
 title: "Spec: Storage Brain dashboard upload UI (slice 3)"
 summary: "Add an upload UI (dropzone + dialog, progress, cancel, unhappy-path handling) to the Storage Brain dashboard files page. Requires a new admin-scoped upload-request endpoint on the API (the admin SDK has no upload path today), so the dashboard uploads with the admin credential it already holds and never touches tenant keys. Independent of auth-brain."
 date: 2026-06-16
@@ -116,3 +116,9 @@ Edit:
 - Per-tenant `can()` filtering (deferred).
 - Physical centralization (workstream 4).
 - Resumable/multipart uploads for >100MB (the limit stays 100MB; document it, do not raise it).
+
+## Reality update (2026-09-10)
+
+Shipped: `packages/dashboard/src/components/files/UploadDialog.tsx`,
+`packages/dashboard/src/lib/upload-file.ts` (+ spec), and the admin upload-request route
+under `packages/dashboard/src/app/api/tenants/[id]/upload` all exist in the current tree.

@@ -30,7 +30,7 @@ export function buildDownloadUrl(
   fileId: string,
   tenantId: string,
   token: string,
-  expiresAt = 0,
+  expiresAt = 0
 ): string {
   return `${baseUrl}/api/v1/files/${fileId}/download?token=${token}&expires=${expiresAt}&tid=${tenantId}`;
 }

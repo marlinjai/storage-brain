@@ -25,10 +25,7 @@ const ACCEPT_LEGACY_GLOBAL_SIGNATURES = true;
 /** Legacy path: HMAC key from the raw global secret (pre-derivation tokens). */
 async function getKey(secret: string): Promise<CryptoKey> {
   const enc = new TextEncoder();
-  return crypto.subtle.importKey('raw', enc.encode(secret), ALGORITHM, false, [
-    'sign',
-    'verify',
-  ]);
+  return crypto.subtle.importKey('raw', enc.encode(secret), ALGORITHM, false, ['sign', 'verify']);
 }
 
 /**
@@ -119,7 +116,7 @@ export async function generateSignedToken(
   fileId: string,
   tenantId: string,
   expiresAt: number,
-  secret: string,
+  secret: string
 ): Promise<string> {
   // Minted derived-only: sign with the per-tenant HKDF key (finding 5).
   const key = await getDerivedKey(secret, tenantId);
@@ -138,7 +135,7 @@ export async function verifySignedToken(
   tenantId: string,
   expiresAt: number,
   token: string,
-  secret: string,
+  secret: string
 ): Promise<boolean> {
   // Check expiry first
   if (expiresAt <= Date.now()) {
@@ -165,7 +162,7 @@ export async function verifySignedToken(
 export async function generatePermanentToken(
   fileId: string,
   tenantId: string,
-  secret: string,
+  secret: string
 ): Promise<string> {
   // Minted derived-only: sign with the per-tenant HKDF key (finding 5).
   const key = await getDerivedKey(secret, tenantId);
@@ -183,7 +180,7 @@ export async function verifyPermanentToken(
   fileId: string,
   tenantId: string,
   token: string,
-  secret: string,
+  secret: string
 ): Promise<boolean> {
   const data = new TextEncoder().encode(`${tenantId}:${fileId}:permanent`);
   // Per-tenant derived signature, or legacy global-secret signature during the
@@ -202,7 +199,7 @@ export async function verifyPermanentToken(
 export async function generateUploadToken(
   storedPath: string,
   expiresAt: number,
-  secret: string,
+  secret: string
 ): Promise<string> {
   // Minted derived-only: the tenant id is embedded in the stored path, so the
   // key binds to it just like signed/permanent tokens (finding 5).
@@ -221,7 +218,7 @@ export async function verifyUploadToken(
   storedPath: string,
   expiresAt: number,
   token: string,
-  secret: string,
+  secret: string
 ): Promise<boolean> {
   if (expiresAt <= Date.now()) {
     return false;

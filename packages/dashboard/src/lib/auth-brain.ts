@@ -1,7 +1,4 @@
-import {
-  createAuthBrainClient,
-  type AuthBrainClient,
-} from '@marlinjai/auth-brain-sdk';
+import { createAuthBrainClient, type AuthBrainClient } from '@marlinjai/auth-brain-sdk';
 
 /**
  * Lazily-built singleton auth-brain client (mirrors the analytics-platform

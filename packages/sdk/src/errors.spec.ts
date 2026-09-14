@@ -63,14 +63,21 @@ describe('parseApiError', () => {
 
   it('returns QuotaExceededError for QUOTA_EXCEEDED', () => {
     const err = parseApiError(403, {
-      error: { code: 'QUOTA_EXCEEDED', message: 'Over', details: { quotaBytes: 100, usedBytes: 100 } },
+      error: {
+        code: 'QUOTA_EXCEEDED',
+        message: 'Over',
+        details: { quotaBytes: 100, usedBytes: 100 },
+      },
     });
     expect(err).toBeInstanceOf(QuotaExceededError);
   });
 
   it('returns InvalidFileTypeError for INVALID_FILE_TYPE', () => {
     const err = parseApiError(400, {
-      error: { code: 'INVALID_FILE_TYPE', details: { fileType: 'text/plain', allowedTypes: ['image/png'] } },
+      error: {
+        code: 'INVALID_FILE_TYPE',
+        details: { fileType: 'text/plain', allowedTypes: ['image/png'] },
+      },
     });
     expect(err).toBeInstanceOf(InvalidFileTypeError);
   });

@@ -9,10 +9,7 @@ interface WorkspacesResponse {
 export function useWorkspaces(tenantId: string | undefined) {
   const url = tenantId ? `/api/tenants/${tenantId}/workspaces` : null;
 
-  const { data, error, isLoading, mutate } = useSWR<WorkspacesResponse, Error>(
-    url,
-    fetcher
-  );
+  const { data, error, isLoading, mutate } = useSWR<WorkspacesResponse, Error>(url, fetcher);
 
   return {
     workspaces: data?.workspaces ?? [],

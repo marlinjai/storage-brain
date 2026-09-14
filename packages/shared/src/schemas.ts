@@ -7,7 +7,9 @@ export { uuidSchema, apiKeySchema, cursorSchema, workspaceSlugSchema } from '@ma
 /**
  * File type validation — accepts any valid MIME type string (e.g. "image/png", "audio/wav")
  */
-export const fileTypeSchema = z.string().regex(/^[a-z]+\/[a-z0-9.+-]+$/i, 'Invalid MIME type format');
+export const fileTypeSchema = z
+  .string()
+  .regex(/^[a-z]+\/[a-z0-9.+-]+$/i, 'Invalid MIME type format');
 
 /**
  * Tags validation (string key-value pairs)
@@ -142,7 +144,14 @@ export const webhookPayloadSchema = z.object({
  */
 export const createWorkspaceSchema = z.object({
   name: z.string().min(1).max(255),
-  slug: z.string().min(1).max(100).regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/, 'Slug must be lowercase alphanumeric with hyphens'),
+  slug: z
+    .string()
+    .min(1)
+    .max(100)
+    .regex(
+      /^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/,
+      'Slug must be lowercase alphanumeric with hyphens'
+    ),
   quotaBytes: z.number().int().positive().optional(),
   metadata: z.record(z.unknown()).optional(),
 });

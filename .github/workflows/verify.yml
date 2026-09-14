@@ -9,6 +9,17 @@ on:
     branches: [main]
 
 jobs:
+  # The root ROADMAP.md is the only index of open work; plans under docs/plans/
+  # are the only place content lives. Rule: knowledge-base
+  # standards/document-lifecycle.md, section 4.
+  roadmap-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: marlinjai/actions-shared/roadmap-check@roadmap-check-v1
+        with:
+          max-age: 30
+
   verify:
     runs-on: ubuntu-latest
     steps:

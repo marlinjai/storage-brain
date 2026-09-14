@@ -110,7 +110,9 @@ describe('S3StorageAdapter', () => {
         },
       });
 
-      const result = await adapter.put('test/file.bin', stream, { contentType: 'application/octet-stream' });
+      const result = await adapter.put('test/file.bin', stream, {
+        contentType: 'application/octet-stream',
+      });
       expect(result.size).toBe(5);
     });
   });
@@ -219,7 +221,10 @@ describe('S3StorageAdapter', () => {
 
   describe('getPresignedUploadUrl', () => {
     it('returns a presigned URL', async () => {
-      const url = await adapter.getPresignedUploadUrl!('key', { expiresIn: 900, contentType: 'image/png' });
+      const url = await adapter.getPresignedUploadUrl!('key', {
+        expiresIn: 900,
+        contentType: 'image/png',
+      });
       expect(url).toBe('https://presigned.example.com/file');
     });
   });
@@ -283,7 +288,9 @@ describe('S3StorageAdapter range reads', () => {
 
     await adapter.get('k', { start: 100 });
 
-    expect((mockSend.mock.calls[0]![0] as { input: { Range?: string } }).input.Range).toBe('bytes=100-');
+    expect((mockSend.mock.calls[0]![0] as { input: { Range?: string } }).input.Range).toBe(
+      'bytes=100-'
+    );
   });
 
   it('falls back to the whole object when S3 rejects the range', async () => {
@@ -299,7 +306,9 @@ describe('S3StorageAdapter range reads', () => {
     expect(res!.range).toBeUndefined();
     expect(res!.size).toBe(10);
     // Second call carries no Range header at all.
-    expect((mockSend.mock.calls[1]![0] as { input: { Range?: string } }).input.Range).toBeUndefined();
+    expect(
+      (mockSend.mock.calls[1]![0] as { input: { Range?: string } }).input.Range
+    ).toBeUndefined();
   });
 
   it('still propagates a non-range error', async () => {

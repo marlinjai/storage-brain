@@ -81,7 +81,9 @@ function createMockDb() {
 function createMockStorage(): StorageAdapter {
   return {
     put: vi.fn(),
-    get: vi.fn().mockResolvedValue({ body: new ReadableStream(), contentType: 'image/png', size: 2048 }),
+    get: vi
+      .fn()
+      .mockResolvedValue({ body: new ReadableStream(), contentType: 'image/png', size: 2048 }),
     delete: vi.fn(),
     exists: vi.fn(),
     head: vi.fn(),
@@ -182,20 +184,20 @@ describe('public download: byte ranges', () => {
   /** A storage adapter that honours ranges, like S3 and R2 do. */
   function rangeAwareStorage(): StorageAdapter {
     getSpy = vi.fn((_key: string, range?: { start: number; end?: number }) => {
-        if (!range) {
-          return Promise.resolve({
-            body: new ReadableStream(),
-            contentType: 'image/png',
-            size: 2048,
-          });
-        }
-        const end = range.end ?? 2047;
+      if (!range) {
         return Promise.resolve({
           body: new ReadableStream(),
           contentType: 'image/png',
           size: 2048,
-          range: { start: range.start, end, total: 2048 },
         });
+      }
+      const end = range.end ?? 2047;
+      return Promise.resolve({
+        body: new ReadableStream(),
+        contentType: 'image/png',
+        size: 2048,
+        range: { start: range.start, end, total: 2048 },
+      });
     });
     return {
       put: vi.fn(),
@@ -221,7 +223,7 @@ describe('public download: byte ranges', () => {
     const res = await app.request(
       `/api/v1/files/${FILE_A}/download`,
       { headers: { ...AUTH, Range: 'bytes=0-99' } },
-      ENV,
+      ENV
     );
 
     expect(res.status).toBe(206);
@@ -237,7 +239,7 @@ describe('public download: byte ranges', () => {
     const res = await app.request(
       `/api/v1/files/${FILE_A}/download`,
       { headers: { ...AUTH, Range: 'bytes=2000-' } },
-      ENV,
+      ENV
     );
 
     expect(res.status).toBe(206);
@@ -251,7 +253,7 @@ describe('public download: byte ranges', () => {
     const res = await app.request(
       `/api/v1/files/${FILE_A}/download`,
       { headers: { ...AUTH, Range: 'bytes=99999-' } },
-      ENV,
+      ENV
     );
 
     expect(res.status).toBe(416);
@@ -281,7 +283,7 @@ describe('public download: byte ranges', () => {
     const res = await app.request(
       `/api/v1/files/${FILE_A}/download`,
       { headers: { ...AUTH, Range: 'bytes=0-99' } },
-      ENV,
+      ENV
     );
 
     expect(res.status).toBe(200);
@@ -315,7 +317,7 @@ describe('public download: partial-response headers', () => {
           contentType: 'image/png',
           size: 2048,
           ...(range ? { range: { start: range.start, end: range.end ?? 2047, total: 2048 } } : {}),
-        }),
+        })
       ),
       delete: vi.fn(),
       exists: vi.fn(),
@@ -335,7 +337,7 @@ describe('public download: partial-response headers', () => {
     return app.request(
       `/api/v1/files/${FILE_A}/download?token=${tok}&expires=0&tid=${TENANT_A}`,
       { headers },
-      ENV,
+      ENV
     );
   }
 

@@ -99,14 +99,18 @@ describe('upload routes', () => {
     };
 
     it('returns presigned URL for valid request', async () => {
-      const res = await app.request('/api/v1/upload/request', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer sk_live_test123',
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/upload/request',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(validBody),
         },
-        body: JSON.stringify(validBody),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body = await res.json<TestResponseBody>();
@@ -117,41 +121,53 @@ describe('upload routes', () => {
     });
 
     it('creates file record and upload session', async () => {
-      await app.request('/api/v1/upload/request', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer sk_live_test123',
-          'Content-Type': 'application/json',
+      await app.request(
+        '/api/v1/upload/request',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(validBody),
         },
-        body: JSON.stringify(validBody),
-      }, ENV);
+        ENV
+      );
 
       expect(db.createFile).toHaveBeenCalledTimes(1);
       expect(db.createUploadSession).toHaveBeenCalledTimes(1);
     });
 
     it('reserves quota for non-zero file size', async () => {
-      await app.request('/api/v1/upload/request', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer sk_live_test123',
-          'Content-Type': 'application/json',
+      await app.request(
+        '/api/v1/upload/request',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(validBody),
         },
-        body: JSON.stringify(validBody),
-      }, ENV);
+        ENV
+      );
 
       expect(db.reserveQuota).toHaveBeenCalledWith(TENANT_ID, 1024);
     });
 
     it('rejects invalid MIME type format', async () => {
-      const res = await app.request('/api/v1/upload/request', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer sk_live_test123',
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/upload/request',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ ...validBody, fileType: 'not-a-mime-type' }),
         },
-        body: JSON.stringify({ ...validBody, fileType: 'not-a-mime-type' }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(400);
     });
@@ -164,27 +180,35 @@ describe('upload routes', () => {
         availableBytes: 0,
       });
 
-      const res = await app.request('/api/v1/upload/request', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer sk_live_test123',
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/upload/request',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(validBody),
         },
-        body: JSON.stringify(validBody),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(403);
     });
 
     it('rejects file exceeding max size', async () => {
-      const res = await app.request('/api/v1/upload/request', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer sk_live_test123',
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/upload/request',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ ...validBody, fileSizeBytes: 200 * 1024 * 1024 }),
         },
-        body: JSON.stringify({ ...validBody, fileSizeBytes: 200 * 1024 * 1024 }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(400);
     });
@@ -195,14 +219,18 @@ describe('upload routes', () => {
         allowedFileTypes: ['application/pdf'],
       });
 
-      const res = await app.request('/api/v1/upload/request', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer sk_live_test123',
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/upload/request',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(validBody),
         },
-        body: JSON.stringify(validBody),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(400);
     });
@@ -211,14 +239,18 @@ describe('upload routes', () => {
       const wsId = '770e8400-e29b-41d4-a716-446655440000';
       db.getWorkspaceById.mockResolvedValueOnce(null);
 
-      const res = await app.request('/api/v1/upload/request', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer sk_live_test123',
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/upload/request',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ ...validBody, workspaceId: wsId }),
         },
-        body: JSON.stringify({ ...validBody, workspaceId: wsId }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(404);
     });

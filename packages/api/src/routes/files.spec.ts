@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createApp } from '../app';
-import { generateSignedToken, generatePermanentToken, verifyPermanentToken } from '../services/signed-url';
+import {
+  generateSignedToken,
+  generatePermanentToken,
+  verifyPermanentToken,
+} from '../services/signed-url';
 import type { StorageAdapter, DatabaseAdapter, Tenant, StoredFile } from '@storage-brain/shared';
 
 const TENANT_ID = '550e8400-e29b-41d4-a716-446655440000';
@@ -72,10 +76,20 @@ function createMockDb() {
     createUploadSession: vi.fn(),
     getUploadSessionByFileId: vi.fn(),
     updateUploadSessionStatus: vi.fn(),
-    checkQuota: vi.fn().mockResolvedValue({ hasCapacity: true, quotaBytes: 500 * 1024 * 1024, usedBytes: 0, availableBytes: 500 * 1024 * 1024 }),
+    checkQuota: vi.fn().mockResolvedValue({
+      hasCapacity: true,
+      quotaBytes: 500 * 1024 * 1024,
+      usedBytes: 0,
+      availableBytes: 500 * 1024 * 1024,
+    }),
     reserveQuota: vi.fn(),
     releaseQuota: vi.fn(),
-    getQuotaUsage: vi.fn().mockResolvedValue({ quotaBytes: 500 * 1024 * 1024, usedBytes: 0, availableBytes: 500 * 1024 * 1024, usagePercent: 0 }),
+    getQuotaUsage: vi.fn().mockResolvedValue({
+      quotaBytes: 500 * 1024 * 1024,
+      usedBytes: 0,
+      availableBytes: 500 * 1024 * 1024,
+      usagePercent: 0,
+    }),
     recalculateQuota: vi.fn(),
     checkWorkspaceQuota: vi.fn(),
     reserveWorkspaceQuota: vi.fn(),
@@ -125,9 +139,13 @@ describe('file routes', () => {
 
   describe('GET /api/v1/files', () => {
     it('returns file list for authenticated tenant', async () => {
-      const res = await app.request('/api/v1/files', {
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/files',
+        {
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body: TestResponseBody = await res.json();
@@ -142,18 +160,26 @@ describe('file routes', () => {
     });
 
     it('returns 401 with invalid auth format', async () => {
-      const res = await app.request('/api/v1/files', {
-        headers: { Authorization: 'Basic invalid' },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/files',
+        {
+          headers: { Authorization: 'Basic invalid' },
+        },
+        ENV
+      );
       expect(res.status).toBe(401);
     });
 
     it('returns 401 when tenant not found', async () => {
       db.getTenantByApiKey.mockResolvedValueOnce(null);
 
-      const res = await app.request('/api/v1/files', {
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/files',
+        {
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
       expect(res.status).toBe(401);
     });
   });
@@ -165,9 +191,13 @@ describe('file routes', () => {
         { context: 'default', fileCount: 1, totalBytes: 10 },
       ]);
 
-      const res = await app.request('/api/v1/files/contexts', {
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/files/contexts',
+        {
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body = await res.json<{ contexts?: Array<{ context: string }> }>();
@@ -181,18 +211,26 @@ describe('file routes', () => {
       const WS = '770e8400-e29b-41d4-a716-446655440000';
       db.aggregateFileContexts.mockResolvedValueOnce([]);
 
-      const res = await app.request(`/api/v1/files/contexts?workspaceId=${WS}`, {
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/files/contexts?workspaceId=${WS}`,
+        {
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       expect(db.aggregateFileContexts).toHaveBeenCalledWith(TENANT_ID, WS);
     });
 
     it('rejects a non-uuid workspaceId with 400', async () => {
-      const res = await app.request('/api/v1/files/contexts?workspaceId=not-a-uuid', {
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/files/contexts?workspaceId=not-a-uuid',
+        {
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(400);
     });
@@ -205,9 +243,13 @@ describe('file routes', () => {
 
   describe('GET /api/v1/files/:fileId', () => {
     it('returns file info', async () => {
-      const res = await app.request(`/api/v1/files/${FILE_ID}`, {
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}`,
+        {
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body: TestResponseBody = await res.json();
@@ -218,16 +260,24 @@ describe('file routes', () => {
     it('returns 404 when file not found', async () => {
       db.getFileById.mockResolvedValueOnce(null);
 
-      const res = await app.request(`/api/v1/files/${FILE_ID}`, {
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}`,
+        {
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
       expect(res.status).toBe(404);
     });
 
     it('scopes file lookup to tenant', async () => {
-      await app.request(`/api/v1/files/${FILE_ID}`, {
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      await app.request(
+        `/api/v1/files/${FILE_ID}`,
+        {
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(db.getFileById).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
     });
@@ -235,7 +285,10 @@ describe('file routes', () => {
 
   describe('PATCH /api/v1/files/:fileId', () => {
     it('renames the file and returns the updated file info', async () => {
-      const renamed = { ...mockFile, originalName: 'voice-sample_max-mustermann_2026-07-08_ab12.webm' };
+      const renamed = {
+        ...mockFile,
+        originalName: 'voice-sample_max-mustermann_2026-07-08_ab12.webm',
+      };
       db.renameFile.mockResolvedValueOnce(renamed);
 
       const res = await app.request(
@@ -246,9 +299,11 @@ describe('file routes', () => {
             Authorization: 'Bearer sk_live_test123',
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ originalName: 'voice-sample_max-mustermann_2026-07-08_ab12.webm' }),
+          body: JSON.stringify({
+            originalName: 'voice-sample_max-mustermann_2026-07-08_ab12.webm',
+          }),
         },
-        ENV,
+        ENV
       );
 
       expect(res.status).toBe(200);
@@ -257,7 +312,7 @@ describe('file routes', () => {
       expect(db.renameFile).toHaveBeenCalledWith(
         FILE_ID,
         TENANT_ID,
-        'voice-sample_max-mustermann_2026-07-08_ab12.webm',
+        'voice-sample_max-mustermann_2026-07-08_ab12.webm'
       );
     });
 
@@ -272,7 +327,7 @@ describe('file routes', () => {
           },
           body: JSON.stringify({ originalName: 'renamed.png' }),
         },
-        ENV,
+        ENV
       );
 
       expect(storage.put).not.toHaveBeenCalled();
@@ -292,7 +347,7 @@ describe('file routes', () => {
           },
           body: JSON.stringify({ originalName: 'renamed.png' }),
         },
-        ENV,
+        ENV
       );
 
       expect(res.status).toBe(404);
@@ -309,7 +364,7 @@ describe('file routes', () => {
           },
           body: JSON.stringify({ originalName: '' }),
         },
-        ENV,
+        ENV
       );
 
       expect(res.status).toBe(400);
@@ -327,7 +382,7 @@ describe('file routes', () => {
           },
           body: JSON.stringify({ originalName: '../etc/passwd' }),
         },
-        ENV,
+        ENV
       );
 
       expect(res.status).toBe(400);
@@ -345,7 +400,7 @@ describe('file routes', () => {
           },
           body: JSON.stringify({ originalName: 'renamed.png' }),
         },
-        ENV,
+        ENV
       );
 
       expect(res.status).toBe(400);
@@ -359,7 +414,7 @@ describe('file routes', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ originalName: 'renamed.png' }),
         },
-        ENV,
+        ENV
       );
       expect(res.status).toBe(401);
     });
@@ -368,12 +423,17 @@ describe('file routes', () => {
   describe('GET /api/v1/files/:fileId/download (cross-origin embedding)', () => {
     it('responds with CORS + CORP headers so browsers can embed the file cross-origin', async () => {
       const expiresAt = Date.now() + 60_000;
-      const token = await generateSignedToken(FILE_ID, TENANT_ID, expiresAt, ENV.URL_SIGNING_SECRET);
+      const token = await generateSignedToken(
+        FILE_ID,
+        TENANT_ID,
+        expiresAt,
+        ENV.URL_SIGNING_SECRET
+      );
 
       const res = await app.request(
         `/api/v1/files/${FILE_ID}/download?token=${token}&expires=${expiresAt}&tid=${TENANT_ID}`,
         { method: 'GET' },
-        ENV,
+        ENV
       );
 
       expect(res.status).toBe(200);
@@ -387,7 +447,12 @@ describe('file routes', () => {
 
     it('returns 200 and RFC 6266 Content-Disposition for non-ASCII filenames', async () => {
       const expiresAt = Date.now() + 60_000;
-      const token = await generateSignedToken(FILE_ID, TENANT_ID, expiresAt, ENV.URL_SIGNING_SECRET);
+      const token = await generateSignedToken(
+        FILE_ID,
+        TENANT_ID,
+        expiresAt,
+        ENV.URL_SIGNING_SECRET
+      );
       // NFD-decomposed "ü" (u + U+0308 combining diaeresis): the exact prod failure mode.
       const decomposedName = 'Rechnung für Test.pdf';
       db.getFileById.mockResolvedValueOnce({ ...mockFile, originalName: decomposedName });
@@ -395,7 +460,7 @@ describe('file routes', () => {
       const res = await app.request(
         `/api/v1/files/${FILE_ID}/download?token=${token}&expires=${expiresAt}&tid=${TENANT_ID}`,
         { method: 'GET' },
-        ENV,
+        ENV
       );
 
       expect(res.status).toBe(200);
@@ -415,7 +480,7 @@ describe('file routes', () => {
             'Access-Control-Request-Headers': 'Range',
           },
         },
-        ENV,
+        ENV
       );
 
       expect(res.status).toBeLessThan(400);
@@ -432,7 +497,7 @@ describe('file routes', () => {
       const res = await app.request(
         `/api/v1/files/${FILE_ID}/permanent-url`,
         { headers: { Authorization: 'Bearer sk_live_test123' } },
-        ENV,
+        ENV
       );
 
       expect(res.status).toBe(200);
@@ -457,7 +522,7 @@ describe('file routes', () => {
       const res = await app.request(
         `/api/v1/files/${FILE_ID}/permanent-url`,
         { headers: { Authorization: 'Bearer sk_live_test123' } },
-        envWithBase,
+        envWithBase
       );
 
       expect(res.status).toBe(200);
@@ -476,7 +541,7 @@ describe('file routes', () => {
       const res = await app.request(
         `/api/v1/files/${FILE_ID}/permanent-url`,
         { headers: { Authorization: 'Bearer sk_live_test123' } },
-        ENV,
+        ENV
       );
       expect(res.status).toBe(404);
     });
@@ -485,7 +550,7 @@ describe('file routes', () => {
       await app.request(
         `/api/v1/files/${FILE_ID}/permanent-url`,
         { headers: { Authorization: 'Bearer sk_live_test123' } },
-        ENV,
+        ENV
       );
 
       expect(db.getFileById).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
@@ -499,7 +564,7 @@ describe('file routes', () => {
       const res = await app.request(
         `/api/v1/files/${FILE_ID}/download?token=${token}&expires=0&tid=${TENANT_ID}`,
         { method: 'GET' },
-        ENV,
+        ENV
       );
 
       expect(res.status).toBe(200);
@@ -513,7 +578,7 @@ describe('file routes', () => {
       const res = await app.request(
         `/api/v1/files/${FILE_ID}/download?token=${token}&tid=${TENANT_ID}`,
         { method: 'GET' },
-        ENV,
+        ENV
       );
 
       expect(res.status).toBe(200);
@@ -525,7 +590,7 @@ describe('file routes', () => {
       const res = await app.request(
         `/api/v1/files/${FILE_ID}/download?token=${wrongToken}&expires=0&tid=${TENANT_ID}`,
         { method: 'GET' },
-        ENV,
+        ENV
       );
 
       expect(res.status).toBe(401);
@@ -537,7 +602,7 @@ describe('file routes', () => {
       const res = await app.request(
         `/api/v1/files/${FILE_ID}/download?token=${token}&expires=0`,
         { method: 'GET' },
-        ENV,
+        ENV
       );
 
       expect(res.status).toBe(401);
@@ -550,7 +615,7 @@ describe('file routes', () => {
       const res = await app.request(
         `/api/v1/files/${FILE_ID}/download?token=${token}&expires=0&tid=${TENANT_ID}`,
         { method: 'GET' },
-        rotatedEnv,
+        rotatedEnv
       );
 
       expect(res.status).toBe(401);
@@ -566,7 +631,7 @@ describe('file routes', () => {
       const res = await app.request(
         `/api/v1/files/${FILE_ID}/download?token=${token}&expires=0&tid=${OTHER_TENANT}`,
         { method: 'GET' },
-        ENV,
+        ENV
       );
 
       expect(res.status).toBe(404);
@@ -575,12 +640,17 @@ describe('file routes', () => {
     it('still serves time-limited signed URLs (backward compat)', async () => {
       // The existing expires=<timestamp> path must keep working unchanged.
       const expiresAt = Date.now() + 60_000;
-      const token = await generateSignedToken(FILE_ID, TENANT_ID, expiresAt, ENV.URL_SIGNING_SECRET);
+      const token = await generateSignedToken(
+        FILE_ID,
+        TENANT_ID,
+        expiresAt,
+        ENV.URL_SIGNING_SECRET
+      );
 
       const res = await app.request(
         `/api/v1/files/${FILE_ID}/download?token=${token}&expires=${expiresAt}&tid=${TENANT_ID}`,
         { method: 'GET' },
-        ENV,
+        ENV
       );
 
       expect(res.status).toBe(200);
@@ -594,14 +664,22 @@ describe('file routes', () => {
     // whole product's users share one bucket, so > 100 in a window must not 429.
     it('meters signed-url on the generous gallery bucket, not the 100/60s API bucket', async () => {
       for (let i = 0; i < 150; i++) {
-        const res = await app.request(`/api/v1/files/${FILE_ID}/signed-url`, { headers: AUTH }, ENV);
+        const res = await app.request(
+          `/api/v1/files/${FILE_ID}/signed-url`,
+          { headers: AUTH },
+          ENV
+        );
         expect(res.status).toBe(200);
       }
     });
 
     it('meters permanent-url on the generous gallery bucket', async () => {
       for (let i = 0; i < 150; i++) {
-        const res = await app.request(`/api/v1/files/${FILE_ID}/permanent-url`, { headers: AUTH }, ENV);
+        const res = await app.request(
+          `/api/v1/files/${FILE_ID}/permanent-url`,
+          { headers: AUTH },
+          ENV
+        );
         expect(res.status).toBe(200);
       }
     });
@@ -623,13 +701,18 @@ describe('file routes', () => {
 
     it('leaves the existing /download bucketing unchanged (generous bucket)', async () => {
       const expiresAt = Date.now() + 60_000;
-      const token = await generateSignedToken(FILE_ID, TENANT_ID, expiresAt, ENV.URL_SIGNING_SECRET);
+      const token = await generateSignedToken(
+        FILE_ID,
+        TENANT_ID,
+        expiresAt,
+        ENV.URL_SIGNING_SECRET
+      );
 
       for (let i = 0; i < 150; i++) {
         const res = await app.request(
           `/api/v1/files/${FILE_ID}/download?token=${token}&expires=${expiresAt}&tid=${TENANT_ID}`,
           { method: 'GET' },
-          ENV,
+          ENV
         );
         expect(res.status).toBe(200);
       }
@@ -642,7 +725,7 @@ describe('file routes', () => {
         const res = await app.request(
           '/api/v1/files',
           { headers: { Authorization: 'Bearer sk_live_tenantA' } },
-          ENV,
+          ENV
         );
         if (res.status === 429) {
           aRateLimited = true;
@@ -655,7 +738,7 @@ describe('file routes', () => {
       const bRes = await app.request(
         '/api/v1/files',
         { headers: { Authorization: 'Bearer sk_live_tenantB' } },
-        ENV,
+        ENV
       );
       expect(bRes.status).toBe(200);
     });
@@ -663,10 +746,14 @@ describe('file routes', () => {
 
   describe('DELETE /api/v1/files/:fileId', () => {
     it('soft deletes the row, deletes the binary, and releases tenant quota', async () => {
-      const res = await app.request(`/api/v1/files/${FILE_ID}`, {
-        method: 'DELETE',
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body: TestResponseBody = await res.json();
@@ -682,10 +769,14 @@ describe('file routes', () => {
       const workspaceId = '770e8400-e29b-41d4-a716-446655440002';
       db.getFileById.mockResolvedValueOnce({ ...mockFile, workspaceId });
 
-      const res = await app.request(`/api/v1/files/${FILE_ID}`, {
-        method: 'DELETE',
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       expect(db.releaseQuota).toHaveBeenCalledWith(TENANT_ID, mockFile.sizeBytes);
@@ -695,10 +786,14 @@ describe('file routes', () => {
     it('still completes the DB cleanup when the storage delete fails', async () => {
       storage.delete.mockRejectedValueOnce(new Error('object already gone'));
 
-      const res = await app.request(`/api/v1/files/${FILE_ID}`, {
-        method: 'DELETE',
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body: TestResponseBody = await res.json();
@@ -710,10 +805,14 @@ describe('file routes', () => {
     it('returns 404 if file not found and touches neither storage nor quota', async () => {
       db.getFileById.mockResolvedValueOnce(null);
 
-      const res = await app.request(`/api/v1/files/${FILE_ID}`, {
-        method: 'DELETE',
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/files/${FILE_ID}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
       expect(res.status).toBe(404);
       expect(storage.delete).not.toHaveBeenCalled();
       expect(db.softDeleteFile).not.toHaveBeenCalled();

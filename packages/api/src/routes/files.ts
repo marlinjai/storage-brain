@@ -210,7 +210,9 @@ fileRoutes.get('/:fileId/signed-url', async (c) => {
   }
 
   const expiresInParam = c.req.query('expiresIn');
-  const expiresIn = expiresInParam ? Math.min(Math.max(parseInt(expiresInParam, 10), 60), 86400) : 3600;
+  const expiresIn = expiresInParam
+    ? Math.min(Math.max(parseInt(expiresInParam, 10), 60), 86400)
+    : 3600;
   const expiresAt = Date.now() + expiresIn * 1000;
 
   const token = await generateSignedToken(fileId, tenant.id, expiresAt, c.env.URL_SIGNING_SECRET);

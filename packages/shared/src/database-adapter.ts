@@ -6,11 +6,7 @@ import type {
   ListFilesInput,
   QuotaResponse,
 } from './types';
-import type {
-  AllowedMimeType,
-  UploadSessionStatus,
-  ProcessingStatus,
-} from './constants';
+import type { AllowedMimeType, UploadSessionStatus, ProcessingStatus } from './constants';
 
 export interface CreateTenantInput {
   id: string;
@@ -74,9 +70,7 @@ export interface CreateUploadSessionInput {
 }
 
 /** Selector for which of a tenant's files to migrate — by tag or by explicit IDs. */
-export type MigrateFilesFilter =
-  | { tag: { key: string; value: string } }
-  | { fileIds: string[] };
+export type MigrateFilesFilter = { tag: { key: string; value: string } } | { fileIds: string[] };
 
 export interface MigrateFilesToWorkspaceInput {
   tenantId: string;
@@ -170,7 +164,11 @@ export interface DatabaseAdapter {
    */
   getAllStoredPathsByTenant(tenantId: string): Promise<string[]>;
   softDeleteFile(fileId: string, tenantId: string): Promise<void>;
-  updateFileMetadata(fileId: string, metadata: Record<string, unknown>, status: ProcessingStatus): Promise<void>;
+  updateFileMetadata(
+    fileId: string,
+    metadata: Record<string, unknown>,
+    status: ProcessingStatus
+  ): Promise<void>;
   updateFileProcessingStatus(fileId: string, status: ProcessingStatus): Promise<void>;
   updateFileSizeBytes(fileId: string, sizeBytes: number): Promise<void>;
   /**
@@ -185,7 +183,11 @@ export interface DatabaseAdapter {
   createWorkspace(input: CreateWorkspaceInput): Promise<Workspace>;
   getWorkspaceById(workspaceId: string, tenantId: string): Promise<Workspace | null>;
   listWorkspacesByTenant(tenantId: string): Promise<Workspace[]>;
-  updateWorkspace(workspaceId: string, tenantId: string, updates: UpdateWorkspaceInput): Promise<Workspace | null>;
+  updateWorkspace(
+    workspaceId: string,
+    tenantId: string,
+    updates: UpdateWorkspaceInput
+  ): Promise<Workspace | null>;
   deleteWorkspace(workspaceId: string, tenantId: string): Promise<void>;
   getActiveFilesByWorkspace(workspaceId: string, tenantId: string): Promise<StoredFile[]>;
   softDeleteFilesByWorkspace(workspaceId: string, tenantId: string): Promise<void>;
@@ -196,7 +198,9 @@ export interface DatabaseAdapter {
    * unchanged. This is an admin migration and does NOT enforce the target
    * workspace quota limit (moves are allowed to exceed it).
    */
-  migrateFilesToWorkspace(input: MigrateFilesToWorkspaceInput): Promise<MigrateFilesToWorkspaceResult>;
+  migrateFilesToWorkspace(
+    input: MigrateFilesToWorkspaceInput
+  ): Promise<MigrateFilesToWorkspaceResult>;
   /**
    * Aggregate a tenant's ACTIVE files by their `context` value (the "folder"
    * view), optionally scoped to one workspace. NULL/empty contexts fold into

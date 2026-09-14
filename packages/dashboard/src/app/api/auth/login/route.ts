@@ -10,10 +10,7 @@ export async function POST(request: Request) {
     };
 
     if (!adminApiKey) {
-      return NextResponse.json(
-        { error: 'Admin API key is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Admin API key is required' }, { status: 400 });
     }
 
     // Validate credentials by making a test call
@@ -28,8 +25,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : 'Invalid credentials';
+    const message = err instanceof Error ? err.message : 'Invalid credentials';
     return NextResponse.json({ error: message }, { status: 401 });
   }
 }

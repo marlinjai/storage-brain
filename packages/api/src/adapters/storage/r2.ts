@@ -10,7 +10,11 @@ import type {
 export class R2StorageAdapter implements StorageAdapter {
   constructor(private bucket: R2Bucket) {}
 
-  async put(key: string, data: ReadableStream | ArrayBuffer, options: PutOptions): Promise<StorageObject> {
+  async put(
+    key: string,
+    data: ReadableStream | ArrayBuffer,
+    options: PutOptions
+  ): Promise<StorageObject> {
     const result = await this.bucket.put(key, data, {
       httpMetadata: {
         contentType: options.contentType,
@@ -39,7 +43,7 @@ export class R2StorageAdapter implements StorageAdapter {
               ...(range.end !== undefined ? { length: range.end - range.start + 1 } : {}),
             },
           }
-        : undefined,
+        : undefined
     );
     if (!object) return null;
 
@@ -88,7 +92,7 @@ export class R2StorageAdapter implements StorageAdapter {
  */
 function servedRange(
   range: { offset?: number; length?: number; suffix?: number } | undefined,
-  total: number,
+  total: number
 ): { start: number; end: number; total: number } | null {
   if (!range) return null;
   if (typeof range.suffix === 'number') {
@@ -101,4 +105,3 @@ function servedRange(
   const end = Math.min(total - 1, start + length - 1);
   return { start, end, total };
 }
-

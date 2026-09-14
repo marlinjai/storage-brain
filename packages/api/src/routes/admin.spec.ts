@@ -105,24 +105,32 @@ describe('admin routes', () => {
 
   describe('admin authentication', () => {
     it('rejects requests without auth header', async () => {
-      const res = await app.request('/api/v1/admin/tenants', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Test' }),
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/admin/tenants',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Test' }),
+        },
+        ENV
+      );
 
       expect(res.status).toBe(401);
     });
 
     it('rejects requests with wrong admin key', async () => {
-      const res = await app.request('/api/v1/admin/tenants', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer wrong-key',
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/admin/tenants',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer wrong-key',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: 'Test' }),
         },
-        body: JSON.stringify({ name: 'Test' }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(401);
     });
@@ -130,14 +138,18 @@ describe('admin routes', () => {
 
   describe('POST /api/v1/admin/tenants', () => {
     it('creates a tenant and returns API key', async () => {
-      const res = await app.request('/api/v1/admin/tenants', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${ADMIN_KEY}`,
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/admin/tenants',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${ADMIN_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: 'New Tenant' }),
         },
-        body: JSON.stringify({ name: 'New Tenant' }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(201);
       const body = await res.json<TestResponseBody>();
@@ -149,14 +161,18 @@ describe('admin routes', () => {
     });
 
     it('creates a tenant bound to an auth-brain tenant (the company-wide default binding)', async () => {
-      const res = await app.request('/api/v1/admin/tenants', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${ADMIN_KEY}`,
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/admin/tenants',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${ADMIN_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: 'Lola Storage', authTenantId: 'auth-tenant-lola' }),
         },
-        body: JSON.stringify({ name: 'Lola Storage', authTenantId: 'auth-tenant-lola' }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(201);
       expect(db.createTenant).toHaveBeenCalledWith(
@@ -167,31 +183,39 @@ describe('admin routes', () => {
     it('rejects duplicate tenant name', async () => {
       db.getTenantByName.mockResolvedValueOnce({ id: 'existing', name: 'Existing' });
 
-      const res = await app.request('/api/v1/admin/tenants', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${ADMIN_KEY}`,
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/admin/tenants',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${ADMIN_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: 'Existing' }),
         },
-        body: JSON.stringify({ name: 'Existing' }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(409);
     });
 
     it('accepts custom quotaBytes and allowedFileTypes', async () => {
-      const res = await app.request('/api/v1/admin/tenants', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${ADMIN_KEY}`,
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/admin/tenants',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${ADMIN_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: 'Custom',
+            quotaBytes: 1024 * 1024,
+            allowedFileTypes: ['image/png'],
+          }),
         },
-        body: JSON.stringify({
-          name: 'Custom',
-          quotaBytes: 1024 * 1024,
-          allowedFileTypes: ['image/png'],
-        }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(201);
       const body = await res.json<TestResponseBody>();
@@ -202,10 +226,14 @@ describe('admin routes', () => {
 
   describe('POST /api/v1/admin/tenants/:tenantId/regenerate-key', () => {
     it('regenerates API key', async () => {
-      const res = await app.request('/api/v1/admin/tenants/tenant-123/regenerate-key', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/admin/tenants/tenant-123/regenerate-key',
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body = await res.json<TestResponseBody>();
@@ -217,10 +245,14 @@ describe('admin routes', () => {
     it('returns 404 if tenant not found', async () => {
       db.updateTenantApiKeyHash.mockResolvedValueOnce(false);
 
-      const res = await app.request('/api/v1/admin/tenants/unknown/regenerate-key', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/admin/tenants/unknown/regenerate-key',
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(404);
     });
@@ -234,10 +266,14 @@ describe('admin routes', () => {
         total: 1,
       });
 
-      const res = await app.request('/api/v1/admin/tenants', {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/admin/tenants',
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body = await res.json<TestResponseBody>();
@@ -251,10 +287,14 @@ describe('admin routes', () => {
     it('passes limit and cursor to db', async () => {
       db.listTenants.mockResolvedValueOnce({ tenants: [], nextCursor: null, total: 0 });
 
-      await app.request('/api/v1/admin/tenants?limit=5&cursor=abc', {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
-      }, ENV);
+      await app.request(
+        '/api/v1/admin/tenants?limit=5&cursor=abc',
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+        },
+        ENV
+      );
 
       expect(db.listTenants).toHaveBeenCalledWith({ limit: 5, cursor: 'abc' });
     });
@@ -264,10 +304,14 @@ describe('admin routes', () => {
     it('returns tenant details with quota', async () => {
       db.getTenantById.mockResolvedValueOnce(mockTenant);
 
-      const res = await app.request('/api/v1/admin/tenants/tenant-123', {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/admin/tenants/tenant-123',
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body = await res.json<TestResponseBody>();
@@ -280,10 +324,14 @@ describe('admin routes', () => {
     it('returns 404 for unknown tenant', async () => {
       db.getTenantById.mockResolvedValueOnce(null);
 
-      const res = await app.request('/api/v1/admin/tenants/unknown', {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/admin/tenants/unknown',
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(404);
     });
@@ -294,14 +342,18 @@ describe('admin routes', () => {
       const updatedTenant = { ...mockTenant, name: 'Updated Name' };
       db.updateTenant.mockResolvedValueOnce(updatedTenant);
 
-      const res = await app.request('/api/v1/admin/tenants/tenant-123', {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${ADMIN_KEY}`,
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/admin/tenants/tenant-123',
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${ADMIN_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: 'Updated Name' }),
         },
-        body: JSON.stringify({ name: 'Updated Name' }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body = await res.json<TestResponseBody>();
@@ -313,14 +365,18 @@ describe('admin routes', () => {
       const updatedTenant = { ...mockTenant, quotaBytes: 1024 };
       db.updateTenant.mockResolvedValueOnce(updatedTenant);
 
-      const res = await app.request('/api/v1/admin/tenants/tenant-123', {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${ADMIN_KEY}`,
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/admin/tenants/tenant-123',
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${ADMIN_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ quotaBytes: 1024 }),
         },
-        body: JSON.stringify({ quotaBytes: 1024 }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body = await res.json<TestResponseBody>();
@@ -331,14 +387,18 @@ describe('admin routes', () => {
       const rebound = { ...mockTenant, authWorkspaceId: null, authTenantId: 'auth-tenant-1' };
       db.updateTenant.mockResolvedValueOnce(rebound);
 
-      const res = await app.request('/api/v1/admin/tenants/tenant-123', {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${ADMIN_KEY}`,
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/admin/tenants/tenant-123',
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${ADMIN_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ authTenantId: 'auth-tenant-1', authWorkspaceId: null }),
         },
-        body: JSON.stringify({ authTenantId: 'auth-tenant-1', authWorkspaceId: null }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(200);
       // Both fields pass through: the new binding is set and the old one is
@@ -352,14 +412,18 @@ describe('admin routes', () => {
     it('returns 404 if tenant not found', async () => {
       db.updateTenant.mockResolvedValueOnce(null);
 
-      const res = await app.request('/api/v1/admin/tenants/unknown', {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${ADMIN_KEY}`,
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/admin/tenants/unknown',
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${ADMIN_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: 'Nope' }),
         },
-        body: JSON.stringify({ name: 'Nope' }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(404);
     });
@@ -367,14 +431,18 @@ describe('admin routes', () => {
     it('rejects duplicate name on update', async () => {
       db.getTenantByName.mockResolvedValueOnce({ id: 'other-tenant', name: 'Taken' });
 
-      const res = await app.request('/api/v1/admin/tenants/tenant-123', {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${ADMIN_KEY}`,
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/admin/tenants/tenant-123',
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${ADMIN_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: 'Taken' }),
         },
-        body: JSON.stringify({ name: 'Taken' }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(409);
     });
@@ -384,10 +452,14 @@ describe('admin routes', () => {
     it('deletes tenant and associated data', async () => {
       db.getTenantById.mockResolvedValueOnce(mockTenant);
 
-      const res = await app.request('/api/v1/admin/tenants/tenant-123', {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/admin/tenants/tenant-123',
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body = await res.json<TestResponseBody>();
@@ -412,10 +484,14 @@ describe('admin routes', () => {
         storage: mockStorage as unknown as StorageAdapter,
       });
 
-      const res = await app.request('/api/v1/admin/tenants/tenant-123', {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/admin/tenants/tenant-123',
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       expect(mockStorage.delete).toHaveBeenCalledTimes(2);
@@ -426,10 +502,14 @@ describe('admin routes', () => {
     it('returns 404 for unknown tenant', async () => {
       db.getTenantById.mockResolvedValueOnce(null);
 
-      const res = await app.request('/api/v1/admin/tenants/unknown', {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/admin/tenants/unknown',
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(404);
     });
@@ -451,10 +531,14 @@ describe('admin routes', () => {
     it('soft deletes the row, deletes the binary, and releases tenant quota', async () => {
       db.getFileById.mockResolvedValueOnce(mockFile);
 
-      const res = await app.request(`/api/v1/admin/tenants/tenant-123/files/${FILE_ID}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/admin/tenants/tenant-123/files/${FILE_ID}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body = await res.json<TestResponseBody>();
@@ -469,10 +553,14 @@ describe('admin routes', () => {
       const workspaceId = '770e8400-e29b-41d4-a716-446655440002';
       db.getFileById.mockResolvedValueOnce({ ...mockFile, workspaceId });
 
-      const res = await app.request(`/api/v1/admin/tenants/tenant-123/files/${FILE_ID}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/admin/tenants/tenant-123/files/${FILE_ID}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       expect(db.releaseQuota).toHaveBeenCalledWith('tenant-123', mockFile.sizeBytes);
@@ -483,10 +571,14 @@ describe('admin routes', () => {
       db.getFileById.mockResolvedValueOnce(mockFile);
       storage.delete.mockRejectedValueOnce(new Error('object already gone'));
 
-      const res = await app.request(`/api/v1/admin/tenants/tenant-123/files/${FILE_ID}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/admin/tenants/tenant-123/files/${FILE_ID}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       expect(db.softDeleteFile).toHaveBeenCalledWith(FILE_ID, 'tenant-123');
@@ -496,10 +588,14 @@ describe('admin routes', () => {
     it('returns 404 for unknown file and touches neither storage nor quota', async () => {
       db.getFileById.mockResolvedValueOnce(null);
 
-      const res = await app.request(`/api/v1/admin/tenants/tenant-123/files/${FILE_ID}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/admin/tenants/tenant-123/files/${FILE_ID}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(404);
       expect(storage.delete).not.toHaveBeenCalled();
@@ -525,11 +621,15 @@ describe('admin routes', () => {
     }
 
     function post(body: unknown, tenantId = 'tenant-123', auth = `Bearer ${ADMIN_KEY}`) {
-      return app.request(`/api/v1/admin/tenants/${tenantId}/upload/request`, {
-        method: 'POST',
-        headers: { Authorization: auth, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      }, ENV);
+      return app.request(
+        `/api/v1/admin/tenants/${tenantId}/upload/request`,
+        {
+          method: 'POST',
+          headers: { Authorization: auth, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+        ENV
+      );
     }
 
     it('returns a handshake on success', async () => {
@@ -577,7 +677,12 @@ describe('admin routes', () => {
 
     it('rejects when the tenant quota is exceeded with 403', async () => {
       uploadDb();
-      db.checkQuota.mockResolvedValue({ hasCapacity: false, quotaBytes: 100, usedBytes: 100, availableBytes: 0 });
+      db.checkQuota.mockResolvedValue({
+        hasCapacity: false,
+        quotaBytes: 100,
+        usedBytes: 100,
+        availableBytes: 0,
+      });
       const res = await post(validBody);
       expect(res.status).toBe(403);
     });
@@ -592,7 +697,11 @@ describe('admin routes', () => {
     it('returns 403 when the workspace quota is exceeded', async () => {
       uploadDb();
       db.getWorkspaceById.mockResolvedValue({ id: WS_ID, tenantId: 'tenant-123' });
-      db.checkWorkspaceQuota.mockResolvedValue({ hasCapacity: false, quotaBytes: 10, usedBytes: 10 });
+      db.checkWorkspaceQuota.mockResolvedValue({
+        hasCapacity: false,
+        quotaBytes: 10,
+        usedBytes: 10,
+      });
       const res = await post({ ...validBody, workspaceId: WS_ID });
       expect(res.status).toBe(403);
     });
@@ -604,11 +713,15 @@ describe('admin routes', () => {
     const FILE_B = '222e8400-e29b-41d4-a716-446655440000';
 
     function post(body: unknown, tenantId = 'tenant-123', auth = `Bearer ${ADMIN_KEY}`) {
-      return app.request(`/api/v1/admin/tenants/${tenantId}/files/migrate-workspace`, {
-        method: 'POST',
-        headers: { Authorization: auth, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      }, ENV);
+      return app.request(
+        `/api/v1/admin/tenants/${tenantId}/files/migrate-workspace`,
+        {
+          method: 'POST',
+          headers: { Authorization: auth, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+        ENV
+      );
     }
 
     interface MigrateBody {
@@ -618,7 +731,11 @@ describe('admin routes', () => {
     }
 
     it('requires the admin key (401 without it)', async () => {
-      const res = await post({ workspaceId: WS_ID, filter: { tag: { key: 'env', value: 'production' } } }, 'tenant-123', 'Bearer wrong-key');
+      const res = await post(
+        { workspaceId: WS_ID, filter: { tag: { key: 'env', value: 'production' } } },
+        'tenant-123',
+        'Bearer wrong-key'
+      );
       expect(res.status).toBe(401);
     });
 
@@ -716,10 +833,14 @@ describe('admin routes', () => {
     }
 
     it('requires the admin key (401 without it)', async () => {
-      const res = await app.request('/api/v1/admin/tenants/tenant-123/files/contexts', {
-        method: 'GET',
-        headers: { Authorization: 'Bearer wrong-key' },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/admin/tenants/tenant-123/files/contexts',
+        {
+          method: 'GET',
+          headers: { Authorization: 'Bearer wrong-key' },
+        },
+        ENV
+      );
       expect(res.status).toBe(401);
     });
 
@@ -729,10 +850,14 @@ describe('admin routes', () => {
         { context: 'marketplace-cover', fileCount: 25, totalBytes: 5000 },
       ]);
 
-      const res = await app.request('/api/v1/admin/tenants/tenant-123/files/contexts', {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${ADMIN_KEY}` },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/admin/tenants/tenant-123/files/contexts',
+        {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${ADMIN_KEY}` },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body = await res.json<ContextsBody>();

@@ -3,10 +3,7 @@ import type { CreateWorkspaceInput } from '@marlinjai/storage-brain-sdk/admin';
 import { getAdmin } from '@/lib/sdk';
 import { routeError } from '@/lib/route-error';
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const admin = await getAdmin();
@@ -17,10 +14,7 @@ export async function GET(
   }
 }
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const admin = await getAdmin();
@@ -34,10 +28,7 @@ export async function POST(
         .replace(/^-|-$/g, '');
     }
 
-    const workspace = await admin.createTenantWorkspace(
-      id,
-      body as CreateWorkspaceInput
-    );
+    const workspace = await admin.createTenantWorkspace(id, body as CreateWorkspaceInput);
     return NextResponse.json(workspace, { status: 201 });
   } catch (err) {
     if (err instanceof Error && err.message === 'Not authenticated') {

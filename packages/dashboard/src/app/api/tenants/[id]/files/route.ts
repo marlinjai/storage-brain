@@ -2,10 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getAdmin } from '@/lib/sdk';
 import { routeError } from '@/lib/route-error';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const admin = await getAdmin();

@@ -1,7 +1,7 @@
 ---
 title: Per-Workspace API Keys
 type: plan
-status: draft
+status: archived
 summary: Scoped API keys that restrict access to a single workspace within a tenant, enabling multi-app tenants with isolated credentials.
 tags: [security, workspaces, multi-tenancy]
 date: 2026-04-06
@@ -65,3 +65,10 @@ Backward compatible — existing tenant keys keep working. Workspace keys are op
 ## Effort Estimate
 
 Medium — touches auth middleware, DB schema, admin routes, SDK, and dashboard. ~2-3 focused sessions.
+
+## Archived (2026-09-10)
+
+Superseded by `docs/plans/2026-07-27-company-isolation.md`, which decided the isolation
+boundary is the auth-brain COMPANY (company-scoped keys), not a workspace inside a tenant.
+That plan lists this one explicitly under its own "Out of scope": "Per-workspace keys inside
+a company (the 2026-04-06 draft stays superseded)."

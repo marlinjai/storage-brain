@@ -26,10 +26,7 @@ const STATUS_BY_CODE: Record<string, number> = {
  * origin. API errors are mapped through (status + code + message) so the UI can
  * surface every unhappy path instead of swallowing it.
  */
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const admin = await getAdmin();

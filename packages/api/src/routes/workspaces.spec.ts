@@ -101,9 +101,13 @@ describe('workspace routes', () => {
 
   describe('GET /api/v1/workspaces', () => {
     it('lists workspaces', async () => {
-      const res = await app.request('/api/v1/workspaces', {
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        '/api/v1/workspaces',
+        {
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body = await res.json<TestResponseBody>();
@@ -114,28 +118,36 @@ describe('workspace routes', () => {
 
   describe('POST /api/v1/workspaces', () => {
     it('creates a workspace', async () => {
-      const res = await app.request('/api/v1/workspaces', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer sk_live_test123',
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/workspaces',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: 'My Workspace', slug: 'my-workspace' }),
         },
-        body: JSON.stringify({ name: 'My Workspace', slug: 'my-workspace' }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(201);
       expect(db.createWorkspace).toHaveBeenCalledTimes(1);
     });
 
     it('rejects invalid slug', async () => {
-      const res = await app.request('/api/v1/workspaces', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer sk_live_test123',
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        '/api/v1/workspaces',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: 'Test', slug: 'INVALID_SLUG' }),
         },
-        body: JSON.stringify({ name: 'Test', slug: 'INVALID_SLUG' }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(400);
     });
@@ -143,9 +155,13 @@ describe('workspace routes', () => {
 
   describe('GET /api/v1/workspaces/:workspaceId', () => {
     it('returns workspace', async () => {
-      const res = await app.request(`/api/v1/workspaces/${WORKSPACE_ID}`, {
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/workspaces/${WORKSPACE_ID}`,
+        {
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       const body = await res.json<TestResponseBody>();
@@ -155,16 +171,24 @@ describe('workspace routes', () => {
     it('returns 404 for unknown workspace', async () => {
       db.getWorkspaceById.mockResolvedValueOnce(null);
 
-      const res = await app.request(`/api/v1/workspaces/${WORKSPACE_ID}`, {
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/workspaces/${WORKSPACE_ID}`,
+        {
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
       expect(res.status).toBe(404);
     });
 
     it('scopes lookup to tenant', async () => {
-      await app.request(`/api/v1/workspaces/${WORKSPACE_ID}`, {
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      await app.request(
+        `/api/v1/workspaces/${WORKSPACE_ID}`,
+        {
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(db.getWorkspaceById).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
     });
@@ -172,14 +196,18 @@ describe('workspace routes', () => {
 
   describe('PATCH /api/v1/workspaces/:workspaceId', () => {
     it('updates workspace', async () => {
-      const res = await app.request(`/api/v1/workspaces/${WORKSPACE_ID}`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: 'Bearer sk_live_test123',
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        `/api/v1/workspaces/${WORKSPACE_ID}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: 'Updated' }),
         },
-        body: JSON.stringify({ name: 'Updated' }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(200);
       expect(db.updateWorkspace).toHaveBeenCalled();
@@ -188,14 +216,18 @@ describe('workspace routes', () => {
     it('returns 404 if workspace does not exist', async () => {
       db.getWorkspaceById.mockResolvedValueOnce(null);
 
-      const res = await app.request(`/api/v1/workspaces/${WORKSPACE_ID}`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: 'Bearer sk_live_test123',
-          'Content-Type': 'application/json',
+      const res = await app.request(
+        `/api/v1/workspaces/${WORKSPACE_ID}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: 'Bearer sk_live_test123',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: 'Updated' }),
         },
-        body: JSON.stringify({ name: 'Updated' }),
-      }, ENV);
+        ENV
+      );
 
       expect(res.status).toBe(404);
     });
@@ -208,10 +240,14 @@ describe('workspace routes', () => {
         { sizeBytes: 300, storedPath: `tenants/${TENANT_ID}/files/f2/b.pdf` },
       ]);
 
-      const res = await app.request(`/api/v1/workspaces/${WORKSPACE_ID}`, {
-        method: 'DELETE',
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/workspaces/${WORKSPACE_ID}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       expect(storage.delete).toHaveBeenCalledTimes(2);
@@ -229,10 +265,14 @@ describe('workspace routes', () => {
       ]);
       storage.delete.mockRejectedValueOnce(new Error('object already gone'));
 
-      const res = await app.request(`/api/v1/workspaces/${WORKSPACE_ID}`, {
-        method: 'DELETE',
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/workspaces/${WORKSPACE_ID}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       expect(db.softDeleteFilesByWorkspace).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
@@ -241,10 +281,14 @@ describe('workspace routes', () => {
     });
 
     it('skips quota release if no files', async () => {
-      const res = await app.request(`/api/v1/workspaces/${WORKSPACE_ID}`, {
-        method: 'DELETE',
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/workspaces/${WORKSPACE_ID}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(200);
       expect(db.releaseQuota).not.toHaveBeenCalled();
@@ -253,10 +297,14 @@ describe('workspace routes', () => {
     it('returns 404 if workspace not found', async () => {
       db.getWorkspaceById.mockResolvedValueOnce(null);
 
-      const res = await app.request(`/api/v1/workspaces/${WORKSPACE_ID}`, {
-        method: 'DELETE',
-        headers: { Authorization: 'Bearer sk_live_test123' },
-      }, ENV);
+      const res = await app.request(
+        `/api/v1/workspaces/${WORKSPACE_ID}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
 
       expect(res.status).toBe(404);
     });

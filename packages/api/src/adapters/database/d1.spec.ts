@@ -176,7 +176,12 @@ describe('D1DatabaseAdapter auth_tenant_id (company binding)', () => {
   });
 
   it('enforces uniqueness of a non-null auth_tenant_id (a company maps to one tenant)', async () => {
-    await db.createTenant({ id: 'c5', ...baseTenant, name: 'First', authTenantId: 'company-shared' });
+    await db.createTenant({
+      id: 'c5',
+      ...baseTenant,
+      name: 'First',
+      authTenantId: 'company-shared',
+    });
 
     await expect(
       db.createTenant({ id: 'c6', ...baseTenant, name: 'Second', authTenantId: 'company-shared' })
@@ -245,7 +250,7 @@ describe('D1DatabaseAdapter migrateFilesToWorkspace', () => {
 
   async function seedFile(
     id: string,
-    opts: { size: number; tags?: Record<string, string>; workspaceId?: string; deleted?: boolean },
+    opts: { size: number; tags?: Record<string, string>; workspaceId?: string; deleted?: boolean }
   ): Promise<void> {
     await db.createFile({
       id,
@@ -456,7 +461,7 @@ describe('D1DatabaseAdapter aggregateFileContexts', () => {
 
   async function seedFile(
     id: string,
-    opts: { size: number; context?: string | null; workspaceId?: string; deleted?: boolean },
+    opts: { size: number; context?: string | null; workspaceId?: string; deleted?: boolean }
   ): Promise<void> {
     await db.createFile({
       id,
@@ -554,7 +559,11 @@ describe('D1DatabaseAdapter erasure ledger + resolution (migration 0008)', () =>
     });
 
     const record = await db.getErasureEvent('evt-1');
-    expect(record).toEqual({ eventId: 'evt-1', kind: 'tenant.erased', processedAt: 1_700_000_000_000 });
+    expect(record).toEqual({
+      eventId: 'evt-1',
+      kind: 'tenant.erased',
+      processedAt: 1_700_000_000_000,
+    });
   });
 
   it('enforces idempotency: re-recording the same event_id rejects (PRIMARY KEY)', async () => {
@@ -577,7 +586,12 @@ describe('D1DatabaseAdapter erasure ledger + resolution (migration 0008)', () =>
   });
 
   it('findTenantsForErasure resolves by company id OR workspace id, without duplicating a both-match', async () => {
-    await db.createTenant({ id: 'sb-1', ...baseTenant, name: 'By company', authTenantId: 'company-1' });
+    await db.createTenant({
+      id: 'sb-1',
+      ...baseTenant,
+      name: 'By company',
+      authTenantId: 'company-1',
+    });
     await db.createTenant({
       id: 'sb-2',
       ...baseTenant,
@@ -591,7 +605,12 @@ describe('D1DatabaseAdapter erasure ledger + resolution (migration 0008)', () =>
       authTenantId: 'company-both',
       authWorkspaceId: 'auth-ws-both',
     });
-    await db.createTenant({ id: 'sb-other', ...baseTenant, name: 'Unrelated', authTenantId: 'company-x' });
+    await db.createTenant({
+      id: 'sb-other',
+      ...baseTenant,
+      name: 'Unrelated',
+      authTenantId: 'company-x',
+    });
 
     const byCompany = await db.findTenantsForErasure('company-1', []);
     expect(byCompany.map((t) => t.id)).toEqual(['sb-1']);

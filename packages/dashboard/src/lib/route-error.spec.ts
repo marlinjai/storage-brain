@@ -28,9 +28,6 @@ describe('routeError', () => {
     const boom = new Error('Unknown scope: platform');
     const res = routeError(boom, 'GET /api/tenants');
     expect((res as unknown as { status: number }).status).toBe(500);
-    expect(spy).toHaveBeenCalledWith(
-      '[dashboard] GET /api/tenants failed:',
-      boom
-    );
+    expect(spy).toHaveBeenCalledWith('[dashboard] GET /api/tenants failed:', boom);
   });
 });

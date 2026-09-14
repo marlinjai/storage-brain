@@ -42,7 +42,8 @@ function main(): void {
     env: {
       ADMIN_API_KEY: required('ADMIN_API_KEY'),
       URL_SIGNING_SECRET: required('URL_SIGNING_SECRET'),
-      ENVIRONMENT: (process.env.ENVIRONMENT as 'development' | 'staging' | 'production') ?? 'production',
+      ENVIRONMENT:
+        (process.env.ENVIRONMENT as 'development' | 'staging' | 'production') ?? 'production',
       PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL,
       // HMAC secret for the R2 upload-complete webhook. Optional at boot, but
       // the route fails closed (500) until it is set, so provide it in any
