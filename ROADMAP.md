@@ -54,7 +54,7 @@ plan when the item carries a decision or a sequence.
 - **Dashboard auth via auth-brain (slice 2A)** [plan](docs/plans/2026-06-16-storage-brain-auth-brain-dashboard-session.md): dashboard humans authenticate via auth-brain's `lumitra_session`, with the legacy admin-key login kept as a fallback.
 - **Dashboard upload UI (slice 3)** [plan](docs/plans/2026-06-16-storage-brain-dashboard-upload-ui.md): dropzone/dialog upload flow wired to a new admin-scoped upload-request endpoint.
 - **Machine auth via auth-brain service-account keys (slice 2B)** [plan](docs/plans/2026-06-17-storage-brain-machine-key-auth.md): the API worker accepts auth-brain-issued keys for machine callers, alongside the legacy tenant key path.
-- **2026-09-11 incident fix** — The S3 client (`packages/api/src/adapters/storage/s3.ts`) had
+- **2026-09-11 incident fix** - The S3 client (`packages/api/src/adapters/storage/s3.ts`) had
   no request timeout, so a hung connection to R2 (Cloudflare's S3-compatible object storage
   backend) never freed its socket. Every download queued behind the wedged pool
   (`@smithy/node-http-handler:WARN - socket usage at capacity=50 and 691 additional requests
@@ -62,8 +62,12 @@ plan when the item carries a decision or a sequence.
   on Storage Brain until the container was restarted. Fixed: a shared `NodeHttpHandler` with a
   5s connection timeout, 30s request timeout, and 300-socket cap, so a hung request now fails
   and frees its socket instead of blocking forever.
-- **v0.5.0** — Multi-tenant workspaces, workspace quotas, workspace-scoped file listing
-- **v0.4.0** — Removed processing pipeline (OCR, thumbnails) — Storage Brain is now storage-only
-- **v0.3.0** — Self-hosting with Docker, S3 + Postgres adapters, admin SDK
-- **v0.2.0** — TypeScript SDK (`@marlinjai/storage-brain-sdk`), presigned URL uploads
-- **v0.1.0** — Initial release: multi-tenant file storage on Cloudflare R2 + D1
+- **v0.5.0** - Multi-tenant workspaces, workspace quotas, workspace-scoped file listing
+- **v0.4.0** - Removed processing pipeline (OCR, thumbnails) - Storage Brain is now storage-only
+- **v0.3.0** - Self-hosting with Docker, S3 + Postgres adapters, admin SDK
+- **v0.2.0** - TypeScript SDK (`@marlinjai/storage-brain-sdk`), presigned URL uploads
+- **v0.1.0** - Initial release: multi-tenant file storage on Cloudflare R2 + D1
+
+## Archived
+
+- **Per-Workspace API Keys** [plan](docs/plans/2026-04-06-per-workspace-api-keys.md): superseded by the company-isolation plan's company-scoped key model.
