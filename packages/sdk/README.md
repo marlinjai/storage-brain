@@ -238,6 +238,8 @@ try {
 }
 ```
 
+Every error the SDK throws is a `StorageBrainError` (with `code` and, for API errors, `statusCode`), so one `instanceof StorageBrainError` check catches them all. Requests are retried with exponential backoff on network failures, timeouts, `408`, `429` and `5xx`. Other `4xx` responses (a `404`, a `401`) are never retried and throw their typed error (`FileNotFoundError`, `AuthenticationError`, ...) immediately. When every retry is exhausted a `NetworkError` is thrown.
+
 ## TypeScript Types
 
 ```typescript

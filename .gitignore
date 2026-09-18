@@ -42,3 +42,6 @@ coverage/
 # Temporary files
 tmp/
 temp/
+
+# Local git worktrees
+.worktrees/

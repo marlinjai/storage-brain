@@ -66,6 +66,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Docs hub backlink now points to Lumitra Cloud (`docs.cloud.lumitra.co`) instead of ERP Suite root
 
 ### Fixed
+- **SDK `v0.11.2`**: a 404 or 401 was retried three times and then surfaced as a
+  `NetworkError` wrapping the real error. `AuthenticationError`, `FileNotFoundError`,
+  `ValidationError`, `QuotaExceededError` and `NetworkError` extended the shared
+  `BrainSdkError` instead of `StorageBrainError`, so the retry guard (which tested
+  `instanceof StorageBrainError`) never saw them as client errors, and
+  `if (e instanceof StorageBrainError)` in consumer code silently missed them. All
+  five now extend `StorageBrainError` (still instances of `BrainSdkError`, same codes
+  and status codes), and the guard is a shared `isRetryableError` used by both
+  `StorageBrain` and `StorageBrainAdmin`: 4xx responses other than 408 and 429 are
+  never retried and throw the typed error directly; 408, 429, 5xx and network
+  failures still retry with backoff. Side effect: typed errors thrown while
+  uploading are no longer re-wrapped in `UploadError`. The five classes are no longer
+  instances of brain-core's own `AuthenticationError`, `NotFoundError`,
+  `ValidationError`, `QuotaExceededError` and `NetworkError`: catch the SDK's exports
+  (or `StorageBrainError`) instead.
 - Inject env bindings in Node.js mode for self-hosting compatibility
 
 ## [0.5.0] - 2026-02-20

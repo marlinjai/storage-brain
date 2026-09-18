@@ -1,11 +1,4 @@
-import {
-  BrainSdkError,
-  AuthenticationError as BaseAuthenticationError,
-  NotFoundError as BaseNotFoundError,
-  ValidationError as BaseValidationError,
-  QuotaExceededError as BaseQuotaExceededError,
-  NetworkError as BaseNetworkError,
-} from '@marlinjai/brain-core/sdk';
+import { BrainSdkError } from '@marlinjai/brain-core/sdk';
 
 /**
  * Base error class for Storage Brain SDK — extends BrainSdkError
@@ -25,19 +18,23 @@ export class StorageBrainError extends BrainSdkError {
 /**
  * Authentication error - invalid or missing API key
  */
-export class AuthenticationError extends BaseAuthenticationError {}
+export class AuthenticationError extends StorageBrainError {
+  constructor(message = 'Authentication failed') {
+    super(message, 'AUTHENTICATION_ERROR', 401);
+    this.name = 'AuthenticationError';
+  }
+}
 
 /**
  * Quota exceeded error
  */
-export class QuotaExceededError extends BaseQuotaExceededError {
+export class QuotaExceededError extends StorageBrainError {
   constructor(
     message = 'Storage quota exceeded',
     public quotaBytes?: number,
     public usedBytes?: number
   ) {
-    super(message);
-    this.details = { quotaBytes, usedBytes };
+    super(message, 'QUOTA_EXCEEDED', 403, { quotaBytes, usedBytes });
     this.name = 'QuotaExceededError';
   }
 }
@@ -73,10 +70,9 @@ export class FileTooLargeError extends StorageBrainError {
 /**
  * File not found error
  */
-export class FileNotFoundError extends BaseNotFoundError {
+export class FileNotFoundError extends StorageBrainError {
   constructor(fileId: string) {
-    super(`File not found: ${fileId}`);
-    this.details = { fileId };
+    super(`File not found: ${fileId}`, 'NOT_FOUND', 404, { fileId });
     this.name = 'FileNotFoundError';
   }
 }
@@ -84,7 +80,15 @@ export class FileNotFoundError extends BaseNotFoundError {
 /**
  * Network error - connection issues
  */
-export class NetworkError extends BaseNetworkError {}
+export class NetworkError extends StorageBrainError {
+  constructor(
+    message = 'Network request failed',
+    public originalError?: Error
+  ) {
+    super(message, 'NETWORK_ERROR', undefined, { originalError: originalError?.message });
+    this.name = 'NetworkError';
+  }
+}
 
 /**
  * Upload error - file upload failed
@@ -102,7 +106,29 @@ export class UploadError extends StorageBrainError {
 /**
  * Validation error - request validation failed
  */
-export class ValidationError extends BaseValidationError {}
+export class ValidationError extends StorageBrainError {
+  constructor(
+    message: string,
+    public errors?: Array<{ path: string; message: string }>
+  ) {
+    super(message, 'VALIDATION_ERROR', 400, { errors });
+    this.name = 'ValidationError';
+  }
+}
+
+/**
+ * Whether a failed request is worth repeating. Client errors (4xx) describe a
+ * request that will fail the same way again, so only 408 (request timeout) and
+ * 429 (rate limited) are retried among them. Server errors (5xx) and anything
+ * that is not an API error at all (a dropped connection, an aborted timeout)
+ * are transient by nature.
+ */
+export function isRetryableError(error: unknown): boolean {
+  if (!(error instanceof BrainSdkError) || error.statusCode === undefined) return true;
+  const status = error.statusCode;
+  if (status >= 400 && status < 500) return status === 408 || status === 429;
+  return true;
+}
 
 /**
  * Parse API error response into appropriate error class
@@ -115,7 +141,7 @@ export function parseApiError(
 
   switch (code) {
     case 'UNAUTHORIZED':
-      return new AuthenticationError(message) as unknown as StorageBrainError;
+      return new AuthenticationError(message);
     case 'QUOTA_EXCEEDED':
       return new QuotaExceededError(
         message,
@@ -133,12 +159,12 @@ export function parseApiError(
     case 'NOT_FOUND':
       return new FileNotFoundError(
         (details?.fileId as string) ?? 'unknown'
-      ) as unknown as StorageBrainError;
+      );
     case 'VALIDATION_ERROR':
       return new ValidationError(
         message ?? 'Validation failed',
         details?.errors as Array<{ path: string; message: string }>
-      ) as unknown as StorageBrainError;
+      );
     default:
       return new StorageBrainError(
         message ?? 'An error occurred',

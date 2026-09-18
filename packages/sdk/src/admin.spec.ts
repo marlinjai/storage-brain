@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StorageBrainAdmin } from './admin';
-import { StorageBrainError } from './errors';
+import { StorageBrainError, AuthenticationError } from './errors';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
@@ -44,6 +44,23 @@ describe('StorageBrainAdmin SDK', () => {
         'https://api.example.com/api/v1/admin/tenants',
         expect.anything()
       );
+    });
+  });
+
+  describe('retry guard', () => {
+    it('does not retry a 401 and throws AuthenticationError directly', async () => {
+      const retrying = new StorageBrainAdmin({
+        adminApiKey: 'admin-secret',
+        baseUrl: 'https://api.example.com',
+        maxRetries: 3,
+      });
+      mockFetch.mockResolvedValue(
+        new Response(JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'bad' } }), {
+          status: 401,
+        })
+      );
+      await expect(retrying.getTenant('t1')).rejects.toBeInstanceOf(AuthenticationError);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
 

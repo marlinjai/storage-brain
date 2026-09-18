@@ -1,6 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { StorageBrain } from './client';
-import { StorageBrainError, NetworkError } from './errors';
+import {
+  StorageBrainError,
+  NetworkError,
+  FileNotFoundError,
+  AuthenticationError,
+  ValidationError,
+  QuotaExceededError,
+} from './errors';
 
 // Mock global fetch
 const mockFetch = vi.fn();
@@ -310,6 +317,106 @@ describe('StorageBrain SDK', () => {
 
       await expect(retryClient.getFile('f1')).rejects.toThrow(NetworkError);
       expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    describe('with retries enabled', () => {
+      let retrying: StorageBrain;
+
+      beforeEach(() => {
+        vi.useFakeTimers();
+        retrying = new StorageBrain({
+          apiKey: 'sk_live_test',
+          baseUrl: 'https://api.example.com',
+          maxRetries: 3,
+          timeout: 5000,
+        });
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      /** Runs the call to completion, advancing the backoff timers. */
+      async function settle<T>(call: Promise<T>) {
+        const outcome = call.then(
+          (value) => ({ value }),
+          (error: unknown) => ({ error })
+        );
+        await vi.runAllTimersAsync();
+        return outcome;
+      }
+
+      it('does not retry a 404 and throws FileNotFoundError directly', async () => {
+        mockFetch.mockResolvedValue(errorResponse(404, 'NOT_FOUND', 'missing'));
+        const result = await settle(retrying.getFile('f1'));
+        expect(result).toHaveProperty('error');
+        const error = (result as { error: unknown }).error;
+        expect(error).toBeInstanceOf(FileNotFoundError);
+        expect(error).toBeInstanceOf(StorageBrainError);
+        expect(error).not.toBeInstanceOf(NetworkError);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not retry a 401 and throws AuthenticationError directly', async () => {
+        mockFetch.mockResolvedValue(errorResponse(401, 'UNAUTHORIZED', 'bad key'));
+        const error = ((await settle(retrying.getFile('f1'))) as { error: unknown }).error;
+        expect(error).toBeInstanceOf(AuthenticationError);
+        expect(error).toBeInstanceOf(StorageBrainError);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+      });
+
+      it.each([
+        [400, 'VALIDATION_ERROR', ValidationError],
+        [403, 'QUOTA_EXCEEDED', QuotaExceededError],
+        [409, 'CONFLICT', StorageBrainError],
+        [404, 'SOMETHING_UNKNOWN', StorageBrainError],
+      ])('does not retry a %i (%s)', async (status, code, errorClass) => {
+        mockFetch.mockResolvedValue(errorResponse(status, code, 'nope'));
+        const error = ((await settle(retrying.getFile('f1'))) as { error: unknown }).error;
+        expect(error).toBeInstanceOf(errorClass);
+        expect(error).not.toBeInstanceOf(NetworkError);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not retry a 4xx whose body is not JSON', async () => {
+        mockFetch.mockResolvedValue(new Response('<html>nope</html>', { status: 404 }));
+        const error = ((await settle(retrying.getFile('f1'))) as { error: unknown }).error;
+        expect(error).toBeInstanceOf(StorageBrainError);
+        expect((error as StorageBrainError).statusCode).toBe(404);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+      });
+
+      it.each([408, 429, 500, 503])('retries a %i and succeeds when it recovers', async (status) => {
+        mockFetch
+          .mockResolvedValueOnce(errorResponse(status, 'TRANSIENT', 'later'))
+          .mockResolvedValueOnce(jsonResponse({ id: 'f1' }));
+        const result = await settle(retrying.getFile('f1'));
+        expect(result).toEqual({ value: { id: 'f1' } });
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+      });
+
+      it('retries a network failure and succeeds when it recovers', async () => {
+        mockFetch
+          .mockRejectedValueOnce(new TypeError('fetch failed'))
+          .mockResolvedValueOnce(jsonResponse({ id: 'f1' }));
+        const result = await settle(retrying.getFile('f1'));
+        expect(result).toEqual({ value: { id: 'f1' } });
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+      });
+
+      it('gives up on a persistent 5xx with NetworkError after maxRetries attempts', async () => {
+        mockFetch.mockResolvedValue(errorResponse(503, 'UNAVAILABLE', 'down'));
+        const error = ((await settle(retrying.getFile('f1'))) as { error: unknown }).error;
+        expect(error).toBeInstanceOf(NetworkError);
+        expect(mockFetch).toHaveBeenCalledTimes(3);
+      });
+
+      it('gives up on a persistent network failure with NetworkError', async () => {
+        mockFetch.mockRejectedValue(new TypeError('fetch failed'));
+        const error = ((await settle(retrying.getFile('f1'))) as { error: unknown }).error;
+        expect(error).toBeInstanceOf(NetworkError);
+        expect(mockFetch).toHaveBeenCalledTimes(3);
+      });
     });
   });
 });
