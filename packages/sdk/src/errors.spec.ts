@@ -7,6 +7,9 @@ import {
   FileTooLargeError,
   FileNotFoundError,
   UploadError,
+  NetworkError,
+  ValidationError,
+  isRetryableError,
   parseApiError,
 } from './errors';
 
@@ -111,5 +114,71 @@ describe('parseApiError', () => {
     const err = parseApiError(500, {});
     expect(err).toBeInstanceOf(StorageBrainError);
     expect(err.code).toBe('UNKNOWN_ERROR');
+  });
+});
+
+describe('error hierarchy', () => {
+  it.each([
+    ['AuthenticationError', new AuthenticationError(), 401],
+    ['QuotaExceededError', new QuotaExceededError(), 403],
+    ['FileNotFoundError', new FileNotFoundError('f1'), 404],
+    ['ValidationError', new ValidationError('bad'), 400],
+    ['NetworkError', new NetworkError('down'), undefined],
+    ['UploadError', new UploadError('failed'), undefined],
+    ['InvalidFileTypeError', new InvalidFileTypeError('x/y'), 400],
+    ['FileTooLargeError', new FileTooLargeError(2, 1), 400],
+  ])('%s is a StorageBrainError with the right name and status', (name, err, status) => {
+    expect(err).toBeInstanceOf(StorageBrainError);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.name).toBe(name);
+    expect(err.statusCode).toBe(status);
+  });
+
+  it('every parseApiError result is a StorageBrainError', () => {
+    for (const code of [
+      'UNAUTHORIZED',
+      'QUOTA_EXCEEDED',
+      'INVALID_FILE_TYPE',
+      'FILE_TOO_LARGE',
+      'FILE_NOT_FOUND',
+      'NOT_FOUND',
+      'VALIDATION_ERROR',
+      'OTHER',
+    ]) {
+      expect(parseApiError(400, { error: { code } })).toBeInstanceOf(StorageBrainError);
+    }
+  });
+
+  it('ValidationError keeps its field errors', () => {
+    const err = new ValidationError('bad', [{ path: 'a', message: 'required' }]);
+    expect(err.errors).toEqual([{ path: 'a', message: 'required' }]);
+  });
+
+  it('NetworkError keeps its cause', () => {
+    const cause = new Error('boom');
+    expect(new NetworkError('down', cause).originalError).toBe(cause);
+  });
+});
+
+describe('isRetryableError', () => {
+  it.each([400, 401, 403, 404, 409, 413, 422])('does not retry %i', (status) => {
+    expect(isRetryableError(new StorageBrainError('x', 'X', status))).toBe(false);
+  });
+
+  it.each([408, 429, 500, 502, 503, 504])('retries %i', (status) => {
+    expect(isRetryableError(new StorageBrainError('x', 'X', status))).toBe(true);
+  });
+
+  it('retries errors with no status and non-API errors', () => {
+    expect(isRetryableError(new NetworkError('down'))).toBe(true);
+    expect(isRetryableError(new TypeError('fetch failed'))).toBe(true);
+    expect(isRetryableError(new DOMException('aborted', 'AbortError'))).toBe(true);
+  });
+
+  it('does not retry the typed 4xx classes', () => {
+    expect(isRetryableError(new AuthenticationError())).toBe(false);
+    expect(isRetryableError(new FileNotFoundError('f1'))).toBe(false);
+    expect(isRetryableError(new ValidationError('bad'))).toBe(false);
+    expect(isRetryableError(new QuotaExceededError())).toBe(false);
   });
 });

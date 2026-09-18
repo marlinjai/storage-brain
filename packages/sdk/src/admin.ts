@@ -1,5 +1,5 @@
 import { RETRY_CONFIG } from './constants';
-import { StorageBrainError, NetworkError, parseApiError } from './errors';
+import { StorageBrainError, NetworkError, parseApiError, isRetryableError } from './errors';
 import type { AllowedMimeType } from './constants';
 
 const DEFAULT_BASE_URL = 'https://api.storage-brain.lumitra.co';
@@ -401,7 +401,8 @@ export class StorageBrainAdmin {
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
 
-        if (error instanceof StorageBrainError && error.statusCode && error.statusCode < 500) {
+        // 4xx (except 408 and 429) will fail identically on retry: surface the typed error.
+        if (!isRetryableError(error)) {
           throw error;
         }
 

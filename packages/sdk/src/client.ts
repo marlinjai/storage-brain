@@ -23,6 +23,7 @@ import {
   UploadError,
   InvalidFileTypeError,
   parseApiError,
+  isRetryableError,
 } from './errors';
 
 const DEFAULT_BASE_URL = 'https://api.storage-brain.lumitra.co';
@@ -503,8 +504,8 @@ export class StorageBrain {
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
 
-        // Don't retry on client errors (4xx) or specific errors
-        if (error instanceof StorageBrainError && error.statusCode && error.statusCode < 500) {
+        // 4xx (except 408 and 429) will fail identically on retry: surface the typed error.
+        if (!isRetryableError(error)) {
           throw error;
         }
 
