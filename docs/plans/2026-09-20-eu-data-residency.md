@@ -53,6 +53,40 @@ R2 cannot change a bucket's jurisdiction in place, and cannot server-side copy
 across jurisdictions. EU residency therefore means: a new bucket, a copy of
 every object, a repointed service, and the old bucket deleted afterwards.
 
+## What happened (2026-09-20)
+
+Steps 1 to 5 are done and verified in production. What is left is the soak and
+the deletion of the old bucket.
+
+- No Cloudflare API token in Infisical carries R2 permissions (all three answer
+  403 on `/accounts/<id>/r2/buckets`), so Terraform could not create the bucket.
+  Marlin minted an R2 Admin Read and Write key instead; it went into the Storage
+  Brain project as `R2_MIGRATION_ACCESS_KEY_ID` and
+  `R2_MIGRATION_SECRET_ACCESS_KEY`.
+- `storage-brain-files-eu` was created over the S3 API against the EU endpoint.
+  Terraform (infra PR #42) must `terraform import` it rather than create it.
+- All 2052 objects were copied and verified twice: identical object count,
+  identical total bytes (3560872814) and zero ETag mismatches. The delta pass
+  immediately before the cutover found nothing to copy.
+- The app's own key was bucket-scoped to `storage-brain-files`, so it could not
+  have reached the new bucket. `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+  in `production` now hold the account-wide key, copied inside Infisical with
+  `copy_secret` so no value was ever read. **The previous values are backed up
+  as `AWS_ACCESS_KEY_ID_PRE_EU` and `AWS_SECRET_ACCESS_KEY_PRE_EU`**, which is
+  what a rollback restores.
+- `S3_BUCKET` and `S3_ENDPOINT` were switched to the EU bucket and the `.eu.`
+  host, and the API was redeployed on Coolify (deployment
+  `lm2j718z2hirff7b81twbhnz`, 68 seconds).
+- Verified live: `/health` 200; an upload through the admin handshake landed in
+  the EU bucket and not in the old one (2053 against 2052, back to 2052 after
+  the throwaway tenant was deleted); a pre-migration file downloaded through the
+  service with exactly its recorded size (52815 bytes).
+
+**Rollback**, if anything surfaces during the soak: restore `AWS_ACCESS_KEY_ID`
+and `AWS_SECRET_ACCESS_KEY` from their `_PRE_EU` copies, set `S3_BUCKET` back to
+`storage-brain-files` and `S3_ENDPOINT` back to the default host, redeploy. The
+old bucket is untouched and still holds every object.
+
 ## Steps
 
 1. **The bucket.** `deployments/storage-brain/r2.tf` in the infra repository:
