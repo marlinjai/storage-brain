@@ -12,6 +12,13 @@ plan when the item carries a decision or a sequence.
 
 ## Now
 
+- [ ] EU data residency: the cutover is DONE and verified (2052 objects copied, production
+      serving from `storage-brain-files-eu`); what remains is the soak, then deleting the old
+      `storage-brain-files` bucket, which needs Marlin's explicit go
+      [plan](docs/plans/2026-09-20-eu-data-residency.md) : also still open, Terraform must
+      `terraform import` the bucket (infra PR #42) once the infra Cloudflare token gains
+      "Workers R2 Storage: Edit", and the privacy texts can claim EU storage only after the
+      soak (ŌPUNTIA's needs a new consent version when they do) (2026-09-20)
 - [ ] auth-brain cutover residuals: revoke lola-stories' legacy Storage Brain tenant key after
       a soak period, delete the dead `8263***` client secret on the Lumitra secrets-proxy
       Infisical identity, and visually confirm the dashboard Tenants page lists all 5 tenants
