@@ -12,6 +12,11 @@ plan when the item carries a decision or a sequence.
 
 ## Now
 
+- [ ] EU data residency: copy the 2052 objects from `storage-brain-files` into the new
+      EU-jurisdiction bucket, point the production API at it, soak, then delete the old
+      bucket [plan](docs/plans/2026-09-20-eu-data-residency.md) : the bucket is Terraform
+      in infra PR #42; the cutover switches `S3_BUCKET` and `S3_ENDPOINT` in Infisical and
+      redeploys, and deleting the old bucket needs Marlin's explicit go (2026-09-20)
 - [ ] auth-brain cutover residuals: revoke lola-stories' legacy Storage Brain tenant key after
       a soak period, delete the dead `8263***` client secret on the Lumitra secrets-proxy
       Infisical identity, and visually confirm the dashboard Tenants page lists all 5 tenants
