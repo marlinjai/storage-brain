@@ -13,12 +13,23 @@ plan when the item carries a decision or a sequence.
 ## Now
 
 - [ ] EU data residency: the cutover is DONE and verified (2052 objects copied, production
-      serving from `storage-brain-files-eu`); what remains is the soak, then deleting the old
-      `storage-brain-files` bucket, which needs Marlin's explicit go
-      [plan](docs/plans/2026-09-20-eu-data-residency.md) : also still open, Terraform must
-      `terraform import` the bucket (infra PR #42) once the infra Cloudflare token gains
-      "Workers R2 Storage: Edit", and the privacy texts can claim EU storage only after the
-      soak (ŌPUNTIA's needs a new consent version when they do) (2026-09-20)
+      serving from `storage-brain-files-eu`, Terraform import done and the plan clean). What
+      remains is the **soak**, which is simply a week of real production traffic on the new
+      bucket with the old one left intact so a rollback stays one edit away. It is not a
+      process running anywhere, it is elapsed time with attention on it. **It ends
+      2026-09-27** (cutover was 2026-09-20). Three things must hold before the cleanup:
+      no storage errors from any Storage Brain consumer, the EU bucket's object count still
+      growing (2052 at cutover, 2070 within hours, so production writes really land there),
+      and a last comparison showing every object of the old bucket exists in the new one at
+      the same size. Then, in **one pass and only on Marlin's explicit go**, three things go
+      together because they are one rollback: the `storage-brain-files` bucket, the
+      `AWS_ACCESS_KEY_ID_PRE_EU` / `AWS_SECRET_ACCESS_KEY_PRE_EU` pair in Infisical, and the
+      Cloudflare token `storage-brain-hetzner` that was scoped to that bucket.
+      [plan](docs/plans/2026-09-20-eu-data-residency.md) : the privacy texts can claim EU
+      storage only after the soak (ŌPUNTIA's needs a new consent version when they do).
+      Decided 2026-09-20: production keeps running on the account-wide R2 key, Marlin's call,
+      so `R2_MIGRATION_ACCESS_KEY_ID` / `R2_MIGRATION_SECRET_ACCESS_KEY` stay and no
+      bucket-scoped replacement is planned; do not re-open this as a finding (2026-09-20)
 - [ ] auth-brain cutover residuals: revoke lola-stories' legacy Storage Brain tenant key after
       a soak period, delete the dead `8263***` client secret on the Lumitra secrets-proxy
       Infisical identity, and visually confirm the dashboard Tenants page lists all 5 tenants

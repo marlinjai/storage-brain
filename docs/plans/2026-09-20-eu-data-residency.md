@@ -25,9 +25,11 @@ corrected to name Cloudflare. Correcting the text was right; the better end
 state is that the bytes actually rest in the EU, which is what Marlin asked for
 on 2026-09-20: "every project using Storage Brain needs to go to EU".
 
-The analytics platform already does this: `lumitra-replay-assets` has been an
-EU-jurisdiction bucket since 2026-06 (`deployments/lumitra-replay-assets`). The
-pattern is proven; Storage Brain simply predates it.
+The analytics platform was meant to do this already: `deployments/lumitra-replay-assets`
+has described an EU-jurisdiction bucket since 2026-06. Correction (2026-09-20):
+that bucket had never actually been created, so the replay-asset pipeline was
+pointing at nothing. It was created, imported into Terraform and given its
+public custom domain on 2026-09-20, in the same sweep as this migration.
 
 ## What is true today (verified 2026-09-20)
 
