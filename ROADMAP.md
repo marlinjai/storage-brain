@@ -61,8 +61,11 @@ plan when the item carries a decision or a sequence.
 
 - [ ] automated key rotation: end-to-end automated key rotation with dual-key grace period,
       Infisical push, and Coolify auto-redeploy
-      [plan](docs/plans/2026-04-06-automated-key-rotation.md) : still wanted, not started
-      (2026-09-10)
+      [plan](docs/plans/2026-04-06-automated-key-rotation.md) : phases 2 to 5 are written on
+      branch `feat/key-rotation-pipeline` (commit 9bd60ec, 2026-04-06, only local until
+      2026-09-25). Not merged: it needs a rebase onto main, its migrations renumbered to
+      0009/0010 (0004/0005 are taken), 9 conflicting files resolved, and a fresh security
+      review before a pull request (2026-09-25)
 - [ ] bring your own S3 bucket: per-tenant S3/R2/GCS bucket configuration for data sovereignty
       and cost isolation [plan](docs/plans/2026-04-06-bring-your-own-s3.md) : still wanted,
       not started (2026-09-10)
