@@ -13,8 +13,10 @@ import type {
   PutOptions,
   GetResult,
   ByteRange,
+  GetOptions,
   PresignedUrlOptions,
 } from '@storage-brain/shared';
+import { guardBody } from '../../utils/guard-body';
 
 export interface S3StorageAdapterConfig {
   bucket: string;
@@ -25,31 +27,71 @@ export interface S3StorageAdapterConfig {
     secretAccessKey: string;
   };
   forcePathStyle?: boolean;
+  /** Overrides BODY_IDLE_TIMEOUT_MS (tests). */
+  bodyIdleTimeoutMs?: number;
 }
 
-// The default Node HTTP handler has no timeout at all, so a request R2 (or
-// any S3-compatible backend) never answers hangs the socket FOREVER: it never
-// errors, never frees, and never retries. Once enough of those pile up, every
-// socket in the pool (default cap 50) is wedged and every new download queues
-// behind them with no way out (`@smithy/node-http-handler:WARN - socket usage
-// at capacity=... and N additional requests are enqueued`, incident
-// 2026-09-11: the queue grew past 690 with nothing completing until the
-// container was restarted). A timeout turns a silent hang into a normal,
-// retryable failure, which is what makes 300 concurrent sockets safe instead
-// of 300 ways to wedge.
+// What each NodeHttpHandler option really does in @smithy/node-http-handler 4.x
+// (read from its source, because the names mislead):
+//
+// - connectionTimeout: how long a request may wait for its socket to CONNECT.
+//   The clock starts when the request is created, so a request queued behind a
+//   full pool also hits it. That is the `did not establish a connection ...
+//   within 5000 ms` error of the 2026-09-26 incident: the pool was full, not
+//   the backend down.
+// - requestTimeout: a wall clock on getting the RESPONSE HEADERS. Without
+//   throwOnRequestTimeout it only logs a warning and the request keeps its
+//   socket; with it the request is destroyed and the socket freed. The timer is
+//   cleared as soon as headers arrive, so it never cuts a long download short.
+//   A PUT is answered only after its last byte, so put() scales it per request
+//   (putRequestTimeoutMs).
+// - Nothing in the handler watches the BODY. Once headers are in, a body that
+//   nobody reads or destroys pins its socket for the life of the process. That
+//   is what exhausted all 300 sockets on 2026-09-26 (the 2026-09-11 incident
+//   had the same signature). Bodies are therefore guarded in get() below: released
+//   on client abort and after BODY_IDLE_TIMEOUT_MS without progress.
+//   (`socketTimeout` is no substitute: values of 6000 ms or more are armed on a
+//   deferral that a fast response cancels, and smaller ones would cut off any
+//   consumer that pauses for a few seconds.)
+//
+// A timeout turns a silent hang into a normal, retryable failure, which is what
+// makes 300 concurrent sockets safe instead of 300 ways to wedge.
 const REQUEST_HANDLER = new NodeHttpHandler({
   connectionTimeout: 5_000,
   requestTimeout: 30_000,
+  throwOnRequestTimeout: true,
   socketAcquisitionWarningTimeout: 5_000,
+  httpAgent: { maxSockets: 300 },
   httpsAgent: { maxSockets: 300 },
 });
+
+/**
+ * How long a GetObject body may make no progress (no chunk passed from the
+ * backend to the client) before it is released. Matches the nginx
+ * proxy_send_timeout default.
+ * A paused `<video>` that trips it simply re-requests with Range on resume.
+ */
+export const BODY_IDLE_TIMEOUT_MS = 60_000;
+
+/**
+ * The header wait of a PUT covers the whole upload, because S3 answers only
+ * after it has received every byte. With throwOnRequestTimeout the handler's
+ * flat 30 s would therefore kill a large upload on a slow link. A PUT gets that
+ * 30 s for S3 to respond plus one second per MiB sent, i.e. it fails only below
+ * 1 MiB/s (130 s for a 100 MB file).
+ */
+export function putRequestTimeoutMs(bytes: number): number {
+  return 30_000 + Math.ceil(bytes / (1024 * 1024)) * 1_000;
+}
 
 export class S3StorageAdapter implements StorageAdapter {
   private client: S3Client;
   private bucket: string;
+  private bodyIdleTimeoutMs: number;
 
   constructor(config: S3StorageAdapterConfig) {
     this.bucket = config.bucket;
+    this.bodyIdleTimeoutMs = config.bodyIdleTimeoutMs ?? BODY_IDLE_TIMEOUT_MS;
     this.client = new S3Client({
       region: config.region,
       endpoint: config.endpoint,
@@ -92,7 +134,9 @@ export class S3StorageAdapter implements StorageAdapter {
       ContentType: options.contentType,
     });
 
-    const result = await this.client.send(command);
+    const result = await this.client.send(command, {
+      requestTimeout: putRequestTimeoutMs(body.length),
+    });
 
     return {
       key,
@@ -103,7 +147,7 @@ export class S3StorageAdapter implements StorageAdapter {
     };
   }
 
-  async get(key: string, range?: ByteRange): Promise<GetResult | null> {
+  async get(key: string, range?: ByteRange, options?: GetOptions): Promise<GetResult | null> {
     try {
       const command = new GetObjectCommand({
         Bucket: this.bucket,
@@ -112,7 +156,9 @@ export class S3StorageAdapter implements StorageAdapter {
         ...(range ? { Range: `bytes=${range.start}-${range.end ?? ''}` } : {}),
       });
 
-      const result = await this.client.send(command);
+      // The signal also takes a request that is still queued for a socket out
+      // of the queue once its client has gone.
+      const result = await this.client.send(command, { abortSignal: options?.signal });
 
       if (!result.Body) return null;
 
@@ -123,7 +169,12 @@ export class S3StorageAdapter implements StorageAdapter {
       const served = parseContentRange(result.ContentRange);
 
       return {
-        body: result.Body.transformToWebStream(),
+        // Guarded so the socket behind it is released on every path, not only
+        // when the body is read to the end (see REQUEST_HANDLER above).
+        body: guardBody(result.Body.transformToWebStream() as ReadableStream<Uint8Array>, {
+          signal: options?.signal,
+          idleTimeoutMs: this.bodyIdleTimeoutMs,
+        }),
         contentType: result.ContentType ?? 'application/octet-stream',
         // On a partial read ContentLength is the length of the SLICE, so the
         // total has to come from Content-Range.
@@ -138,7 +189,7 @@ export class S3StorageAdapter implements StorageAdapter {
       // range and this would surface as a 500 on an ordinary video request,
       // which is a miserable thing to debug. Fall back to reading the whole
       // object and report no range, so the caller answers a truthful 200.
-      if (isInvalidRange(err) && range) return this.get(key);
+      if (isInvalidRange(err) && range) return this.get(key, undefined, options);
       throw err;
     }
   }

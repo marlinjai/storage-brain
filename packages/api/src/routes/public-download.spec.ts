@@ -230,7 +230,11 @@ describe('public download: byte ranges', () => {
     expect(res.headers.get('Content-Range')).toBe('bytes 0-99/2048');
     expect(res.headers.get('Content-Length')).toBe('100');
     expect(res.headers.get('Accept-Ranges')).toBe('bytes');
-    expect(getSpy).toHaveBeenCalledWith(expect.any(String), { start: 0, end: 99 });
+    expect(getSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      { start: 0, end: 99 },
+      { signal: expect.any(AbortSignal) }
+    );
   });
 
   it('serves an open-ended range to the last byte', async () => {
@@ -299,7 +303,39 @@ describe('public download: byte ranges', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Length')).toBe('2048');
     expect(res.headers.get('Content-Range')).toBeNull();
-    expect(getSpy).toHaveBeenCalledWith(expect.any(String), undefined);
+    expect(getSpy).toHaveBeenCalledWith(expect.any(String), undefined, {
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it('answers HEAD from the database row and never opens the object', async () => {
+    // Hono serves HEAD through this GET handler and drops the body uncancelled,
+    // which stranded one S3 socket per HEAD (incident 2026-09-26).
+    const app = appWith(rangeAwareStorage());
+
+    const res = await app.request(
+      `/api/v1/files/${FILE_A}/download`,
+      { method: 'HEAD', headers: { ...AUTH, Range: 'bytes=0-99' } },
+      ENV
+    );
+
+    // Range is only defined for GET, so HEAD describes the whole object.
+    expect(res.status).toBe(200);
+    expect(res.body).toBeNull();
+    expect(res.headers.get('Content-Length')).toBe('2048');
+    expect(res.headers.get('Content-Type')).toBe('image/png');
+    expect(res.headers.get('Accept-Ranges')).toBe('bytes');
+    expect(res.headers.get('Content-Range')).toBeNull();
+    expect(getSpy).not.toHaveBeenCalled();
+  });
+
+  it('still refuses HEAD without credentials', async () => {
+    const app = appWith(rangeAwareStorage());
+
+    const res = await app.request(`/api/v1/files/${FILE_A}/download`, { method: 'HEAD' }, ENV);
+
+    expect(res.status).toBe(401);
+    expect(getSpy).not.toHaveBeenCalled();
   });
 });
 

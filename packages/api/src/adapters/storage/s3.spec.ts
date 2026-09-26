@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
-import { S3StorageAdapter } from './s3';
+import { S3StorageAdapter, putRequestTimeoutMs } from './s3';
 import type { StorageAdapter } from '@storage-brain/shared';
 
 const mockSend = vi.fn();
@@ -60,12 +60,18 @@ describe('S3StorageAdapter', () => {
         configProvider: Promise<{
           connectionTimeout?: number;
           requestTimeout?: number;
+          throwOnRequestTimeout?: boolean;
+          httpAgent?: { maxSockets?: number };
           httpsAgent?: { maxSockets?: number };
         }>;
       };
       return handler.configProvider.then((resolved) => {
         expect(resolved.connectionTimeout).toBe(5_000);
         expect(resolved.requestTimeout).toBe(30_000);
+        // Without this, requestTimeout only logs a warning and the stuck
+        // request keeps its socket (incident 2026-09-26).
+        expect(resolved.throwOnRequestTimeout).toBe(true);
+        expect(resolved.httpAgent?.maxSockets).toBe(300);
         expect(resolved.httpsAgent?.maxSockets).toBe(300);
       });
     });
@@ -99,6 +105,20 @@ describe('S3StorageAdapter', () => {
       expect(result.etag).toBe('abc123');
     });
 
+    it('gives a PUT time for its upload, not only the flat header wait', async () => {
+      // S3 answers a PUT only after the last byte, so the header timeout covers
+      // the whole upload and must grow with it.
+      mockSend.mockResolvedValueOnce({ ETag: '"big"' });
+
+      await adapter.put('test/big.bin', new ArrayBuffer(100 * 1024 * 1024), {
+        contentType: 'application/octet-stream',
+      });
+
+      expect(mockSend.mock.calls[0]![1]).toEqual({ requestTimeout: 130_000 });
+      expect(putRequestTimeoutMs(0)).toBe(30_000);
+      expect(putRequestTimeoutMs(1)).toBe(31_000);
+    });
+
     it('handles ReadableStream input', async () => {
       mockSend.mockResolvedValueOnce({ ETag: '"def456"' });
 
@@ -119,7 +139,12 @@ describe('S3StorageAdapter', () => {
 
   describe('get', () => {
     it('returns file content', async () => {
-      const mockStream = new ReadableStream();
+      const mockStream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1, 2, 3]));
+          controller.close();
+        },
+      });
       mockSend.mockResolvedValueOnce({
         Body: { transformToWebStream: () => mockStream },
         ContentType: 'image/png',
@@ -129,9 +154,47 @@ describe('S3StorageAdapter', () => {
 
       const result = await adapter.get('test/file.png');
       expect(result).not.toBeNull();
-      expect(result!.body).toBe(mockStream);
       expect(result!.contentType).toBe('image/png');
       expect(result!.size).toBe(2048);
+      // The body is a guarded wrapper, and passes the bytes through unchanged.
+      expect(new Uint8Array(await new Response(result!.body).arrayBuffer())).toEqual(
+        new Uint8Array([1, 2, 3])
+      );
+    });
+
+    it('hands the request signal to the SDK so a queued or in-flight read is abandoned', async () => {
+      mockSend.mockResolvedValueOnce({
+        Body: { transformToWebStream: () => new ReadableStream() },
+        ContentType: 'image/png',
+      });
+      const controller = new AbortController();
+
+      await adapter.get('test/file.png', undefined, { signal: controller.signal });
+
+      expect(mockSend.mock.calls[0]![1]).toEqual({ abortSignal: controller.signal });
+    });
+
+    it('releases the S3 body when the request aborts after the body was handed out', async () => {
+      let sourceCancelled = false;
+      const source = new ReadableStream<Uint8Array>({
+        cancel() {
+          sourceCancelled = true;
+        },
+      });
+      mockSend.mockResolvedValueOnce({
+        Body: { transformToWebStream: () => source },
+        ContentType: 'video/mp4',
+      });
+      const controller = new AbortController();
+
+      const result = await adapter.get('clip.mp4', undefined, { signal: controller.signal });
+      // Lock it the way the HTTP layer does, then abort: release must not
+      // depend on whoever holds the returned stream.
+      result!.body.getReader();
+      controller.abort();
+      await Promise.resolve();
+
+      expect(sourceCancelled).toBe(true);
     });
 
     it('returns null for NoSuchKey error', async () => {
@@ -309,6 +372,17 @@ describe('S3StorageAdapter range reads', () => {
     expect(
       (mockSend.mock.calls[1]![0] as { input: { Range?: string } }).input.Range
     ).toBeUndefined();
+  });
+
+  it('keeps the request signal on the whole-object fallback read', async () => {
+    const invalidRange = Object.assign(new Error('InvalidRange'), { name: 'InvalidRange' });
+    mockSend.mockRejectedValueOnce(invalidRange);
+    mockSend.mockResolvedValueOnce({ Body: body(), ContentType: 'video/mp4', ContentLength: 10 });
+    const controller = new AbortController();
+
+    await adapter.get('k', { start: 99999 }, { signal: controller.signal });
+
+    expect(mockSend.mock.calls[1]![1]).toEqual({ abortSignal: controller.signal });
   });
 
   it('still propagates a non-range error', async () => {

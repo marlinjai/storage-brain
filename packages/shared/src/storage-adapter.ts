@@ -40,6 +40,17 @@ export interface GetResult {
   range?: { start: number; end: number; total: number };
 }
 
+export interface GetOptions {
+  /**
+   * The signal of the request this read serves. When it aborts (the client
+   * went away), the adapter abandons a read still in flight and releases the
+   * body it already returned, so a departed client can never pin a backend
+   * connection. Callers that stream `GetResult.body` to an HTTP response should
+   * always pass it.
+   */
+  signal?: AbortSignal;
+}
+
 export interface PresignedUrlOptions {
   expiresIn: number;
   contentType?: string;
@@ -52,8 +63,11 @@ export interface StorageAdapter {
    * serve ranges may ignore `range` and return the whole body, but then it MUST
    * leave `GetResult.range` unset so the caller does not claim a partial
    * response it did not make.
+   *
+   * The returned `body` holds a backend connection until it is read to the end
+   * or cancelled. A caller that decides not to send it MUST `cancel()` it.
    */
-  get(key: string, range?: ByteRange): Promise<GetResult | null>;
+  get(key: string, range?: ByteRange, options?: GetOptions): Promise<GetResult | null>;
   delete(key: string): Promise<void>;
   exists(key: string): Promise<boolean>;
   head(key: string): Promise<StorageObject | null>;
