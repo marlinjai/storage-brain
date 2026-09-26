@@ -83,6 +83,12 @@ plan when the item carries a decision or a sequence.
       replace the reservation, a failed, cut-off or expired upload releases it, a 5-minute sweep
       reclaims stale sessions); deletes release and close sessions in the same transaction
       (2026-09-26)
+- [ ] orphaned objects after a crash mid-upload: when a server process dies after writing an
+      upload's object but before settling its session, the expiry sweep reclaims the quota
+      after the one-hour grace period, but the object already written to storage stays behind,
+      uncounted in any quota and attached only to a failed zero-byte file record. Needs an
+      orphan sweep that lists storage keys without an active completed file row (or writes a
+      pre-write intent record) and deletes them after a grace period (2026-09-26)
 
 ## Completed
 

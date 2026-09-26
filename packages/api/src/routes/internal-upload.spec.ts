@@ -147,7 +147,11 @@ describe('PUT /_internal/upload/* body size limit', () => {
     expect(src.cancelled).toBe(true);
     expect(storage.put).not.toHaveBeenCalled();
     // The cut-off transfer releases its whole reservation.
-    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', { status: 'failed' });
+    expect(db.settleUploadSession).toHaveBeenCalledWith(
+      'session-1',
+      { status: 'failed' },
+      'uploading'
+    );
   });
 
   it('rejects a Content-Length above the declared size with 413 without reading', async () => {
@@ -163,7 +167,11 @@ describe('PUT /_internal/upload/* body size limit', () => {
     );
     expect(src.pulls).toBe(0);
     expect(storage.put).not.toHaveBeenCalled();
-    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', { status: 'failed' });
+    expect(db.settleUploadSession).toHaveBeenCalledWith(
+      'session-1',
+      { status: 'failed' },
+      'uploading'
+    );
   });
 
   it('cuts off a body larger than the declared size even when Content-Length lies', async () => {
@@ -179,7 +187,11 @@ describe('PUT /_internal/upload/* body size limit', () => {
     expect(src.cancelled).toBe(true);
     expect(storage.put).not.toHaveBeenCalled();
     // The cut-off transfer releases its whole reservation.
-    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', { status: 'failed' });
+    expect(db.settleUploadSession).toHaveBeenCalledWith(
+      'session-1',
+      { status: 'failed' },
+      'uploading'
+    );
   });
 
   it('stores exactly the bytes of a valid upload', async () => {
@@ -199,10 +211,11 @@ describe('PUT /_internal/upload/* body size limit', () => {
     const expected = Uint8Array.from({ length: 4_321 }, (_, i) => i % 251);
     expect(new Uint8Array(stored)).toEqual(expected);
     // A body smaller than declared is still accepted and the real size recorded.
-    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', {
-      status: 'completed',
-      actualBytes: 4_321,
-    });
+    expect(db.settleUploadSession).toHaveBeenCalledWith(
+      'session-1',
+      { status: 'completed', actualBytes: 4_321 },
+      'uploading'
+    );
   });
 
   it('accepts an upload of exactly the maximum size without Content-Length', async () => {
@@ -219,10 +232,11 @@ describe('PUT /_internal/upload/* body size limit', () => {
     const bytes = new Uint8Array(stored);
     expect(bytes[0]).toBe(0);
     expect(bytes[MAX_FILE_SIZE_BYTES - MIB]).toBe((MAX_FILE_SIZE_BYTES / MIB - 1) % 256);
-    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', {
-      status: 'completed',
-      actualBytes: MAX_FILE_SIZE_BYTES,
-    });
+    expect(db.settleUploadSession).toHaveBeenCalledWith(
+      'session-1',
+      { status: 'completed', actualBytes: MAX_FILE_SIZE_BYTES },
+      'uploading'
+    );
   });
 });
 
@@ -259,10 +273,11 @@ describe('PUT /_internal/upload/* settles its upload session on every path', () 
     expect(res.status).toBe(200);
     expect(db.claimUploadSession).toHaveBeenCalledWith('session-1');
     // 600 of the 1000 reserved bytes are kept; the adapter releases the other 400.
-    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', {
-      status: 'completed',
-      actualBytes: 600,
-    });
+    expect(db.settleUploadSession).toHaveBeenCalledWith(
+      'session-1',
+      { status: 'completed', actualBytes: 600 },
+      'uploading'
+    );
   });
 
   it('refuses a second transfer for a session another one already claimed (409, nothing read)', async () => {
@@ -288,14 +303,22 @@ describe('PUT /_internal/upload/* settles its upload session on every path', () 
 
     expect(res.status).toBe(500);
     expect(db.settleUploadSession).toHaveBeenCalledTimes(1);
-    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', { status: 'failed' });
+    expect(db.settleUploadSession).toHaveBeenCalledWith(
+      'session-1',
+      { status: 'failed' },
+      'uploading'
+    );
   });
 
   it('releases the reservation for an empty body (400)', async () => {
     const res = await put(0);
 
     expect(res.status).toBe(400);
-    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', { status: 'failed' });
+    expect(db.settleUploadSession).toHaveBeenCalledWith(
+      'session-1',
+      { status: 'failed' },
+      'uploading'
+    );
     expect(storage.put).not.toHaveBeenCalled();
   });
 
@@ -327,7 +350,11 @@ describe('PUT /_internal/upload/* settles its upload session on every path', () 
     const res = await put(600);
 
     expect(res.status).toBe(410);
-    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', { status: 'expired' });
+    expect(db.settleUploadSession).toHaveBeenCalledWith(
+      'session-1',
+      { status: 'expired' },
+      'pending'
+    );
     expect(db.claimUploadSession).not.toHaveBeenCalled();
   });
 

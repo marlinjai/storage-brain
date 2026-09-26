@@ -91,20 +91,57 @@ webhookRoutes.post('/r2-upload-complete', async (c) => {
 
   // Settle the session with the size R2 reports for the stored object, which
   // replaces the reservation with the real bytes. Without a usable size the
-  // reservation (the declared size) is kept as the file's size. A session that
-  // is already settled (a redelivered event) changes nothing.
+  // reservation (the declared size) is kept as the file's size. Only a session
+  // still `pending` is settled here, atomically: the internal upload route
+  // claims its session (`uploading`) before writing, and its own put fires
+  // this same event, so settling an `uploading` session would race that route
+  // and could make it delete the object it just stored. A session that is
+  // already settled (a redelivered event) changes nothing either.
   const file = await db.getFileById(fileId, tenantId);
   if (!file) {
     console.error(`File record not found: ${fileId}`);
     return c.json({ error: 'File record not found' }, 404);
   }
 
+  // The event must be for this file's own object, not merely a key under its
+  // prefix: settling or deleting anything else would act on the wrong bytes.
+  if (file.storedPath !== storedPath) {
+    console.warn(`Ignoring upload event for unexpected key of file ${fileId}: ${storedPath}`);
+    return c.json({ status: 'ignored' });
+  }
+
   const reportedSize = (object as { size?: unknown }).size;
-  const actualBytes =
+  const usableSize =
     typeof reportedSize === 'number' && Number.isSafeInteger(reportedSize) && reportedSize >= 0
       ? reportedSize
-      : file.sizeBytes;
-  const settled = await db.settleUploadSession(session.id, { status: 'completed', actualBytes });
+      : null;
+
+  // More bytes than were declared (and reserved) are refused, as the internal
+  // upload route refuses them with a 413: the quota was only checked for the
+  // declared size. The reservation is released and the object removed.
+  const declaredSize = file.sizeBytes;
+  if (usableSize !== null && declaredSize > 0 && usableSize > declaredSize) {
+    const rejected = await db.settleUploadSession(session.id, { status: 'failed' }, 'pending');
+    if (!rejected) {
+      return c.json({ status: 'ignored' });
+    }
+    try {
+      await c.get('storage').delete(storedPath);
+    } catch (err) {
+      console.error(`Failed to delete oversized upload ${storedPath}:`, err);
+    }
+    console.warn(
+      `Rejected upload of ${usableSize} bytes for file ${fileId}: ${declaredSize} bytes were declared`
+    );
+    return c.json({ status: 'rejected', fileId });
+  }
+
+  const actualBytes = usableSize ?? declaredSize;
+  const settled = await db.settleUploadSession(
+    session.id,
+    { status: 'completed', actualBytes },
+    'pending'
+  );
   if (!settled) {
     return c.json({ status: 'ignored' });
   }

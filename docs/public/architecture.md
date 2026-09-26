@@ -145,8 +145,9 @@ A tenant's (and a workspace's) `used_bytes` is always the sum of `size_bytes` ov
 
 - **Completed:** the file's size becomes the stored bytes and the counters move by the difference to the reservation.
 - **Failed** (body rejected, cut off, or not storable) or **expired** (URL lapsed unused, or a transfer that never finished): the whole reservation is released and the file is marked `failed` with size 0.
-- A sweep settles stale sessions as expired every 5 minutes (a timer in the Node server, a cron trigger on Workers). A transfer already under way gets one hour past its URL expiry before it is reclaimed.
-- Deleting a file (or a workspace) releases its bytes and closes any open upload session in the same transaction, so a later settle or sweep cannot release them a second time.
+- A sweep settles stale sessions as expired every 5 minutes (a timer in the Node server, a cron trigger on Workers). It drains the backlog in batches of 100 until a batch comes back short or its 20-second budget is spent, and the next run continues from there. A transfer already under way gets one hour past its URL expiry before it is reclaimed, including one that claimed its session while the sweep was selecting it.
+- Deleting a file (or a workspace) releases its bytes and closes any open upload session in the same transaction, so a later settle or sweep cannot release them a second time. A workspace delete removes the storage objects of exactly the files that transaction soft-deleted, so a file uploaded while the delete runs cannot keep its object.
+- The R2 completion webhook settles only a session no transfer has claimed. An upload through the API claims its session before writing, so the event its own write fires never settles it. An object larger than the size declared for its upload is refused: the session fails, its reservation is released and the object is deleted.
 
 ## Deployment
 

@@ -71,6 +71,34 @@ export type UploadSessionOutcome =
   | { status: 'failed' }
   | { status: 'expired' };
 
+/** The two states an upload session can be settled from (it is still open). */
+export type OpenUploadSessionStatus = 'pending' | 'uploading';
+
+/** What one call to `expireStaleUploadSessions` did. */
+export interface ExpireStaleUploadSessionsResult {
+  /** Stale sessions selected for this batch (at most the requested limit). */
+  scanned: number;
+  /** Of those, how many this call settled as `expired` (the rest were settled elsewhere first). */
+  expired: number;
+}
+
+/** A file soft-deleted by a bulk delete, with the key of its storage object. */
+export interface DeletedFileRef {
+  id: string;
+  storedPath: string;
+}
+
+export interface DeleteWorkspaceFilesResult {
+  /** Bytes released from the tenant and the workspace counters. */
+  releasedBytes: number;
+  /**
+   * Exactly the files this delete soft-deleted, selected in the same
+   * transaction, so the caller removes the storage object of every one of them
+   * (including a file created after any earlier listing).
+   */
+  files: DeletedFileRef[];
+}
+
 export interface CreatePendingUploadInput {
   /** The file row to create; `sizeBytes` is the declared size, reserved as quota. */
   file: CreateFileInput;
@@ -245,13 +273,30 @@ export interface DatabaseAdapter {
    * file `completed` or `failed`. Returns false, changing nothing, when the
    * session was already settled, so a retry can never release twice. A file
    * deleted meanwhile keeps its counters untouched (the delete released them).
+   *
+   * `fromStatus` narrows which open state may be settled, checked atomically
+   * with the settle itself: `'pending'` settles only a session no transfer has
+   * claimed (the R2 completion webhook must never settle a transfer the
+   * internal upload route is running), `'uploading'` only a claimed one.
+   * Without it, either open state is settled.
    */
-  settleUploadSession(sessionId: string, outcome: UploadSessionOutcome): Promise<boolean>;
+  settleUploadSession(
+    sessionId: string,
+    outcome: UploadSessionOutcome,
+    fromStatus?: OpenUploadSessionStatus
+  ): Promise<boolean>;
   /**
-   * Settle as `expired` every session still `pending` after its `expiresAt`,
-   * or still `uploading` `uploadingGraceMs` after it. Returns how many.
+   * Settle as `expired` up to `limit` sessions still `pending` after their
+   * `expiresAt`, or still `uploading` `uploadingGraceMs` after it, oldest
+   * first. Each is settled from the state it was selected in, so a session
+   * claimed after selection keeps its in-flight grace period. A caller drains
+   * a backlog by calling again while `scanned === limit`.
    */
-  expireStaleUploadSessions(now: number, uploadingGraceMs: number): Promise<number>;
+  expireStaleUploadSessions(
+    now: number,
+    uploadingGraceMs: number,
+    limit: number
+  ): Promise<ExpireStaleUploadSessionsResult>;
   /**
    * Soft-delete a live file, release its bytes from both counters and close
    * its open upload session, atomically. Returns null (changing nothing) when
@@ -261,9 +306,13 @@ export interface DatabaseAdapter {
   /**
    * Soft-delete every live file of a workspace, release their bytes from both
    * counters and close their open upload sessions, atomically. Returns the
-   * number of bytes released.
+   * bytes released and exactly the files it soft-deleted, which is the list
+   * whose storage objects the caller must remove.
    */
-  deleteWorkspaceFilesAndReleaseQuota(workspaceId: string, tenantId: string): Promise<number>;
+  deleteWorkspaceFilesAndReleaseQuota(
+    workspaceId: string,
+    tenantId: string
+  ): Promise<DeleteWorkspaceFilesResult>;
 
   // Quota — tenant level
   checkQuota(tenantId: string, fileSizeBytes: number): Promise<QuotaCheckResult>;

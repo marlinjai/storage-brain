@@ -15,6 +15,7 @@ export function describeQuotaContract(adapterName: string, getDb: () => Database
     let tenantId: string;
     let workspaceId: string;
     const GRACE = 60 * 60 * 1000;
+    const BATCH = 500;
 
     beforeEach(async () => {
       db = getDb();
@@ -144,7 +145,7 @@ export function describeQuotaContract(adapterName: string, getDb: () => Database
       await seedFile(db, fresh, { pending: true, expiresAt: Date.now() + 60_000 });
       expect(await tenantUsed()).toBe(500);
 
-      const expired = await db.expireStaleUploadSessions(Date.now(), GRACE);
+      const { expired } = await db.expireStaleUploadSessions(Date.now(), GRACE, BATCH);
 
       expect(expired).toBeGreaterThanOrEqual(1);
       expect(await tenantUsed()).toBe(200);
@@ -152,7 +153,7 @@ export function describeQuotaContract(adapterName: string, getDb: () => Database
       expect((await db.getUploadSessionByFileId(lapsed.id))?.status).toBe('expired');
       expect((await db.getUploadSessionByFileId(fresh.id))?.status).toBe('pending');
       // Running the sweep again releases nothing more.
-      await db.expireStaleUploadSessions(Date.now(), GRACE);
+      await db.expireStaleUploadSessions(Date.now(), GRACE, BATCH);
       expect(await tenantUsed()).toBe(200);
     });
 
@@ -162,11 +163,11 @@ export function describeQuotaContract(adapterName: string, getDb: () => Database
       const sessionId = await seedFile(db, file, { pending: true, expiresAt });
       await db.claimUploadSession(sessionId);
 
-      await db.expireStaleUploadSessions(Date.now(), GRACE);
+      await db.expireStaleUploadSessions(Date.now(), GRACE, BATCH);
       expect((await db.getUploadSessionByFileId(file.id))?.status).toBe('uploading');
       expect(await tenantUsed()).toBe(300);
 
-      await db.expireStaleUploadSessions(expiresAt + GRACE + 1, GRACE);
+      await db.expireStaleUploadSessions(expiresAt + GRACE + 1, GRACE, BATCH);
       expect((await db.getUploadSessionByFileId(file.id))?.status).toBe('expired');
       expect(await tenantUsed()).toBe(0);
     });
@@ -225,7 +226,7 @@ export function describeQuotaContract(adapterName: string, getDb: () => Database
       expect(await workspaceUsed()).toBe(0);
       expect((await db.getUploadSessionByFileId(file.id))?.status).toBe('failed');
 
-      await db.expireStaleUploadSessions(Date.now(), GRACE);
+      await db.expireStaleUploadSessions(Date.now(), GRACE, BATCH);
       expect(await db.deleteFileAndReleaseQuota(file.id, tenantId)).toBeNull();
       expect(await tenantUsed()).toBe(0);
     });
@@ -246,17 +247,128 @@ export function describeQuotaContract(adapterName: string, getDb: () => Database
     });
 
     it('releases completed and reserved bytes when a workspace is emptied', async () => {
-      await seedFile(db, fileInput(200, { workspace: true }));
+      const completed = fileInput(200, { workspace: true });
+      await seedFile(db, completed);
       const pending = fileInput(300, { workspace: true });
       await seedFile(db, pending, { pending: true });
-      await seedFile(db, fileInput(100)); // outside the workspace
+      const outside = fileInput(100);
+      await seedFile(db, outside);
 
-      const released = await db.deleteWorkspaceFilesAndReleaseQuota(workspaceId, tenantId);
+      const { releasedBytes, files } = await db.deleteWorkspaceFilesAndReleaseQuota(
+        workspaceId,
+        tenantId
+      );
 
-      expect(released).toBe(500);
+      expect(releasedBytes).toBe(500);
+      // Exactly the files it soft-deleted, with the keys of their objects.
+      const byId = (a: { id: string }, b: { id: string }) => a.id.localeCompare(b.id);
+      expect([...files].sort(byId)).toEqual(
+        [
+          { id: completed.id, storedPath: completed.storedPath },
+          { id: pending.id, storedPath: pending.storedPath },
+        ].sort(byId)
+      );
+      expect(await db.getFileById(completed.id, tenantId)).toBeNull();
+      expect(await db.getFileById(pending.id, tenantId)).toBeNull();
+      expect(await db.getFileById(outside.id, tenantId)).not.toBeNull();
       expect(await tenantUsed()).toBe(100);
       expect(await workspaceUsed()).toBe(0);
       expect((await db.getUploadSessionByFileId(pending.id))?.status).toBe('failed');
+    });
+
+    it('reports a file created after an earlier listing, so its object is removed too', async () => {
+      const early = fileInput(200, { workspace: true });
+      await seedFile(db, early);
+      const listed = await db.getActiveFilesByWorkspace(workspaceId, tenantId);
+      // An upload lands between a listing and the delete.
+      const late = fileInput(100, { workspace: true });
+      await seedFile(db, late, { pending: true });
+
+      const { releasedBytes, files } = await db.deleteWorkspaceFilesAndReleaseQuota(
+        workspaceId,
+        tenantId
+      );
+
+      expect(listed.map((f) => f.id)).toEqual([early.id]);
+      expect(releasedBytes).toBe(300);
+      expect(files.map((f) => f.id).sort()).toEqual([early.id, late.id].sort());
+      expect(files.find((f) => f.id === late.id)?.storedPath).toBe(late.storedPath);
+      expect(await tenantUsed()).toBe(0);
+      expect(await workspaceUsed()).toBe(0);
+    });
+
+    it('reports nothing when an empty workspace is emptied', async () => {
+      expect(await db.deleteWorkspaceFilesAndReleaseQuota(workspaceId, tenantId)).toEqual({
+        releasedBytes: 0,
+        files: [],
+      });
+    });
+
+    it('settles from the named state only: a claimed session is not settled as pending', async () => {
+      const file = fileInput(300, { workspace: true });
+      const sessionId = await seedFile(db, file, { pending: true });
+      await db.claimUploadSession(sessionId);
+
+      expect(
+        await db.settleUploadSession(
+          sessionId,
+          { status: 'completed', actualBytes: 300 },
+          'pending'
+        )
+      ).toBe(false);
+      expect((await db.getUploadSessionByFileId(file.id))?.status).toBe('uploading');
+      expect(await tenantUsed()).toBe(300);
+      expect((await db.getFileById(file.id, tenantId))?.processingStatus).toBe('pending');
+
+      expect(
+        await db.settleUploadSession(
+          sessionId,
+          { status: 'completed', actualBytes: 120 },
+          'uploading'
+        )
+      ).toBe(true);
+      expect(await tenantUsed()).toBe(120);
+      expect(await workspaceUsed()).toBe(120);
+    });
+
+    it('settles a pending session from pending, and an unclaimed one never from uploading', async () => {
+      const file = fileInput(300);
+      const sessionId = await seedFile(db, file, { pending: true });
+
+      expect(await db.settleUploadSession(sessionId, { status: 'failed' }, 'uploading')).toBe(
+        false
+      );
+      expect(await tenantUsed()).toBe(300);
+      expect(
+        await db.settleUploadSession(
+          sessionId,
+          { status: 'completed', actualBytes: 250 },
+          'pending'
+        )
+      ).toBe(true);
+      expect(await tenantUsed()).toBe(250);
+      expect((await db.getUploadSessionByFileId(file.id))?.status).toBe('completed');
+    });
+
+    it('drains stale sessions in bounded batches', async () => {
+      // Other tests share the database, so these sessions lapse at a moment
+      // long before any other session could, and the sweep is judged against
+      // the instant right after it: only these three are stale then.
+      const lapsedAt = 1_000;
+      const files = [fileInput(100), fileInput(100), fileInput(100)];
+      for (const f of files) await seedFile(db, f, { pending: true, expiresAt: lapsedAt });
+      expect(await tenantUsed()).toBe(300);
+
+      const at = lapsedAt + 1;
+      const first = await db.expireStaleUploadSessions(at, GRACE, 2);
+      expect(first).toEqual({ scanned: 2, expired: 2 });
+      expect(await tenantUsed()).toBe(100);
+
+      const second = await db.expireStaleUploadSessions(at, GRACE, 2);
+      expect(second).toEqual({ scanned: 1, expired: 1 });
+      expect(await tenantUsed()).toBe(0);
+
+      expect(await db.expireStaleUploadSessions(at, GRACE, 2)).toEqual({ scanned: 0, expired: 0 });
     });
 
     it('charges the stored bytes of a legacy upload that declared no size', async () => {

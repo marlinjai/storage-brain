@@ -9,6 +9,9 @@ import type {
   CreatePendingUploadInput,
   CreatePendingUploadResult,
   UploadSessionOutcome,
+  OpenUploadSessionStatus,
+  ExpireStaleUploadSessionsResult,
+  DeleteWorkspaceFilesResult,
   MigrateFilesToWorkspaceInput,
   MigrateFilesToWorkspaceResult,
   FileContextAggregate,
@@ -695,8 +698,15 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     return result.meta.changes > 0;
   }
 
-  async settleUploadSession(sessionId: string, outcome: UploadSessionOutcome): Promise<boolean> {
+  async settleUploadSession(
+    sessionId: string,
+    outcome: UploadSessionOutcome,
+    fromStatus?: OpenUploadSessionStatus
+  ): Promise<boolean> {
     const now = Date.now();
+    // The open states this settle may start from; binding the same one twice
+    // narrows the claim below to that state alone.
+    const [fromA, fromB] = fromStatus ? [fromStatus, fromStatus] : ['pending', 'uploading'];
     const actualBytes = outcome.status === 'completed' ? outcome.actualBytes : 0;
     const processingStatus: ProcessingStatus =
       outcome.status === 'completed' ? 'completed' : 'failed';
@@ -711,9 +721,9 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       this.db
         .prepare(
           `UPDATE upload_sessions SET status = ?
-           WHERE id = ? AND status IN ('pending', 'uploading')`
+           WHERE id = ? AND status IN (?, ?)`
         )
-        .bind(marker, sessionId),
+        .bind(marker, sessionId, fromA, fromB),
       // Counters move by (stored - reserved); the reservation is still the
       // file's size_bytes here because the files update runs last.
       this.db
@@ -746,23 +756,29 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     return (results[0]?.meta.changes ?? 0) > 0;
   }
 
-  async expireStaleUploadSessions(now: number, uploadingGraceMs: number): Promise<number> {
+  async expireStaleUploadSessions(
+    now: number,
+    uploadingGraceMs: number,
+    limit: number
+  ): Promise<ExpireStaleUploadSessionsResult> {
     const rows = await this.db
       .prepare(
-        `SELECT id FROM upload_sessions
+        `SELECT id, status FROM upload_sessions
          WHERE (status = 'pending' AND expires_at < ?)
             OR (status = 'uploading' AND expires_at < ?)
          ORDER BY expires_at
-         LIMIT 500`
+         LIMIT ?`
       )
-      .bind(now, now - uploadingGraceMs)
-      .all<{ id: string }>();
+      .bind(now, now - uploadingGraceMs, limit)
+      .all<{ id: string; status: OpenUploadSessionStatus }>();
 
     let expired = 0;
     for (const row of rows.results) {
-      if (await this.settleUploadSession(row.id, { status: 'expired' })) expired += 1;
+      // Settle from the state it was selected in: a pending session a transfer
+      // claimed since the SELECT is left alone until its grace period is over.
+      if (await this.settleUploadSession(row.id, { status: 'expired' }, row.status)) expired += 1;
     }
-    return expired;
+    return { scanned: rows.results.length, expired };
   }
 
   async deleteFileAndReleaseQuota(fileId: string, tenantId: string): Promise<StoredFile | null> {
@@ -806,13 +822,17 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
   async deleteWorkspaceFilesAndReleaseQuota(
     workspaceId: string,
     tenantId: string
-  ): Promise<number> {
+  ): Promise<DeleteWorkspaceFilesResult> {
     const now = Date.now();
     const live = 'workspace_id = ? AND tenant_id = ? AND deleted_at IS NULL';
     const total = `(SELECT COALESCE(SUM(size_bytes), 0) FROM files WHERE ${live})`;
 
+    // One transaction: the files listed by the first statement are exactly the
+    // ones the counters release and the last statement soft-deletes.
     const results = await this.db.batch([
-      this.db.prepare(`SELECT ${total} AS total`).bind(workspaceId, tenantId),
+      this.db
+        .prepare(`SELECT id, stored_path, size_bytes FROM files WHERE ${live}`)
+        .bind(workspaceId, tenantId),
       this.db
         .prepare(
           `UPDATE tenants SET used_bytes = MAX(0, used_bytes - ${total}), updated_at = ? WHERE id = ?`
@@ -836,8 +856,15 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
         .bind(now, now, workspaceId, tenantId),
     ]);
 
-    const row = results[0]?.results[0] as { total?: number } | undefined;
-    return Number(row?.total ?? 0);
+    const rows = (results[0]?.results ?? []) as {
+      id: string;
+      stored_path: string;
+      size_bytes: number;
+    }[];
+    return {
+      releasedBytes: rows.reduce((sum, r) => sum + Number(r.size_bytes), 0),
+      files: rows.map((r) => ({ id: r.id, storedPath: r.stored_path })),
+    };
   }
 
   // ============================================================================

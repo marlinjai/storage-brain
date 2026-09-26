@@ -21,6 +21,12 @@ export default {
   // Cron trigger (wrangler.toml [triggers]): release the quota held by upload
   // sessions that will never complete.
   scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): void {
-    ctx.waitUntil(expireStaleUploads(new D1DatabaseAdapter(env.DB)).then(() => undefined));
+    ctx.waitUntil(
+      expireStaleUploads(new D1DatabaseAdapter(env.DB)).then(({ truncated }) => {
+        if (truncated) {
+          console.warn('Stale upload sweep hit its time budget; the next run continues.');
+        }
+      })
+    );
   },
 };

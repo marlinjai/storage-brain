@@ -60,9 +60,9 @@ function createMockDb() {
     createPendingUpload: vi.fn().mockResolvedValue({ created: true, sessionId: 'session-1' }),
     claimUploadSession: vi.fn().mockResolvedValue(true),
     settleUploadSession: vi.fn().mockResolvedValue(true),
-    expireStaleUploadSessions: vi.fn().mockResolvedValue(0),
+    expireStaleUploadSessions: vi.fn().mockResolvedValue({ scanned: 0, expired: 0 }),
     deleteFileAndReleaseQuota: vi.fn().mockResolvedValue(null),
-    deleteWorkspaceFilesAndReleaseQuota: vi.fn().mockResolvedValue(0),
+    deleteWorkspaceFilesAndReleaseQuota: vi.fn().mockResolvedValue({ releasedBytes: 0, files: [] }),
     checkQuota: vi.fn(),
     getQuotaUsage: vi.fn(),
     recalculateQuota: vi.fn(),
@@ -230,10 +230,13 @@ describe('workspace routes', () => {
 
   describe('DELETE /api/v1/workspaces/:workspaceId', () => {
     it('deletes workspace, deletes binaries from storage, and releases quota', async () => {
-      db.getActiveFilesByWorkspace.mockResolvedValueOnce([
-        { sizeBytes: 500, storedPath: `tenants/${TENANT_ID}/files/f1/a.png` },
-        { sizeBytes: 300, storedPath: `tenants/${TENANT_ID}/files/f2/b.pdf` },
-      ]);
+      db.deleteWorkspaceFilesAndReleaseQuota.mockResolvedValueOnce({
+        releasedBytes: 800,
+        files: [
+          { id: 'f1', storedPath: `tenants/${TENANT_ID}/files/f1/a.png` },
+          { id: 'f2', storedPath: `tenants/${TENANT_ID}/files/f2/b.pdf` },
+        ],
+      });
 
       const res = await app.request(
         `/api/v1/workspaces/${WORKSPACE_ID}`,
@@ -254,11 +257,40 @@ describe('workspace routes', () => {
       expect(db.deleteWorkspace).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
     });
 
+    it('removes the objects of exactly the files the atomic soft-delete selected', async () => {
+      // A file stored after any earlier listing is still in the adapter's
+      // result, so its object is removed too; nothing is listed separately.
+      db.deleteWorkspaceFilesAndReleaseQuota.mockResolvedValueOnce({
+        releasedBytes: 300,
+        files: [{ id: 'late', storedPath: `tenants/${TENANT_ID}/files/late/c.bin` }],
+      });
+
+      const res = await app.request(
+        `/api/v1/workspaces/${WORKSPACE_ID}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer sk_live_test123' },
+        },
+        ENV
+      );
+
+      expect(res.status).toBe(200);
+      expect(db.getActiveFilesByWorkspace).not.toHaveBeenCalled();
+      expect(storage.delete).toHaveBeenCalledTimes(1);
+      expect(storage.delete).toHaveBeenCalledWith(`tenants/${TENANT_ID}/files/late/c.bin`);
+      // The soft-delete runs before the storage cleanup it drives.
+      expect(db.deleteWorkspaceFilesAndReleaseQuota.mock.invocationCallOrder[0]).toBeLessThan(
+        storage.delete.mock.invocationCallOrder[0] as number
+      );
+    });
+
     it('still deletes the workspace when a storage delete fails', async () => {
-      db.getActiveFilesByWorkspace.mockResolvedValueOnce([
-        { sizeBytes: 500, storedPath: `tenants/${TENANT_ID}/files/f1/a.png` },
-      ]);
+      db.deleteWorkspaceFilesAndReleaseQuota.mockResolvedValueOnce({
+        releasedBytes: 500,
+        files: [{ id: 'f1', storedPath: `tenants/${TENANT_ID}/files/f1/a.png` }],
+      });
       storage.delete.mockRejectedValueOnce(new Error('object already gone'));
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
       const res = await app.request(
         `/api/v1/workspaces/${WORKSPACE_ID}`,
@@ -275,6 +307,7 @@ describe('workspace routes', () => {
     });
 
     it('still runs the atomic release when the workspace has no files', async () => {
+      // The default mock soft-deletes nothing, so there is nothing to remove.
       const res = await app.request(
         `/api/v1/workspaces/${WORKSPACE_ID}`,
         {
@@ -286,6 +319,7 @@ describe('workspace routes', () => {
 
       expect(res.status).toBe(200);
       expect(db.deleteWorkspaceFilesAndReleaseQuota).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
+      expect(storage.delete).not.toHaveBeenCalled();
       expect(db.deleteWorkspace).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
     });
 

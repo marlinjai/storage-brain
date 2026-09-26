@@ -13,6 +13,9 @@ import type {
   CreatePendingUploadResult,
   UploadSessionOutcome,
   UploadSessionStatus,
+  OpenUploadSessionStatus,
+  ExpireStaleUploadSessionsResult,
+  DeleteWorkspaceFilesResult,
   MigrateFilesToWorkspaceInput,
   MigrateFilesToWorkspaceResult,
   FileContextAggregate,
@@ -577,8 +580,13 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     return rows.length > 0;
   }
 
-  async settleUploadSession(sessionId: string, outcome: UploadSessionOutcome): Promise<boolean> {
+  async settleUploadSession(
+    sessionId: string,
+    outcome: UploadSessionOutcome,
+    fromStatus?: OpenUploadSessionStatus
+  ): Promise<boolean> {
     const now = Date.now();
+    const from: OpenUploadSessionStatus[] = fromStatus ? [fromStatus] : ['pending', 'uploading'];
     const actualBytes = outcome.status === 'completed' ? outcome.actualBytes : 0;
     const processingStatus: ProcessingStatus =
       outcome.status === 'completed' ? 'completed' : 'failed';
@@ -600,7 +608,7 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
       // racing a delete that already closed the session, matches no row.
       const settled = await sql`
         UPDATE upload_sessions SET status = ${outcome.status}
-        WHERE id = ${sessionId} AND status IN ${sql(['pending', 'uploading'])}
+        WHERE id = ${sessionId} AND status IN ${sql(from)}
         RETURNING id
       `;
       if (settled.length === 0) return false;
@@ -629,19 +637,30 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     });
   }
 
-  async expireStaleUploadSessions(now: number, uploadingGraceMs: number): Promise<number> {
+  async expireStaleUploadSessions(
+    now: number,
+    uploadingGraceMs: number,
+    limit: number
+  ): Promise<ExpireStaleUploadSessionsResult> {
     const rows = await this.sql`
-      SELECT id FROM upload_sessions
+      SELECT id, status FROM upload_sessions
       WHERE (status = ${'pending'} AND expires_at < ${now})
          OR (status = ${'uploading'} AND expires_at < ${now - uploadingGraceMs})
       ORDER BY expires_at
-      LIMIT 500
+      LIMIT ${limit}
     `;
     let expired = 0;
     for (const row of rows) {
-      if (await this.settleUploadSession(row.id as string, { status: 'expired' })) expired += 1;
+      // Settle from the state it was selected in: a pending session a transfer
+      // claimed since the SELECT is left alone until its grace period is over.
+      const settled = await this.settleUploadSession(
+        row.id as string,
+        { status: 'expired' },
+        row.status as OpenUploadSessionStatus
+      );
+      if (settled) expired += 1;
     }
-    return expired;
+    return { scanned: rows.length, expired };
   }
 
   async deleteFileAndReleaseQuota(fileId: string, tenantId: string): Promise<StoredFile | null> {
@@ -672,17 +691,19 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
   async deleteWorkspaceFilesAndReleaseQuota(
     workspaceId: string,
     tenantId: string
-  ): Promise<number> {
+  ): Promise<DeleteWorkspaceFilesResult> {
     const now = Date.now();
     return this.sql.begin(async (tx) => {
       const sql = tx as unknown as postgres.Sql;
 
+      // RETURNING yields exactly the rows this statement soft-deleted, which
+      // are the ones released below and whose objects the caller removes.
       const rows = await sql`
         UPDATE files SET deleted_at = ${now}, updated_at = ${now}
         WHERE workspace_id = ${workspaceId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
-        RETURNING id, size_bytes
+        RETURNING id, stored_path, size_bytes
       `;
-      if (rows.length === 0) return 0;
+      if (rows.length === 0) return { releasedBytes: 0, files: [] };
 
       const total = rows.reduce((sum, r) => sum + Number(r.size_bytes), 0);
       await releaseBytes(sql, tenantId, workspaceId, total, now);
@@ -691,7 +712,10 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
         WHERE file_id IN ${sql(rows.map((r) => r.id as string))}
           AND status IN ${sql(['pending', 'uploading'])}
       `;
-      return total;
+      return {
+        releasedBytes: total,
+        files: rows.map((r) => ({ id: r.id as string, storedPath: r.stored_path as string })),
+      };
     });
   }
 

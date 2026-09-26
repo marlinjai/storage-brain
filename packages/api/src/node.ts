@@ -105,8 +105,10 @@ function main(): void {
 function startStaleUploadSweep(db: DatabaseAdapter): void {
   const sweep = (): void => {
     expireStaleUploads(db)
-      .then((expired) => {
+      .then(({ expired, truncated }) => {
         if (expired > 0) console.log(`Expired ${expired} stale upload session(s).`);
+        if (truncated)
+          console.warn('Stale upload sweep hit its time budget; the next run continues.');
       })
       .catch((err) => console.error('Stale upload sweep failed:', err));
   };

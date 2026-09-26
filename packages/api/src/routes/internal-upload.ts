@@ -88,7 +88,7 @@ internalUploadRoutes.put('/upload/*', async (c) => {
   // releases its reservation (the periodic sweep does the same for sessions
   // nobody comes back to).
   if (session.status === 'pending' && Date.now() > session.expiresAt) {
-    await db.settleUploadSession(session.id, { status: 'expired' });
+    await db.settleUploadSession(session.id, { status: 'expired' }, 'pending');
     return c.json({ error: 'Upload session expired' }, 410);
   }
 
@@ -151,14 +151,17 @@ internalUploadRoutes.put('/upload/*', async (c) => {
 
   // Replace the reservation with the bytes actually stored (releasing the
   // unused part when the file is smaller than declared) and complete the file.
-  const settled = await db.settleUploadSession(session.id, {
-    status: 'completed',
-    actualBytes: actualSize,
-  });
+  // Only this transfer's claim ('uploading') is settled here; the R2
+  // completion webhook settles pending sessions only, so it cannot race this.
+  const settled = await db.settleUploadSession(
+    session.id,
+    { status: 'completed', actualBytes: actualSize },
+    'uploading'
+  );
   if (!settled) {
     // The session was closed while the bytes were in flight (the file was
-    // deleted, or the sweep reclaimed it): its quota is already gone, so the
-    // object must not stay behind either.
+    // deleted, or the sweep reclaimed it after the grace period): its quota is
+    // already gone, so the object must not stay behind either.
     await storage.delete(storedPath).catch(() => {});
     return c.json({ error: 'Upload session was closed before the upload finished' }, 409);
   }
@@ -208,7 +211,7 @@ internalUploadRoutes.put('/upload/*', async (c) => {
  */
 async function settleFailed(db: DatabaseAdapter, sessionId: string): Promise<void> {
   try {
-    await db.settleUploadSession(sessionId, { status: 'failed' });
+    await db.settleUploadSession(sessionId, { status: 'failed' }, 'uploading');
   } catch (settleErr) {
     console.error(`Failed to settle upload session ${sessionId} as failed:`, settleErr);
   }

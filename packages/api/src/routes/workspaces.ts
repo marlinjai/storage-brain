@@ -150,22 +150,27 @@ workspaceRoutes.delete('/:workspaceId', async (c) => {
     throw ApiError.notFound('Workspace not found');
   }
 
-  // Active files, for their storage objects
-  const activeFiles = await db.getActiveFilesByWorkspace(workspaceId, tenant.id);
+  // Soft-delete all files in the workspace, release their bytes from the
+  // workspace and the tenant and close their open upload sessions, atomically.
+  // The adapter returns exactly the files it soft-deleted, so the storage
+  // cleanup below covers every one of them, including a file whose upload was
+  // requested after any earlier listing would have been taken.
+  const { files: deletedFiles } = await db.deleteWorkspaceFilesAndReleaseQuota(
+    workspaceId,
+    tenant.id
+  );
 
-  // Delete the binaries from storage. Best-effort, mirroring tenant deletion:
-  // an object that is already gone must not block the DB cleanup.
-  for (const file of activeFiles) {
+  // Delete their binaries from storage. Best-effort, mirroring tenant deletion:
+  // an object that is already gone (or was never written) must not fail the
+  // request. An upload still in flight for one of these files finds its
+  // session closed when it settles and deletes the object it wrote itself.
+  for (const file of deletedFiles) {
     try {
       await storage.delete(file.storedPath);
-    } catch {
-      // Best-effort deletion: continue even if storage delete fails
+    } catch (err) {
+      console.error(`Failed to delete storage object ${file.storedPath}:`, err);
     }
   }
-
-  // Soft-delete all files in the workspace, release their bytes from the
-  // workspace and the tenant and close their open upload sessions, atomically
-  await db.deleteWorkspaceFilesAndReleaseQuota(workspaceId, tenant.id);
 
   // Delete the workspace itself
   await db.deleteWorkspace(workspaceId, tenant.id);

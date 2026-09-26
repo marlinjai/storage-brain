@@ -23,8 +23,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the bytes arrive the session is settled exactly once: the reservation is
   replaced by the stored bytes, a failed or cut-off upload releases all of it,
   and a sweep (5-minute Node timer, Workers cron trigger) releases sessions
-  that expired unused. File and workspace deletes release bytes and close open
-  sessions in the same transaction. SDK 0.12.0: `RequestTenantUploadInput.fileSizeBytes`
+  that expired unused, draining the backlog in bounded batches within a time
+  budget. File and workspace deletes release bytes and close open sessions in
+  the same transaction; a workspace delete removes the storage objects of
+  exactly the files that transaction soft-deleted. The R2 completion webhook
+  settles only unclaimed (`pending`) sessions, so it can no longer race an
+  upload through the API, and it refuses an object larger than the declared
+  size (session failed, object deleted). SDK 0.12.0: `RequestTenantUploadInput.fileSizeBytes`
   is required (`StorageBrain.upload()` always sent it).
 
 ### Added

@@ -47,9 +47,9 @@ function createMockDb() {
     createPendingUpload: vi.fn().mockResolvedValue({ created: true, sessionId: 'session-1' }),
     claimUploadSession: vi.fn().mockResolvedValue(true),
     settleUploadSession: vi.fn().mockResolvedValue(true),
-    expireStaleUploadSessions: vi.fn().mockResolvedValue(0),
+    expireStaleUploadSessions: vi.fn().mockResolvedValue({ scanned: 0, expired: 0 }),
     deleteFileAndReleaseQuota: vi.fn().mockResolvedValue(null),
-    deleteWorkspaceFilesAndReleaseQuota: vi.fn().mockResolvedValue(0),
+    deleteWorkspaceFilesAndReleaseQuota: vi.fn().mockResolvedValue({ releasedBytes: 0, files: [] }),
     checkQuota: vi.fn(),
     getQuotaUsage: vi.fn().mockResolvedValue({
       quotaBytes: 500 * 1024 * 1024,
