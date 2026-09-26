@@ -5,6 +5,7 @@ import { fileIdSchema, apiKeySchema } from '@storage-brain/shared';
 import { verifySignedToken, verifyPermanentToken } from '../services/signed-url';
 import { buildContentDisposition } from '../utils/content-disposition';
 import { parseRangeHeader } from '../utils/range';
+import { readObjectForClient } from '../utils/read-object-for-client';
 import { authenticateApiKey } from '../middleware/auth';
 import { getAuthBrainClient } from '../lib/auth-brain';
 
@@ -104,6 +105,49 @@ export async function publicDownloadHandler(c: Context<AppEnv>) {
     );
   }
 
+  const disposition = c.req.query('disposition') === 'inline' ? 'inline' : 'attachment';
+  const isPermanentToken = !!token && (expiresParam === undefined || expiresParam === '0');
+
+  const headers = new Headers();
+  headers.set('Content-Type', fileType);
+  headers.set('Content-Disposition', buildContentDisposition(disposition, originalName));
+  headers.set('Accept-Ranges', 'bytes');
+  // Explicit cross-origin embedding headers so audio/video/image elements on
+  // other origins can load this file. CORS headers are added by the global
+  // cors() middleware; CORP is set here (and globally via secureHeaders) to
+  // allow embedding without the crossorigin attribute as well.
+  headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  headers.set('Access-Control-Allow-Origin', '*');
+  headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
+
+  // Allow browser caching for token-based downloads. Permanent URLs are stable
+  // (token is deterministic, revoked only by rotating URL_SIGNING_SECRET), so
+  // mark them immutable for a year: repeat dashboard loads serve from cache
+  // instead of re-fetching bytes. Time-limited signed URLs get a short window.
+  // `immutable` is a claim about the whole representation, so it must never go
+  // on a 206: that response carries one slice, and a naive cache that stored it
+  // under the URL would later serve a fragment as if it were the entire file.
+  // Partial responses get the ordinary window instead.
+  const cacheControl = (partial: boolean): string | null =>
+    token
+      ? !partial && isPermanentToken
+        ? 'public, max-age=31536000, immutable'
+        : 'public, max-age=3600'
+      : null;
+
+  // HEAD (fetchers probing size and type before downloading) is answered from
+  // the database row without opening the object. Hono serves HEAD by running
+  // this GET handler and discarding its body without cancelling it, which for a
+  // storage stream stranded a backend socket per HEAD (incident 2026-09-26).
+  // Range is only defined for GET (RFC 9110 14.2), so HEAD describes the whole
+  // object.
+  if (c.req.method === 'HEAD') {
+    headers.set('Content-Length', sizeBytes.toString());
+    const cc = cacheControl(false);
+    if (cc) headers.set('Cache-Control', cc);
+    return new Response(null, { status: 200, headers });
+  }
+
   // Resolve any Range request BEFORE touching storage, using the size from the
   // database row: an unsatisfiable range is answered without an object read.
   const rangeRequest = parseRangeHeader(c.req.header('Range'), sizeBytes);
@@ -121,21 +165,18 @@ export async function publicDownloadHandler(c: Context<AppEnv>) {
     });
   }
 
-  // Fetch from storage
-  const object = await storage.get(
+  // Fetch from storage, bound to this request: if the client leaves, the read
+  // and its body are released instead of pinning a backend socket.
+  const object = await readObjectForClient(
+    storage,
     storedPath,
-    rangeRequest.kind === 'range' ? rangeRequest.range : undefined
+    rangeRequest.kind === 'range' ? rangeRequest.range : undefined,
+    c.req.raw.signal
   );
+  if (object instanceof Response) return object;
   if (!object) {
     throw ApiError.notFound('File not found in storage');
   }
-
-  const disposition = c.req.query('disposition') === 'inline' ? 'inline' : 'attachment';
-
-  const headers = new Headers();
-  headers.set('Content-Type', fileType);
-  headers.set('Content-Disposition', buildContentDisposition(disposition, originalName));
-  headers.set('Accept-Ranges', 'bytes');
 
   // Only claim 206 when the STORAGE LAYER actually served a partial body. An
   // adapter that ignored the range leaves `object.range` unset, and we answer a
@@ -148,30 +189,8 @@ export async function publicDownloadHandler(c: Context<AppEnv>) {
   } else {
     headers.set('Content-Length', sizeBytes.toString());
   }
-
-  // Explicit cross-origin embedding headers so audio/video/image elements on
-  // other origins can load this file. CORS headers are added by the global
-  // cors() middleware; CORP is set here (and globally via secureHeaders) to
-  // allow embedding without the crossorigin attribute as well.
-  headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
-  headers.set('Access-Control-Allow-Origin', '*');
-  headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
-
-  // Allow browser caching for token-based downloads. Permanent URLs are stable
-  // (token is deterministic, revoked only by rotating URL_SIGNING_SECRET), so
-  // mark them immutable for a year — repeat dashboard loads serve from cache
-  // instead of re-fetching bytes. Time-limited signed URLs get a short window.
-  if (token) {
-    const isPermanent = expiresParam === undefined || expiresParam === '0';
-    // `immutable` is a claim about the whole representation, so it must never go
-    // on a 206: that response carries one slice, and a naive cache that stored it
-    // under the URL would later serve a fragment as if it were the entire file.
-    // Partial responses get the ordinary window instead.
-    headers.set(
-      'Cache-Control',
-      !served && isPermanent ? 'public, max-age=31536000, immutable' : 'public, max-age=3600'
-    );
-  }
+  const cc = cacheControl(!!served);
+  if (cc) headers.set('Cache-Control', cc);
 
   return new Response(object.body, { status: served ? 206 : 200, headers });
 }

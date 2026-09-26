@@ -16,6 +16,7 @@ import { internalUploadRoutes } from './routes/internal-upload';
 import { internalErasureRoutes } from './routes/internal-erasure';
 import { errorHandler } from './middleware/error-handler';
 import { rateLimiter, tenantKeyFn } from './middleware/rate-limit';
+import { requestLifecycle } from './middleware/request-lifecycle';
 import { publicDownloadHandler } from './routes/public-download';
 
 export interface AppConfig {
@@ -34,6 +35,10 @@ export interface AppConfig {
 
 export function createApp(config: AppConfig): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
+
+  // Outermost on purpose: it must see the request before anything awaits, and
+  // the final response after everything else (see the middleware's comment).
+  app.use('*', requestLifecycle);
 
   // Inject env bindings (for Node.js mode where c.env isn't populated automatically)
   if (config.env) {

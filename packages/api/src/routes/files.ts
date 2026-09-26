@@ -11,6 +11,7 @@ import {
 } from '@storage-brain/shared';
 import { generateSignedToken, generatePermanentToken } from '../services/signed-url';
 import { buildContentDisposition } from '../utils/content-disposition';
+import { readObjectForClient } from '../utils/read-object-for-client';
 import { resolvePublicBaseUrl, buildDownloadUrl } from '../utils/public-url';
 
 export const fileRoutes = new Hono<AppEnv>();
@@ -277,18 +278,25 @@ fileRoutes.get('/:fileId/download', async (c) => {
     throw ApiError.notFound('File not found');
   }
 
-  // Get file from storage
-  const object = await storage.get(file.storedPath);
-
-  if (!object) {
-    throw ApiError.notFound('File not found in storage');
-  }
-
-  // Return file with appropriate headers
   const headers = new Headers();
   headers.set('Content-Type', file.fileType);
   headers.set('Content-Disposition', buildContentDisposition('attachment', file.originalName));
   headers.set('Content-Length', file.sizeBytes.toString());
+
+  // HEAD is answered from the database row: Hono runs this handler for HEAD and
+  // would drop the storage body uncancelled, stranding its backend socket.
+  if (c.req.method === 'HEAD') {
+    return new Response(null, { status: 200, headers });
+  }
+
+  // Get file from storage, bound to this request so a departed client releases
+  // the read and its body instead of pinning a backend socket.
+  const object = await readObjectForClient(storage, file.storedPath, undefined, c.req.raw.signal);
+  if (object instanceof Response) return object;
+
+  if (!object) {
+    throw ApiError.notFound('File not found in storage');
+  }
 
   return new Response(object.body, {
     status: 200,
