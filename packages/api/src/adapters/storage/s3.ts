@@ -42,7 +42,9 @@ export interface S3StorageAdapterConfig {
 // - requestTimeout: a wall clock on getting the RESPONSE HEADERS. Without
 //   throwOnRequestTimeout it only logs a warning and the request keeps its
 //   socket; with it the request is destroyed and the socket freed. The timer is
-//   cleared as soon as headers arrive, so it never cuts a long body short.
+//   cleared as soon as headers arrive, so it never cuts a long download short.
+//   A PUT is answered only after its last byte, so put() scales it per request
+//   (putRequestTimeoutMs).
 // - Nothing in the handler watches the BODY. Once headers are in, a body that
 //   nobody reads or destroys pins its socket for the life of the process. That
 //   is what exhausted all 300 sockets on 2026-09-26 (the 2026-09-11 incident
@@ -70,6 +72,17 @@ const REQUEST_HANDLER = new NodeHttpHandler({
  * A paused `<video>` that trips it simply re-requests with Range on resume.
  */
 export const BODY_IDLE_TIMEOUT_MS = 60_000;
+
+/**
+ * The header wait of a PUT covers the whole upload, because S3 answers only
+ * after it has received every byte. With throwOnRequestTimeout the handler's
+ * flat 30 s would therefore kill a large upload on a slow link. A PUT gets that
+ * 30 s for S3 to respond plus one second per MiB sent, i.e. it fails only below
+ * 1 MiB/s (130 s for a 100 MB file).
+ */
+export function putRequestTimeoutMs(bytes: number): number {
+  return 30_000 + Math.ceil(bytes / (1024 * 1024)) * 1_000;
+}
 
 export class S3StorageAdapter implements StorageAdapter {
   private client: S3Client;
@@ -121,7 +134,9 @@ export class S3StorageAdapter implements StorageAdapter {
       ContentType: options.contentType,
     });
 
-    const result = await this.client.send(command);
+    const result = await this.client.send(command, {
+      requestTimeout: putRequestTimeoutMs(body.length),
+    });
 
     return {
       key,

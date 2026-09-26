@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
-import { S3StorageAdapter } from './s3';
+import { S3StorageAdapter, putRequestTimeoutMs } from './s3';
 import type { StorageAdapter } from '@storage-brain/shared';
 
 const mockSend = vi.fn();
@@ -103,6 +103,20 @@ describe('S3StorageAdapter', () => {
       expect(result.size).toBe(10);
       expect(result.contentType).toBe('image/png');
       expect(result.etag).toBe('abc123');
+    });
+
+    it('gives a PUT time for its upload, not only the flat header wait', async () => {
+      // S3 answers a PUT only after the last byte, so the header timeout covers
+      // the whole upload and must grow with it.
+      mockSend.mockResolvedValueOnce({ ETag: '"big"' });
+
+      await adapter.put('test/big.bin', new ArrayBuffer(100 * 1024 * 1024), {
+        contentType: 'application/octet-stream',
+      });
+
+      expect(mockSend.mock.calls[0]![1]).toEqual({ requestTimeout: 130_000 });
+      expect(putRequestTimeoutMs(0)).toBe(30_000);
+      expect(putRequestTimeoutMs(1)).toBe(31_000);
     });
 
     it('handles ReadableStream input', async () => {
