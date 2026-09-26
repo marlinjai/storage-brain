@@ -66,6 +66,10 @@ jobs:
       - name: Lint
         run: pnpm run lint
 
+      # Prettier drifted on main once already; this keeps it from drifting again.
+      - name: Format check
+        run: pnpm run format:check
+
       - name: Test
         run: pnpm test
         env:

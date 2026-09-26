@@ -157,9 +157,7 @@ export function parseApiError(
       return new FileTooLargeError(details?.fileSize as number, details?.maxSize as number);
     case 'FILE_NOT_FOUND':
     case 'NOT_FOUND':
-      return new FileNotFoundError(
-        (details?.fileId as string) ?? 'unknown'
-      );
+      return new FileNotFoundError((details?.fileId as string) ?? 'unknown');
     case 'VALIDATION_ERROR':
       return new ValidationError(
         message ?? 'Validation failed',
