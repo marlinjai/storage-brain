@@ -3,6 +3,8 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { secureHeaders } from 'hono/secure-headers';
 import { requestId } from 'hono/request-id';
+import { bodyLimit } from 'hono/body-limit';
+import { MAX_JSON_BODY_BYTES } from '@storage-brain/shared';
 
 import type { AppEnv, Env } from './env';
 import type { StorageAdapter, DatabaseAdapter } from '@storage-brain/shared';
@@ -14,7 +16,7 @@ import { workspaceRoutes } from './routes/workspaces';
 import { webhookRoutes } from './routes/webhooks';
 import { internalUploadRoutes } from './routes/internal-upload';
 import { internalErasureRoutes } from './routes/internal-erasure';
-import { errorHandler } from './middleware/error-handler';
+import { ApiError, errorHandler } from './middleware/error-handler';
 import { rateLimiter, tenantKeyFn } from './middleware/rate-limit';
 import { requestLifecycle } from './middleware/request-lifecycle';
 import { publicDownloadHandler } from './routes/public-download';
@@ -87,6 +89,25 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
 
   // Error handling
   app.onError(errorHandler);
+
+  // Body size cap for every route except the byte upload (/_internal/upload,
+  // which enforces its own per-upload limit while it streams). Without it a
+  // caller can make the process buffer an arbitrarily large body: the signed
+  // webhooks (/webhooks/*, /api/v1/internal/erasure) read the raw body BEFORE
+  // they can verify its signature, so that would not even need credentials. A
+  // Content-Length above the cap is refused unread; a body without one is
+  // counted as it streams and cut off at the cap.
+  const jsonBodyLimit = bodyLimit({
+    maxSize: MAX_JSON_BODY_BYTES,
+    onError: (c) => {
+      const err = ApiError.payloadTooLarge(
+        `Request body exceeds the maximum of ${MAX_JSON_BODY_BYTES} bytes`
+      );
+      return c.json({ error: { code: err.code, message: err.message } }, 413);
+    },
+  });
+  app.use('/api/v1/*', jsonBodyLimit);
+  app.use('/webhooks/*', jsonBodyLimit);
 
   // Health check — returns 503 while the app is still initialising so
   // Coolify's healthcheck gets a real HTTP response (not "connection refused")

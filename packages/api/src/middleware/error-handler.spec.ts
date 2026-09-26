@@ -22,6 +22,13 @@ describe('ApiError', () => {
       expect(err.message).toBe('File type not allowed');
     });
 
+    it('payloadTooLarge returns 413', () => {
+      const err = ApiError.payloadTooLarge('body too big');
+      expect(err.statusCode).toBe(413);
+      expect(err.code).toBe('PAYLOAD_TOO_LARGE');
+      expect(err.message).toBe('body too big');
+    });
+
     it('fileTooLarge returns 400', () => {
       const err = ApiError.fileTooLarge('too big');
       expect(err.statusCode).toBe(400);
