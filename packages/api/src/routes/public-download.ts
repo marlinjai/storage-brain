@@ -21,8 +21,9 @@ import { getAuthBrainClient } from '../lib/auth-brain';
 export async function publicDownloadHandler(c: Context<AppEnv>) {
   const db = c.get('db');
   const storage = c.get('storage');
-  const fileId = c.req.param('fileId');
-  fileIdSchema.parse(fileId);
+  // The handler is mounted with a plain Context, so Hono types the param as
+  // possibly undefined; the schema both validates it and narrows it to string.
+  const fileId = fileIdSchema.parse(c.req.param('fileId'));
 
   const token = c.req.query('token');
   const expiresParam = c.req.query('expires');

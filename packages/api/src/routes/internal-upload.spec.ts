@@ -261,6 +261,22 @@ describe('body size cap on JSON and webhook routes', () => {
     expect(src.bytesProduced).toBeLessThanOrEqual(MAX_JSON_BODY_BYTES + 2 * 64 * 1024);
   });
 
+  it('answers 413, not 404, for an unbounded streamed body to an unknown /api/v1 path', async () => {
+    // No handler reads this body, so the cap must fire before the 404 does.
+    const src = countingStream(20 * MAX_JSON_BODY_BYTES, 64 * 1024);
+
+    const res = await app.request(
+      '/api/v1/no-such-route',
+      { method: 'POST', body: src.stream, duplex: 'half' } as RequestInit,
+      ENV
+    );
+
+    expect(res.status).toBe(413);
+    const body = await res.json<ErrorBody>();
+    expect(body.error.code).toBe('PAYLOAD_TOO_LARGE');
+    expect(src.bytesProduced).toBeLessThanOrEqual(MAX_JSON_BODY_BYTES + 2 * 64 * 1024);
+  });
+
   it('caps the signed erasure webhook too', async () => {
     const res = await app.request(
       '/api/v1/internal/erasure',
