@@ -2,7 +2,14 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../env';
 import { sendWebhook } from '../services/webhook';
 import type { FileResponse } from '@storage-brain/shared';
+import { MAX_FILE_SIZE_BYTES } from '@storage-brain/shared';
 import { verifyUploadToken } from '../services/signed-url';
+import { ApiError } from '../middleware/error-handler';
+import {
+  BodyTooLargeError,
+  declaredContentLength,
+  readBodyWithLimit,
+} from '../utils/read-body-limited';
 
 export const internalUploadRoutes = new Hono<AppEnv>();
 
@@ -55,6 +62,16 @@ internalUploadRoutes.put('/upload/*', async (c) => {
     return c.json({ error: 'Invalid or expired upload token' }, 403);
   }
 
+  // Cheapest rejection first: a Content-Length above the global per-file
+  // maximum can never be a valid upload, so answer before any DB lookup and
+  // without reading a byte of the body.
+  const contentLength = declaredContentLength(c.req.raw);
+  if (contentLength !== null && contentLength > MAX_FILE_SIZE_BYTES) {
+    throw ApiError.payloadTooLarge(
+      `Upload body of ${contentLength} bytes exceeds the maximum of ${MAX_FILE_SIZE_BYTES} bytes`
+    );
+  }
+
   // Get the file record by stored path
   const file = await db.getFileByStoredPath(storedPath);
   if (!file) {
@@ -81,8 +98,34 @@ internalUploadRoutes.put('/upload/*', async (c) => {
   // Get the content type from request header (fallback to file record)
   const contentType = c.req.header('Content-Type') ?? file.fileType;
 
-  // Get the request body as ArrayBuffer
-  const body = await c.req.arrayBuffer();
+  // The body may be no larger than the size declared when the upload was
+  // requested (that is what quota was reserved for), and never larger than the
+  // global maximum. A declared size of 0 means the caller did not declare one,
+  // so only the global maximum applies.
+  const declaredSize = file.sizeBytes;
+  const limit =
+    declaredSize > 0 ? Math.min(declaredSize, MAX_FILE_SIZE_BYTES) : MAX_FILE_SIZE_BYTES;
+  const tooLarge = (declaredBytes: number | null): ApiError => {
+    const subject =
+      declaredBytes === null ? 'Upload body' : `Upload body of ${declaredBytes} bytes`;
+    return ApiError.payloadTooLarge(
+      limit < MAX_FILE_SIZE_BYTES
+        ? `${subject} exceeds the ${declaredSize} bytes declared for this upload`
+        : `${subject} exceeds the maximum of ${MAX_FILE_SIZE_BYTES} bytes`
+    );
+  };
+
+  // Read the body counting bytes as they stream, so a missing or lying
+  // Content-Length is cut off at the limit instead of buffered whole.
+  let body: ArrayBuffer;
+  try {
+    body = await readBodyWithLimit(c.req.raw, limit);
+  } catch (err) {
+    if (err instanceof BodyTooLargeError) {
+      throw tooLarge(err.declaredBytes);
+    }
+    throw err;
+  }
   const actualSize = body.byteLength;
 
   if (actualSize === 0) {

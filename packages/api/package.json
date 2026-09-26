@@ -23,7 +23,7 @@
     "@marlinjai/brain-core": "^1.0.0",
     "@smithy/node-http-handler": "^4.4.12",
     "@storage-brain/shared": "workspace:*",
-    "hono": "^4.0.0",
+    "hono": "^4.12.34",
     "postgres": "^3.4.5",
     "zod": "^3.22.4"
   },

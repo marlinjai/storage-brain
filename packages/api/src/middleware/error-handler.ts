@@ -13,6 +13,11 @@ export class ApiError extends BaseApiError {
     return new ApiError(400, 'FILE_TOO_LARGE', message);
   }
 
+  /** 413: the request body itself is larger than the route accepts. */
+  static payloadTooLarge(message = 'Request body too large') {
+    return new ApiError(413, 'PAYLOAD_TOO_LARGE', message);
+  }
+
   static rateLimited(message = 'Rate limit exceeded') {
     return new ApiError(429, 'RATE_LIMITED', message);
   }
@@ -22,7 +27,19 @@ export class ApiError extends BaseApiError {
   }
 }
 
+const baseErrorHandler = createErrorHandler<AppEnv>();
+
 /**
- * Global error handler for Hono
+ * Global error handler for Hono.
+ *
+ * A body cut off by `hono/body-limit` surfaces in the route as a
+ * `BodyLimitError` from `c.req.json()` / `c.req.text()`. The middleware then
+ * replaces the response with its 413, but the base handler would first log the
+ * error as an unexpected 500, so it is answered as the 413 it is right here.
  */
-export const errorHandler = createErrorHandler<AppEnv>();
+export const errorHandler: typeof baseErrorHandler = (err, c) => {
+  if (err instanceof Error && err.name === 'BodyLimitError') {
+    return baseErrorHandler(ApiError.payloadTooLarge('Request body too large'), c);
+  }
+  return baseErrorHandler(err, c);
+};

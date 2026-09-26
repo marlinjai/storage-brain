@@ -50,6 +50,13 @@ export const ALLOWED_MIME_TYPES = Object.keys(KNOWN_FILE_TYPES);
  */
 export const DEFAULT_QUOTA_BYTES = 500 * 1024 * 1024; // 500MB
 export const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100MB per file
+/**
+ * Largest body accepted by every route that is not the byte upload itself (the
+ * JSON API, the signed webhooks). Far above the largest legitimate payload (a
+ * 500-id migrate-workspace list is about 20 KB) and far below anything that
+ * could pressure the container's memory.
+ */
+export const MAX_JSON_BODY_BYTES = 1024 * 1024; // 1MB
 
 /**
  * Presigned URL configuration

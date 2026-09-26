@@ -69,12 +69,19 @@ plan when the item carries a decision or a sequence.
 - [ ] bring your own S3 bucket: per-tenant S3/R2/GCS bucket configuration for data sovereignty
       and cost isolation [plan](docs/plans/2026-04-06-bring-your-own-s3.md) : still wanted,
       not started (2026-09-10)
-- [ ] upload body size limit: `packages/api/src/routes/internal-upload.ts` buffers the whole
+- [x] upload body size limit: `packages/api/src/routes/internal-upload.ts` buffered the whole
       request body (`c.req.arrayBuffer()`) without enforcing the 100 MB `MAX_FILE_SIZE_BYTES`;
-      only the size declared when the upload is requested is checked, so an oversized or
-      lying client can exhaust the container's memory. Fix: enforce the limit while reading
-      the body (reject early on a too-large `Content-Length`, count bytes while streaming)
-      and answer 413. Found while fixing the download socket leak (PR #33) (2026-09-26)
+      only the size declared when the upload is requested was checked, so an oversized or
+      lying client could exhaust the container's memory. Shipped: the upload body is refused
+      unread (413) on a `Content-Length` above the maximum or the declared size and is counted
+      while streaming and cut off at that limit, and every other route (JSON API, signed
+      webhooks) is capped at 1 MB by `hono/body-limit` (2026-09-26)
+- [ ] undeclared upload size skips quota: an upload requested without `fileSizeBytes`
+      (`packages/api/src/lib/upload/request-upload.ts`, `fileSizeBytes ?? 0`) reserves no quota,
+      and the internal upload route writes the real size without a quota check, so such uploads
+      never count against the tenant or workspace quota; a body smaller than declared also
+      leaves the larger reservation in place. Fix: reconcile reserved and actual bytes when the
+      upload completes. Found while fixing the upload body size limit (2026-09-26)
 
 ## Completed
 
