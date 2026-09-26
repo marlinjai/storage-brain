@@ -150,9 +150,8 @@ workspaceRoutes.delete('/:workspaceId', async (c) => {
     throw ApiError.notFound('Workspace not found');
   }
 
-  // Get active files to calculate total bytes to release
+  // Active files, for their storage objects
   const activeFiles = await db.getActiveFilesByWorkspace(workspaceId, tenant.id);
-  const totalBytes = activeFiles.reduce((sum, f) => sum + f.sizeBytes, 0);
 
   // Delete the binaries from storage. Best-effort, mirroring tenant deletion:
   // an object that is already gone must not block the DB cleanup.
@@ -164,14 +163,9 @@ workspaceRoutes.delete('/:workspaceId', async (c) => {
     }
   }
 
-  // Soft-delete all files in the workspace
-  await db.softDeleteFilesByWorkspace(workspaceId, tenant.id);
-
-  // Release quota from both workspace and tenant levels
-  if (totalBytes > 0) {
-    await db.releaseWorkspaceQuota(workspaceId, totalBytes);
-    await db.releaseQuota(tenant.id, totalBytes);
-  }
+  // Soft-delete all files in the workspace, release their bytes from the
+  // workspace and the tenant and close their open upload sessions, atomically
+  await db.deleteWorkspaceFilesAndReleaseQuota(workspaceId, tenant.id);
 
   // Delete the workspace itself
   await db.deleteWorkspace(workspaceId, tenant.id);

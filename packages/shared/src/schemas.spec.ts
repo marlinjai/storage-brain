@@ -54,12 +54,40 @@ describe('requestUploadSchema', () => {
   const validInput = {
     fileType: 'image/png',
     fileName: 'test.png',
+    fileSizeBytes: 1024,
   };
 
   it('accepts minimal valid input', () => {
     const result = requestUploadSchema.parse(validInput);
     expect(result.fileType).toBe('image/png');
     expect(result.fileName).toBe('test.png');
+    expect(result.fileSizeBytes).toBe(1024);
+  });
+
+  // The declared size is what quota is reserved for, so it is mandatory.
+  it('rejects a missing fileSizeBytes with a message that says what to send', () => {
+    const withoutSize: Record<string, unknown> = { ...validInput };
+    delete withoutSize.fileSizeBytes;
+    const result = requestUploadSchema.safeParse(withoutSize);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(['fileSizeBytes']);
+    expect(result.error?.issues[0]?.message).toBe(
+      'fileSizeBytes is required: declare the exact size of the file in bytes'
+    );
+  });
+
+  it('rejects a zero fileSizeBytes (empty files cannot be uploaded)', () => {
+    const result = requestUploadSchema.safeParse({ ...validInput, fileSizeBytes: 0 });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe(
+      'fileSizeBytes must be greater than 0: empty files cannot be uploaded'
+    );
+  });
+
+  it('rejects a fractional fileSizeBytes', () => {
+    const result = requestUploadSchema.safeParse({ ...validInput, fileSizeBytes: 10.5 });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe('fileSizeBytes must be a whole number of bytes');
   });
 
   it('accepts full valid input', () => {

@@ -22,6 +22,21 @@ jobs:
 
   verify:
     runs-on: ubuntu-latest
+    # A real Postgres for the adapter's quota-accounting contract
+    # (packages/api/src/adapters/database/postgres.quota.spec.ts), whose
+    # concurrency cases need a real server rather than an in-process shim.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
     steps:
       - uses: actions/checkout@v4
 
@@ -53,3 +68,5 @@ jobs:
 
       - name: Test
         run: pnpm test
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres

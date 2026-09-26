@@ -64,9 +64,25 @@ export const MAX_JSON_BODY_BYTES = 1024 * 1024; // 1MB
 export const PRESIGNED_URL_EXPIRATION_SECONDS = 15 * 60; // 15 minutes
 
 /**
- * Upload session statuses
+ * How long past its URL expiry an upload that already started (`uploading`)
+ * may still finish before its reservation is reclaimed. Far longer than any
+ * transfer can run (Node's server request timeout is 5 minutes), so it only
+ * reclaims transfers whose process died mid-upload.
  */
-export const UPLOAD_SESSION_STATUSES = ['pending', 'completed', 'expired', 'failed'] as const;
+export const UPLOAD_IN_FLIGHT_GRACE_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Upload session statuses. `pending`: URL issued, no transfer yet.
+ * `uploading`: a transfer has claimed the session and is streaming.
+ * The other three are final (see DatabaseAdapter.settleUploadSession).
+ */
+export const UPLOAD_SESSION_STATUSES = [
+  'pending',
+  'uploading',
+  'completed',
+  'expired',
+  'failed',
+] as const;
 export type UploadSessionStatus = (typeof UPLOAD_SESSION_STATUSES)[number];
 
 /**

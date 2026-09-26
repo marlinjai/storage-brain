@@ -33,9 +33,10 @@ export interface RequestUploadParams {
 /**
  * Shared upload-request handshake logic.
  *
- * Validates the body, enforces allowed-MIME / max-size / tenant-quota /
- * workspace-existence / workspace-quota, creates the file record + upload
- * session, reserves quota, and returns the presigned-URL handshake.
+ * Validates the body (the declared `fileSizeBytes` is required), enforces
+ * allowed-MIME / max-size / tenant-quota / workspace-existence /
+ * workspace-quota, atomically reserves the declared size and creates the file
+ * record + upload session, and returns the presigned-URL handshake.
  *
  * This is the single source of truth for the upload-request checks. Both the
  * tenant-scoped route (`POST /api/v1/upload/request`) and the admin-scoped
@@ -55,15 +56,11 @@ export async function requestUpload(params: RequestUploadParams): Promise<Upload
     throw ApiError.invalidFileType(`File type '${fileType}' is not allowed for this tenant`);
   }
 
-  // Check file size if provided
-  const fileSize = validatedBody.fileSizeBytes ?? 0;
-  if (fileSize > MAX_FILE_SIZE_BYTES) {
-    throw ApiError.fileTooLarge(
-      `File size ${fileSize} bytes exceeds maximum of ${MAX_FILE_SIZE_BYTES} bytes`
-    );
-  }
+  // The declared size is required by the schema and is what gets reserved.
+  const fileSize = validatedBody.fileSizeBytes;
 
-  // Check tenant quota
+  // Friendly pre-checks with the current numbers in the message. They are not
+  // what enforces the quota: createPendingUpload re-checks atomically below.
   const quotaCheck = await db.checkQuota(tenant.id, fileSize);
   if (!quotaCheck.hasCapacity) {
     throw ApiError.quotaExceeded(
@@ -91,41 +88,37 @@ export async function requestUpload(params: RequestUploadParams): Promise<Upload
   const fileId = crypto.randomUUID();
   const storedPath = `tenants/${tenant.id}/files/${fileId}/${validatedBody.fileName}`;
 
-  // Create file record in database
-  await db.createFile({
-    id: fileId,
-    tenantId: tenant.id,
-    originalName: validatedBody.fileName,
-    storedPath,
-    fileType,
-    sizeBytes: fileSize,
-    context: validatedBody.context ?? null,
-    tags: validatedBody.tags ?? null,
-    webhookUrl: validatedBody.webhookUrl,
-    workspaceId,
-  });
-
   // Generate presigned URL for upload with HMAC token
   // MVP: uses internal worker endpoint, not true R2 presigned URLs
   const expiresAt = Date.now() + PRESIGNED_URL_EXPIRATION_SECONDS * 1000;
   const uploadToken = await generateUploadToken(storedPath, expiresAt, urlSigningSecret);
   const presignedUrl = `/_internal/upload/${encodeURIComponent(storedPath)}?token=${uploadToken}&expires=${expiresAt}`;
 
-  // Create upload session, stamped with the owning tenant so the token-only
-  // upload route can scope its lookups (company-isolation S1, finding 7).
-  await db.createUploadSession({
-    fileId,
-    tenantId: tenant.id,
-    presignedUrl,
-    expiresAt,
+  // Reserve the declared size and create the file record and its upload
+  // session in one atomic step. The session is stamped with the owning tenant
+  // so the token-only upload route can scope its lookups (company-isolation
+  // S1, finding 7). A concurrent request can take the last free bytes between
+  // the pre-check above and here; the reservation then fails and nothing is
+  // written.
+  const pending = await db.createPendingUpload({
+    file: {
+      id: fileId,
+      tenantId: tenant.id,
+      originalName: validatedBody.fileName,
+      storedPath,
+      fileType,
+      sizeBytes: fileSize,
+      context: validatedBody.context ?? null,
+      tags: validatedBody.tags ?? null,
+      webhookUrl: validatedBody.webhookUrl,
+      workspaceId,
+    },
+    session: { presignedUrl, expiresAt },
   });
-
-  // Reserve quota (will be confirmed after upload completes)
-  if (fileSize > 0) {
-    await db.reserveQuota(tenant.id, fileSize);
-    if (workspaceId) {
-      await db.reserveWorkspaceQuota(workspaceId, fileSize);
-    }
+  if (!pending.created) {
+    throw ApiError.quotaExceeded(
+      `Quota exceeded: no room left to reserve ${fileSize} bytes for this upload`
+    );
   }
 
   return {

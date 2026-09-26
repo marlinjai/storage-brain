@@ -61,7 +61,7 @@ POST /api/v1/upload/request
 |-------|------|----------|-------------|
 | `fileType` | string | Yes | MIME type. One of: `image/jpeg`, `image/png`, `image/webp`, `image/gif`, `image/avif`, `application/pdf` |
 | `fileName` | string | Yes | Original filename (1-255 chars, no special characters) |
-| `fileSizeBytes` | number | No | File size in bytes (max: 104857600) |
+| `fileSizeBytes` | number | Yes | Exact file size in bytes (1 to 104857600). Reserved against the tenant (and workspace) quota; the upload is refused with 413 if its body is larger. A request without it is rejected with 400. |
 | `context` | string | No | Optional free-form string for categorization (max 100 chars) |
 | `tags` | object | No | Key-value string pairs for categorization |
 | `webhookUrl` | string | No | URL to notify after upload completes |

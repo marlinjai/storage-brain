@@ -158,7 +158,11 @@ export interface QuotaInfo {
 export interface RequestTenantUploadInput {
   fileName: string;
   fileType: string;
-  fileSizeBytes?: number;
+  /**
+   * Exact size of the file in bytes (required, greater than 0). It is reserved
+   * against the tenant's quota, and the upload is refused if its body is larger.
+   */
+  fileSizeBytes: number;
   context?: string;
   tags?: Record<string, string>;
   workspaceId?: string;

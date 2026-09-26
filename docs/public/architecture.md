@@ -128,16 +128,25 @@ Storage Brain uses four tables:
 | `file_id` | TEXT (FK) | References `files.id` |
 | `presigned_url` | TEXT | Presigned upload URL |
 | `expires_at` | INTEGER | Expiration timestamp |
-| `status` | TEXT | `pending`, `completed`, `expired`, or `failed` |
+| `status` | TEXT | `pending` (URL issued), `uploading` (a transfer claimed it), then one of `completed`, `expired` or `failed` |
 | `created_at` | INTEGER | Unix timestamp |
 
 ## Upload Flow
 
-1. **Client** calls `POST /api/v1/upload/request` with file metadata (and optional `workspaceId`)
-2. **API** validates auth, checks tenant quota (and workspace quota if applicable), creates file record and upload session
+1. **Client** calls `POST /api/v1/upload/request` with file metadata, including the required `fileSizeBytes` (and optional `workspaceId`)
+2. **API** validates auth and, in one atomic step, reserves the declared size against the tenant quota (and workspace quota if applicable) and creates the file record and upload session
 3. **API** returns a presigned URL (valid for 15 minutes)
-4. **Client** uploads file directly to storage using the presigned URL
-5. **API** marks the file as `completed` and sends a `file.uploaded` webhook if configured
+4. **Client** uploads file directly to storage using the presigned URL; a body larger than declared is refused with 413
+5. **API** settles the session: the reservation is replaced by the bytes actually stored (a smaller file releases the difference), the file is marked `completed`, and a `file.uploaded` webhook is sent if configured
+
+### Quota accounting
+
+A tenant's (and a workspace's) `used_bytes` is always the sum of `size_bytes` over its live files, where a file whose upload is still open counts its declared size as a reservation. Every change to files, sessions and both counters happens in one transaction, and each upload session is settled exactly once:
+
+- **Completed:** the file's size becomes the stored bytes and the counters move by the difference to the reservation.
+- **Failed** (body rejected, cut off, or not storable) or **expired** (URL lapsed unused, or a transfer that never finished): the whole reservation is released and the file is marked `failed` with size 0.
+- A sweep settles stale sessions as expired every 5 minutes (a timer in the Node server, a cron trigger on Workers). A transfer already under way gets one hour past its URL expiry before it is reclaimed.
+- Deleting a file (or a workspace) releases its bytes and closes any open upload session in the same transaction, so a later settle or sweep cannot release them a second time.
 
 ## Deployment
 

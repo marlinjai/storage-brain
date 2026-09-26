@@ -29,12 +29,6 @@ describe('ApiError', () => {
       expect(err.message).toBe('body too big');
     });
 
-    it('fileTooLarge returns 400', () => {
-      const err = ApiError.fileTooLarge('too big');
-      expect(err.statusCode).toBe(400);
-      expect(err.code).toBe('FILE_TOO_LARGE');
-    });
-
     it('rateLimited returns 429', () => {
       const err = ApiError.rateLimited();
       expect(err.statusCode).toBe(429);

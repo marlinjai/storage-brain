@@ -45,9 +45,8 @@ function file(): StoredFile {
 function createMockDb() {
   return {
     getUploadSessionByFileId: vi.fn().mockResolvedValue({ id: 'sess-1', status: 'pending' }),
-    updateUploadSessionStatus: vi.fn().mockResolvedValue(undefined),
+    settleUploadSession: vi.fn().mockResolvedValue(true),
     getFileById: vi.fn().mockResolvedValue(file()),
-    updateFileProcessingStatus: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -90,7 +89,36 @@ describe('POST /webhooks/r2-upload-complete signature gate', () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: 'completed', fileId: FILE_ID });
-    expect(db.updateFileProcessingStatus).toHaveBeenCalledWith(FILE_ID, 'completed');
+    // No size in the event: the reservation (the file's declared size) stands.
+    expect(db.settleUploadSession).toHaveBeenCalledWith('sess-1', {
+      status: 'completed',
+      actualBytes: 2048,
+    });
+  });
+
+  it('settles with the object size R2 reports, replacing the reservation', async () => {
+    const body = JSON.stringify({
+      object: { key: `tenants/${TENANT_ID}/files/${FILE_ID}/photo.png`, size: 1500 },
+    });
+    const signature = await signWebhookBody(body, SECRET);
+
+    const res = await post(body, { 'X-Webhook-Signature': signature });
+
+    expect(res.status).toBe(200);
+    expect(db.settleUploadSession).toHaveBeenCalledWith('sess-1', {
+      status: 'completed',
+      actualBytes: 1500,
+    });
+  });
+
+  it('ignores a redelivered event for an already settled session', async () => {
+    db.settleUploadSession.mockResolvedValueOnce(false);
+    const signature = await signWebhookBody(RAW_BODY, SECRET);
+
+    const res = await post(RAW_BODY, { 'X-Webhook-Signature': signature });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: 'ignored' });
   });
 
   it('rejects a request with an invalid signature (401), no side effects', async () => {
@@ -99,7 +127,7 @@ describe('POST /webhooks/r2-upload-complete signature gate', () => {
     const res = await post(RAW_BODY, { 'X-Webhook-Signature': badSignature });
 
     expect(res.status).toBe(401);
-    expect(db.updateFileProcessingStatus).not.toHaveBeenCalled();
+    expect(db.settleUploadSession).not.toHaveBeenCalled();
   });
 
   it('rejects a request whose body was tampered after signing (401)', async () => {
@@ -116,7 +144,7 @@ describe('POST /webhooks/r2-upload-complete signature gate', () => {
     const res = await post(RAW_BODY, {});
 
     expect(res.status).toBe(401);
-    expect(db.updateFileProcessingStatus).not.toHaveBeenCalled();
+    expect(db.settleUploadSession).not.toHaveBeenCalled();
   });
 
   it('fails closed with 500 when the signing secret is unset (misconfig)', async () => {
@@ -128,7 +156,7 @@ describe('POST /webhooks/r2-upload-complete signature gate', () => {
     const res = await post(RAW_BODY, { 'X-Webhook-Signature': signature }, envWithout);
 
     expect(res.status).toBe(500);
-    expect(db.updateFileProcessingStatus).not.toHaveBeenCalled();
+    expect(db.settleUploadSession).not.toHaveBeenCalled();
   });
 
   it('fails closed with 500 when the signing secret is too short (misconfig)', async () => {
@@ -143,6 +171,6 @@ describe('POST /webhooks/r2-upload-complete signature gate', () => {
     );
 
     expect(res.status).toBe(500);
-    expect(db.updateFileProcessingStatus).not.toHaveBeenCalled();
+    expect(db.settleUploadSession).not.toHaveBeenCalled();
   });
 });

@@ -2,12 +2,13 @@ import type { D1Database } from '@cloudflare/workers-types';
 import type {
   DatabaseAdapter,
   CreateTenantInput,
-  CreateFileInput,
   ListFilesResult,
   CreateWorkspaceInput,
   UpdateWorkspaceInput,
   QuotaCheckResult,
-  CreateUploadSessionInput,
+  CreatePendingUploadInput,
+  CreatePendingUploadResult,
+  UploadSessionOutcome,
   MigrateFilesToWorkspaceInput,
   MigrateFilesToWorkspaceResult,
   FileContextAggregate,
@@ -240,30 +241,6 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
   // Files
   // ============================================================================
 
-  async createFile(input: CreateFileInput): Promise<void> {
-    const now = Date.now();
-    await this.db
-      .prepare(
-        `INSERT INTO files (id, tenant_id, workspace_id, original_name, stored_path, file_type, size_bytes, context, tags, metadata, processing_status, webhook_url, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'pending', ?, ?, ?)`
-      )
-      .bind(
-        input.id,
-        input.tenantId,
-        input.workspaceId ?? null,
-        input.originalName,
-        input.storedPath,
-        input.fileType,
-        input.sizeBytes,
-        input.context,
-        input.tags ? JSON.stringify(input.tags) : null,
-        input.webhookUrl ?? null,
-        now,
-        now
-      )
-      .run();
-  }
-
   async getFileById(fileId: string, tenantId: string): Promise<StoredFile | null> {
     const result = await this.db
       .prepare('SELECT * FROM files WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL')
@@ -359,14 +336,6 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     return { files, nextCursor, total };
   }
 
-  async softDeleteFile(fileId: string, tenantId: string): Promise<void> {
-    const now = Date.now();
-    await this.db
-      .prepare('UPDATE files SET deleted_at = ?, updated_at = ? WHERE id = ? AND tenant_id = ?')
-      .bind(now, now, fileId, tenantId)
-      .run();
-  }
-
   async updateFileMetadata(
     fileId: string,
     metadata: Record<string, unknown>,
@@ -376,22 +345,6 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     await this.db
       .prepare('UPDATE files SET metadata = ?, processing_status = ?, updated_at = ? WHERE id = ?')
       .bind(JSON.stringify(metadata), status, now, fileId)
-      .run();
-  }
-
-  async updateFileProcessingStatus(fileId: string, status: ProcessingStatus): Promise<void> {
-    const now = Date.now();
-    await this.db
-      .prepare('UPDATE files SET processing_status = ?, updated_at = ? WHERE id = ?')
-      .bind(status, now, fileId)
-      .run();
-  }
-
-  async updateFileSizeBytes(fileId: string, sizeBytes: number): Promise<void> {
-    const now = Date.now();
-    await this.db
-      .prepare('UPDATE files SET size_bytes = ?, updated_at = ? WHERE id = ?')
-      .bind(sizeBytes, now, fileId)
       .run();
   }
 
@@ -514,16 +467,6 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       .all();
 
     return result.results.map((row) => this.mapFileRow(row));
-  }
-
-  async softDeleteFilesByWorkspace(workspaceId: string, tenantId: string): Promise<void> {
-    const now = Date.now();
-    await this.db
-      .prepare(
-        'UPDATE files SET deleted_at = ?, updated_at = ? WHERE workspace_id = ? AND tenant_id = ? AND deleted_at IS NULL'
-      )
-      .bind(now, now, workspaceId, tenantId)
-      .run();
   }
 
   async migrateFilesToWorkspace(
@@ -651,22 +594,86 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
   }
 
   // ============================================================================
-  // Upload Sessions
+  // Upload Sessions and quota accounting (contract: DatabaseAdapter)
+  //
+  // D1 has no interactive transactions, but a batch() runs as one transaction
+  // with its statements in order. Every multi-row change below is therefore a
+  // single batch whose later statements are guarded by conditions the earlier
+  // ones establish, so each operation is all-or-nothing and exactly-once.
   // ============================================================================
 
-  async createUploadSession(input: CreateUploadSessionInput): Promise<string> {
-    const id = crypto.randomUUID();
+  async createPendingUpload(input: CreatePendingUploadInput): Promise<CreatePendingUploadResult> {
+    const { file, session } = input;
+    const size = file.sizeBytes;
+    const workspaceId = file.workspaceId ?? null;
+    const sessionId = crypto.randomUUID();
     const now = Date.now();
+    const sessionExists = 'EXISTS (SELECT 1 FROM upload_sessions WHERE id = ?)';
 
-    await this.db
-      .prepare(
-        `INSERT INTO upload_sessions (id, file_id, tenant_id, presigned_url, expires_at, status, created_at)
-         VALUES (?, ?, ?, ?, ?, 'pending', ?)`
-      )
-      .bind(id, input.fileId, input.tenantId ?? null, input.presignedUrl, input.expiresAt, now)
-      .run();
+    const results = await this.db.batch([
+      // files.context is NOT NULL (DEFAULT 'default') in D1, so an upload
+      // requested without a context is stored under 'default', which is also
+      // how aggregateFileContexts reads a missing context.
+      // The capacity check and the insert are one statement, so nothing can
+      // slip in between them; the increments below only run if it inserted.
+      this.db
+        .prepare(
+          `INSERT INTO files (id, tenant_id, workspace_id, original_name, stored_path, file_type, size_bytes, context, tags, metadata, processing_status, webhook_url, created_at, updated_at)
+           SELECT ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 'default'), ?, NULL, 'pending', ?, ?, ?
+           WHERE EXISTS (SELECT 1 FROM tenants WHERE id = ? AND (quota_bytes - used_bytes) >= ?)
+             AND (? IS NULL OR EXISTS (
+               SELECT 1 FROM workspaces WHERE id = ? AND tenant_id = ?
+                 AND (quota_bytes IS NULL OR (quota_bytes - used_bytes) >= ?)))`
+        )
+        .bind(
+          file.id,
+          file.tenantId,
+          workspaceId,
+          file.originalName,
+          file.storedPath,
+          file.fileType,
+          size,
+          file.context,
+          file.tags ? JSON.stringify(file.tags) : null,
+          file.webhookUrl ?? null,
+          now,
+          now,
+          file.tenantId,
+          size,
+          workspaceId,
+          workspaceId,
+          file.tenantId,
+          size
+        ),
+      this.db
+        .prepare(
+          `INSERT INTO upload_sessions (id, file_id, tenant_id, presigned_url, expires_at, status, created_at)
+           SELECT ?, ?, ?, ?, ?, 'pending', ? WHERE EXISTS (SELECT 1 FROM files WHERE id = ?)`
+        )
+        .bind(
+          sessionId,
+          file.id,
+          file.tenantId,
+          session.presignedUrl,
+          session.expiresAt,
+          now,
+          file.id
+        ),
+      this.db
+        .prepare(
+          `UPDATE tenants SET used_bytes = used_bytes + ?, updated_at = ?
+           WHERE id = ? AND ${sessionExists}`
+        )
+        .bind(size, now, file.tenantId, sessionId),
+      this.db
+        .prepare(
+          `UPDATE workspaces SET used_bytes = used_bytes + ?, updated_at = ?
+           WHERE id = ? AND ${sessionExists}`
+        )
+        .bind(size, now, workspaceId, sessionId),
+    ]);
 
-    return id;
+    return (results[0]?.meta.changes ?? 0) > 0 ? { created: true, sessionId } : { created: false };
   }
 
   async getUploadSessionByFileId(fileId: string): Promise<UploadSession | null> {
@@ -678,11 +685,159 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     return result ? this.mapUploadSessionRow(result) : null;
   }
 
-  async updateUploadSessionStatus(sessionId: string, status: UploadSessionStatus): Promise<void> {
-    await this.db
-      .prepare('UPDATE upload_sessions SET status = ? WHERE id = ?')
-      .bind(status, sessionId)
+  async claimUploadSession(sessionId: string): Promise<boolean> {
+    const result = await this.db
+      .prepare(
+        `UPDATE upload_sessions SET status = 'uploading' WHERE id = ? AND status = 'pending'`
+      )
+      .bind(sessionId)
       .run();
+    return result.meta.changes > 0;
+  }
+
+  async settleUploadSession(sessionId: string, outcome: UploadSessionOutcome): Promise<boolean> {
+    const now = Date.now();
+    const actualBytes = outcome.status === 'completed' ? outcome.actualBytes : 0;
+    const processingStatus: ProcessingStatus =
+      outcome.status === 'completed' ? 'completed' : 'failed';
+    // A value no other settle can produce: it marks "this batch won the claim".
+    const marker = `settling:${crypto.randomUUID()}`;
+
+    const won = 'EXISTS (SELECT 1 FROM upload_sessions WHERE id = ? AND status = ?)';
+    const fileId = '(SELECT file_id FROM upload_sessions WHERE id = ?)';
+    const liveFile = `id = ${fileId} AND deleted_at IS NULL`;
+
+    const results = await this.db.batch([
+      this.db
+        .prepare(
+          `UPDATE upload_sessions SET status = ?
+           WHERE id = ? AND status IN ('pending', 'uploading')`
+        )
+        .bind(marker, sessionId),
+      // Counters move by (stored - reserved); the reservation is still the
+      // file's size_bytes here because the files update runs last.
+      this.db
+        .prepare(
+          `UPDATE tenants
+           SET used_bytes = MAX(0, used_bytes + (? - (SELECT size_bytes FROM files WHERE ${liveFile}))),
+               updated_at = ?
+           WHERE id = (SELECT tenant_id FROM files WHERE ${liveFile}) AND ${won}`
+        )
+        .bind(actualBytes, sessionId, now, sessionId, sessionId, marker),
+      this.db
+        .prepare(
+          `UPDATE workspaces
+           SET used_bytes = MAX(0, used_bytes + (? - (SELECT size_bytes FROM files WHERE ${liveFile}))),
+               updated_at = ?
+           WHERE id = (SELECT workspace_id FROM files WHERE ${liveFile}) AND ${won}`
+        )
+        .bind(actualBytes, sessionId, now, sessionId, sessionId, marker),
+      this.db
+        .prepare(
+          `UPDATE files SET size_bytes = ?, processing_status = ?, updated_at = ?
+           WHERE ${liveFile} AND ${won}`
+        )
+        .bind(actualBytes, processingStatus, now, sessionId, sessionId, marker),
+      this.db
+        .prepare('UPDATE upload_sessions SET status = ? WHERE id = ? AND status = ?')
+        .bind(outcome.status, sessionId, marker),
+    ]);
+
+    return (results[0]?.meta.changes ?? 0) > 0;
+  }
+
+  async expireStaleUploadSessions(now: number, uploadingGraceMs: number): Promise<number> {
+    const rows = await this.db
+      .prepare(
+        `SELECT id FROM upload_sessions
+         WHERE (status = 'pending' AND expires_at < ?)
+            OR (status = 'uploading' AND expires_at < ?)
+         ORDER BY expires_at
+         LIMIT 500`
+      )
+      .bind(now, now - uploadingGraceMs)
+      .all<{ id: string }>();
+
+    let expired = 0;
+    for (const row of rows.results) {
+      if (await this.settleUploadSession(row.id, { status: 'expired' })) expired += 1;
+    }
+    return expired;
+  }
+
+  async deleteFileAndReleaseQuota(fileId: string, tenantId: string): Promise<StoredFile | null> {
+    const file = await this.getFileById(fileId, tenantId);
+    if (!file) return null;
+
+    const now = Date.now();
+    const live = 'id = ? AND tenant_id = ? AND deleted_at IS NULL';
+    const results = await this.db.batch([
+      this.db
+        .prepare(
+          `UPDATE tenants
+           SET used_bytes = MAX(0, used_bytes - (SELECT size_bytes FROM files WHERE ${live})),
+               updated_at = ?
+           WHERE id = ? AND EXISTS (SELECT 1 FROM files WHERE ${live})`
+        )
+        .bind(fileId, tenantId, now, tenantId, fileId, tenantId),
+      this.db
+        .prepare(
+          `UPDATE workspaces
+           SET used_bytes = MAX(0, used_bytes - (SELECT size_bytes FROM files WHERE ${live})),
+               updated_at = ?
+           WHERE id = (SELECT workspace_id FROM files WHERE ${live})`
+        )
+        .bind(fileId, tenantId, now, fileId, tenantId),
+      this.db
+        .prepare(
+          `UPDATE upload_sessions SET status = 'failed'
+           WHERE file_id = ? AND status IN ('pending', 'uploading')
+             AND EXISTS (SELECT 1 FROM files WHERE ${live})`
+        )
+        .bind(fileId, fileId, tenantId),
+      this.db
+        .prepare(`UPDATE files SET deleted_at = ?, updated_at = ? WHERE ${live}`)
+        .bind(now, now, fileId, tenantId),
+    ]);
+
+    return (results[3]?.meta.changes ?? 0) > 0 ? file : null;
+  }
+
+  async deleteWorkspaceFilesAndReleaseQuota(
+    workspaceId: string,
+    tenantId: string
+  ): Promise<number> {
+    const now = Date.now();
+    const live = 'workspace_id = ? AND tenant_id = ? AND deleted_at IS NULL';
+    const total = `(SELECT COALESCE(SUM(size_bytes), 0) FROM files WHERE ${live})`;
+
+    const results = await this.db.batch([
+      this.db.prepare(`SELECT ${total} AS total`).bind(workspaceId, tenantId),
+      this.db
+        .prepare(
+          `UPDATE tenants SET used_bytes = MAX(0, used_bytes - ${total}), updated_at = ? WHERE id = ?`
+        )
+        .bind(workspaceId, tenantId, now, tenantId),
+      this.db
+        .prepare(
+          `UPDATE workspaces SET used_bytes = MAX(0, used_bytes - ${total}), updated_at = ?
+           WHERE id = ? AND tenant_id = ?`
+        )
+        .bind(workspaceId, tenantId, now, workspaceId, tenantId),
+      this.db
+        .prepare(
+          `UPDATE upload_sessions SET status = 'failed'
+           WHERE status IN ('pending', 'uploading')
+             AND file_id IN (SELECT id FROM files WHERE ${live})`
+        )
+        .bind(workspaceId, tenantId),
+      this.db
+        .prepare(`UPDATE files SET deleted_at = ?, updated_at = ? WHERE ${live}`)
+        .bind(now, now, workspaceId, tenantId),
+    ]);
+
+    const row = results[0]?.results[0] as { total?: number } | undefined;
+    return Number(row?.total ?? 0);
   }
 
   // ============================================================================
@@ -708,36 +863,6 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       usedBytes: result.used_bytes,
       availableBytes,
     };
-  }
-
-  async reserveQuota(tenantId: string, sizeBytes: number): Promise<void> {
-    const now = Date.now();
-
-    const result = await this.db
-      .prepare(
-        `UPDATE tenants
-         SET used_bytes = used_bytes + ?, updated_at = ?
-         WHERE id = ? AND (quota_bytes - used_bytes) >= ?`
-      )
-      .bind(sizeBytes, now, tenantId, sizeBytes)
-      .run();
-
-    if (result.meta.changes === 0) {
-      throw new Error('Insufficient quota or tenant not found');
-    }
-  }
-
-  async releaseQuota(tenantId: string, sizeBytes: number): Promise<void> {
-    const now = Date.now();
-
-    await this.db
-      .prepare(
-        `UPDATE tenants
-         SET used_bytes = MAX(0, used_bytes - ?), updated_at = ?
-         WHERE id = ?`
-      )
-      .bind(sizeBytes, now, tenantId)
-      .run();
   }
 
   async getQuotaUsage(tenantId: string): Promise<QuotaResponse> {
@@ -809,36 +934,6 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       usedBytes: result.used_bytes,
       availableBytes,
     };
-  }
-
-  async reserveWorkspaceQuota(workspaceId: string, sizeBytes: number): Promise<void> {
-    const now = Date.now();
-
-    const result = await this.db
-      .prepare(
-        `UPDATE workspaces
-         SET used_bytes = used_bytes + ?, updated_at = ?
-         WHERE id = ? AND (quota_bytes IS NULL OR (quota_bytes - used_bytes) >= ?)`
-      )
-      .bind(sizeBytes, now, workspaceId, sizeBytes)
-      .run();
-
-    if (result.meta.changes === 0) {
-      throw new Error('Insufficient workspace quota or workspace not found');
-    }
-  }
-
-  async releaseWorkspaceQuota(workspaceId: string, sizeBytes: number): Promise<void> {
-    const now = Date.now();
-
-    await this.db
-      .prepare(
-        `UPDATE workspaces
-         SET used_bytes = MAX(0, used_bytes - ?), updated_at = ?
-         WHERE id = ?`
-      )
-      .bind(sizeBytes, now, workspaceId)
-      .run();
   }
 
   // ============================================================================

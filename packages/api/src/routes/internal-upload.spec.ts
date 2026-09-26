@@ -66,9 +66,8 @@ function createMockDb(declaredSize: number) {
   return {
     getFileByStoredPath: vi.fn().mockResolvedValue(file(declaredSize)),
     getUploadSessionByFileId: vi.fn().mockResolvedValue(session()),
-    updateUploadSessionStatus: vi.fn(),
-    updateFileSizeBytes: vi.fn(),
-    updateFileProcessingStatus: vi.fn(),
+    claimUploadSession: vi.fn().mockResolvedValue(true),
+    settleUploadSession: vi.fn().mockResolvedValue(true),
     getFileById: vi.fn(),
   };
 }
@@ -85,12 +84,12 @@ async function uploadUrl(): Promise<string> {
 
 describe('PUT /_internal/upload/* body size limit', () => {
   let db: ReturnType<typeof createMockDb>;
-  let storage: { put: ReturnType<typeof vi.fn> };
+  let storage: { put: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
   let app: ReturnType<typeof createApp>;
 
   function setup(declaredSize: number) {
     db = createMockDb(declaredSize);
-    storage = { put: vi.fn().mockResolvedValue({}) };
+    storage = { put: vi.fn().mockResolvedValue({}), delete: vi.fn().mockResolvedValue(undefined) };
     app = createApp({
       db: db as unknown as DatabaseAdapter,
       storage: storage as unknown as StorageAdapter,
@@ -110,7 +109,8 @@ describe('PUT /_internal/upload/* body size limit', () => {
     );
   }
 
-  beforeEach(() => setup(0));
+  // Declared at the maximum, so only the global limit is in play by default.
+  beforeEach(() => setup(MAX_FILE_SIZE_BYTES));
 
   it('rejects a Content-Length above the maximum with 413 before reading or touching the DB', async () => {
     const src = countingStream(MAX_FILE_SIZE_BYTES + 1, MIB);
@@ -125,6 +125,7 @@ describe('PUT /_internal/upload/* body size limit', () => {
     );
     expect(src.pulls).toBe(0);
     expect(db.getFileByStoredPath).not.toHaveBeenCalled();
+    expect(db.claimUploadSession).not.toHaveBeenCalled();
     expect(storage.put).not.toHaveBeenCalled();
   });
 
@@ -145,7 +146,8 @@ describe('PUT /_internal/upload/* body size limit', () => {
     expect(src.pulls).toBeLessThanOrEqual(MAX_FILE_SIZE_BYTES / MIB + 2);
     expect(src.cancelled).toBe(true);
     expect(storage.put).not.toHaveBeenCalled();
-    expect(db.updateUploadSessionStatus).not.toHaveBeenCalled();
+    // The cut-off transfer releases its whole reservation.
+    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', { status: 'failed' });
   });
 
   it('rejects a Content-Length above the declared size with 413 without reading', async () => {
@@ -161,6 +163,7 @@ describe('PUT /_internal/upload/* body size limit', () => {
     );
     expect(src.pulls).toBe(0);
     expect(storage.put).not.toHaveBeenCalled();
+    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', { status: 'failed' });
   });
 
   it('cuts off a body larger than the declared size even when Content-Length lies', async () => {
@@ -175,7 +178,8 @@ describe('PUT /_internal/upload/* body size limit', () => {
     expect(src.bytesProduced).toBeLessThanOrEqual(1_000 + 256);
     expect(src.cancelled).toBe(true);
     expect(storage.put).not.toHaveBeenCalled();
-    expect(db.updateUploadSessionStatus).not.toHaveBeenCalled();
+    // The cut-off transfer releases its whole reservation.
+    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', { status: 'failed' });
   });
 
   it('stores exactly the bytes of a valid upload', async () => {
@@ -195,8 +199,10 @@ describe('PUT /_internal/upload/* body size limit', () => {
     const expected = Uint8Array.from({ length: 4_321 }, (_, i) => i % 251);
     expect(new Uint8Array(stored)).toEqual(expected);
     // A body smaller than declared is still accepted and the real size recorded.
-    expect(db.updateFileSizeBytes).toHaveBeenCalledWith(FILE_ID, 4_321);
-    expect(db.updateUploadSessionStatus).toHaveBeenCalledWith('session-1', 'completed');
+    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', {
+      status: 'completed',
+      actualBytes: 4_321,
+    });
   });
 
   it('accepts an upload of exactly the maximum size without Content-Length', async () => {
@@ -213,7 +219,126 @@ describe('PUT /_internal/upload/* body size limit', () => {
     const bytes = new Uint8Array(stored);
     expect(bytes[0]).toBe(0);
     expect(bytes[MAX_FILE_SIZE_BYTES - MIB]).toBe((MAX_FILE_SIZE_BYTES / MIB - 1) % 256);
-    expect(db.updateFileSizeBytes).toHaveBeenCalledWith(FILE_ID, MAX_FILE_SIZE_BYTES);
+    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', {
+      status: 'completed',
+      actualBytes: MAX_FILE_SIZE_BYTES,
+    });
+  });
+});
+
+describe('PUT /_internal/upload/* settles its upload session on every path', () => {
+  let db: ReturnType<typeof createMockDb>;
+  let storage: { put: ReturnType<typeof vi.fn>; delete: ReturnType<typeof vi.fn> };
+  let app: ReturnType<typeof createApp>;
+
+  beforeEach(() => {
+    db = createMockDb(1_000);
+    storage = { put: vi.fn().mockResolvedValue({}), delete: vi.fn().mockResolvedValue(undefined) };
+    app = createApp({
+      db: db as unknown as DatabaseAdapter,
+      storage: storage as unknown as StorageAdapter,
+    });
+  });
+
+  async function put(bytes: number) {
+    return app.request(
+      await uploadUrl(),
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'image/png' },
+        body: countingStream(bytes, 256).stream,
+        duplex: 'half',
+      } as RequestInit,
+      ENV
+    );
+  }
+
+  it('claims the session before reading, then settles the smaller-than-declared size', async () => {
+    const res = await put(600);
+
+    expect(res.status).toBe(200);
+    expect(db.claimUploadSession).toHaveBeenCalledWith('session-1');
+    // 600 of the 1000 reserved bytes are kept; the adapter releases the other 400.
+    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', {
+      status: 'completed',
+      actualBytes: 600,
+    });
+  });
+
+  it('refuses a second transfer for a session another one already claimed (409, nothing read)', async () => {
+    db.claimUploadSession.mockResolvedValueOnce(false);
+    const src = countingStream(600, 256);
+
+    const res = await app.request(
+      await uploadUrl(),
+      { method: 'PUT', body: src.stream, duplex: 'half' } as RequestInit,
+      ENV
+    );
+
+    expect(res.status).toBe(409);
+    expect(src.pulls).toBe(0);
+    expect(db.settleUploadSession).not.toHaveBeenCalled();
+    expect(storage.put).not.toHaveBeenCalled();
+  });
+
+  it('releases the reservation when storing the bytes fails', async () => {
+    storage.put.mockRejectedValueOnce(new Error('R2 unavailable'));
+
+    const res = await put(600);
+
+    expect(res.status).toBe(500);
+    expect(db.settleUploadSession).toHaveBeenCalledTimes(1);
+    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', { status: 'failed' });
+  });
+
+  it('releases the reservation for an empty body (400)', async () => {
+    const res = await put(0);
+
+    expect(res.status).toBe(400);
+    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', { status: 'failed' });
+    expect(storage.put).not.toHaveBeenCalled();
+  });
+
+  it('still answers with the upload error when settling the failure also fails', async () => {
+    storage.put.mockRejectedValueOnce(new Error('R2 unavailable'));
+    db.settleUploadSession.mockRejectedValueOnce(new Error('db down'));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const res = await put(600);
+
+    expect(res.status).toBe(500);
+  });
+
+  it('deletes the stored object when the session was closed while the bytes were in flight', async () => {
+    db.settleUploadSession.mockResolvedValueOnce(false);
+
+    const res = await put(600);
+
+    expect(res.status).toBe(409);
+    expect(storage.delete).toHaveBeenCalledWith(STORED_PATH);
+  });
+
+  it('settles a lapsed pending session as expired (410), releasing its reservation', async () => {
+    db.getUploadSessionByFileId.mockResolvedValueOnce({
+      ...session(),
+      expiresAt: Date.now() - 1,
+    });
+
+    const res = await put(600);
+
+    expect(res.status).toBe(410);
+    expect(db.settleUploadSession).toHaveBeenCalledWith('session-1', { status: 'expired' });
+    expect(db.claimUploadSession).not.toHaveBeenCalled();
+  });
+
+  it('answers 409 for a session that is already settled, without touching it', async () => {
+    db.getUploadSessionByFileId.mockResolvedValueOnce({ ...session(), status: 'completed' });
+
+    const res = await put(600);
+
+    expect(res.status).toBe(409);
+    expect(db.claimUploadSession).not.toHaveBeenCalled();
+    expect(db.settleUploadSession).not.toHaveBeenCalled();
   });
 });
 

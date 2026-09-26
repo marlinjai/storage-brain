@@ -45,33 +45,28 @@ function createMockDb() {
     getTenantByName: vi.fn(),
     getTenantById: vi.fn(),
     updateTenantApiKeyHash: vi.fn(),
-    createFile: vi.fn(),
     getFileById: vi.fn(),
     getFileByIdUnscoped: vi.fn(),
     getFileByStoredPath: vi.fn(),
     listFilesByTenant: vi.fn(),
-    softDeleteFile: vi.fn(),
     updateFileMetadata: vi.fn(),
-    updateFileProcessingStatus: vi.fn(),
-    updateFileSizeBytes: vi.fn(),
     createWorkspace: vi.fn().mockResolvedValue(mockWorkspace),
     getWorkspaceById: vi.fn().mockResolvedValue(mockWorkspace),
     listWorkspacesByTenant: vi.fn().mockResolvedValue([mockWorkspace]),
     updateWorkspace: vi.fn().mockResolvedValue({ ...mockWorkspace, name: 'Updated' }),
     deleteWorkspace: vi.fn(),
     getActiveFilesByWorkspace: vi.fn().mockResolvedValue([]),
-    softDeleteFilesByWorkspace: vi.fn(),
-    createUploadSession: vi.fn(),
     getUploadSessionByFileId: vi.fn(),
-    updateUploadSessionStatus: vi.fn(),
+    createPendingUpload: vi.fn().mockResolvedValue({ created: true, sessionId: 'session-1' }),
+    claimUploadSession: vi.fn().mockResolvedValue(true),
+    settleUploadSession: vi.fn().mockResolvedValue(true),
+    expireStaleUploadSessions: vi.fn().mockResolvedValue(0),
+    deleteFileAndReleaseQuota: vi.fn().mockResolvedValue(null),
+    deleteWorkspaceFilesAndReleaseQuota: vi.fn().mockResolvedValue(0),
     checkQuota: vi.fn(),
-    reserveQuota: vi.fn(),
-    releaseQuota: vi.fn(),
     getQuotaUsage: vi.fn(),
     recalculateQuota: vi.fn(),
     checkWorkspaceQuota: vi.fn(),
-    reserveWorkspaceQuota: vi.fn(),
-    releaseWorkspaceQuota: vi.fn(),
     migrate: vi.fn(),
   };
 }
@@ -253,9 +248,9 @@ describe('workspace routes', () => {
       expect(storage.delete).toHaveBeenCalledTimes(2);
       expect(storage.delete).toHaveBeenCalledWith(`tenants/${TENANT_ID}/files/f1/a.png`);
       expect(storage.delete).toHaveBeenCalledWith(`tenants/${TENANT_ID}/files/f2/b.pdf`);
-      expect(db.softDeleteFilesByWorkspace).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
-      expect(db.releaseWorkspaceQuota).toHaveBeenCalledWith(WORKSPACE_ID, 800);
-      expect(db.releaseQuota).toHaveBeenCalledWith(TENANT_ID, 800);
+      // Soft delete of every file plus the tenant + workspace release is one
+      // atomic adapter call (covered by the adapter specs).
+      expect(db.deleteWorkspaceFilesAndReleaseQuota).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
       expect(db.deleteWorkspace).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
     });
 
@@ -275,12 +270,11 @@ describe('workspace routes', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(db.softDeleteFilesByWorkspace).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
-      expect(db.releaseQuota).toHaveBeenCalledWith(TENANT_ID, 500);
+      expect(db.deleteWorkspaceFilesAndReleaseQuota).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
       expect(db.deleteWorkspace).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
     });
 
-    it('skips quota release if no files', async () => {
+    it('still runs the atomic release when the workspace has no files', async () => {
       const res = await app.request(
         `/api/v1/workspaces/${WORKSPACE_ID}`,
         {
@@ -291,7 +285,8 @@ describe('workspace routes', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(db.releaseQuota).not.toHaveBeenCalled();
+      expect(db.deleteWorkspaceFilesAndReleaseQuota).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
+      expect(db.deleteWorkspace).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
     });
 
     it('returns 404 if workspace not found', async () => {

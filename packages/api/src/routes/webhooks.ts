@@ -59,7 +59,7 @@ webhookRoutes.post('/r2-upload-complete', async (c) => {
 
   // R2 event notification payload structure
   // https://developers.cloudflare.com/r2/buckets/event-notifications/
-  const { object } = body as { object?: { key?: string } };
+  const { object } = body as { object?: { key?: string; size?: unknown } };
 
   if (!object?.key) {
     return c.json({ error: 'Invalid webhook payload' }, 400);
@@ -89,18 +89,25 @@ webhookRoutes.post('/r2-upload-complete', async (c) => {
     return c.json({ status: 'ignored' });
   }
 
-  // Update session status
-  await db.updateUploadSessionStatus(session.id, 'completed');
-
-  // Get file record
+  // Settle the session with the size R2 reports for the stored object, which
+  // replaces the reservation with the real bytes. Without a usable size the
+  // reservation (the declared size) is kept as the file's size. A session that
+  // is already settled (a redelivered event) changes nothing.
   const file = await db.getFileById(fileId, tenantId);
   if (!file) {
     console.error(`File record not found: ${fileId}`);
     return c.json({ error: 'File record not found' }, 404);
   }
 
-  // Mark file as completed immediately
-  await db.updateFileProcessingStatus(file.id, 'completed');
+  const reportedSize = (object as { size?: unknown }).size;
+  const actualBytes =
+    typeof reportedSize === 'number' && Number.isSafeInteger(reportedSize) && reportedSize >= 0
+      ? reportedSize
+      : file.sizeBytes;
+  const settled = await db.settleUploadSession(session.id, { status: 'completed', actualBytes });
+  if (!settled) {
+    return c.json({ status: 'ignored' });
+  }
   console.log(`File marked as completed: ${fileId}`);
 
   // Fire webhook if configured (non-blocking via waitUntil)
@@ -110,7 +117,7 @@ webhookRoutes.post('/r2-upload-complete', async (c) => {
       url: `/api/v1/files/${file.id}/download`,
       originalName: file.originalName,
       fileType: file.fileType,
-      sizeBytes: file.sizeBytes,
+      sizeBytes: actualBytes,
       context: file.context,
       tags: file.tags,
       metadata: file.metadata,

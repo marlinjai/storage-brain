@@ -77,7 +77,13 @@ describe('PRESIGNED_URL_EXPIRATION_SECONDS', () => {
 
 describe('status constants', () => {
   it('UPLOAD_SESSION_STATUSES contains expected values', () => {
-    expect(UPLOAD_SESSION_STATUSES).toEqual(['pending', 'completed', 'expired', 'failed']);
+    expect(UPLOAD_SESSION_STATUSES).toEqual([
+      'pending',
+      'uploading',
+      'completed',
+      'expired',
+      'failed',
+    ]);
   });
 
   it('PROCESSING_STATUSES contains expected values', () => {

@@ -76,12 +76,13 @@ plan when the item carries a decision or a sequence.
       unread (413) on a `Content-Length` above the maximum or the declared size and is counted
       while streaming and cut off at that limit, and every other route (JSON API, signed
       webhooks) is capped at 1 MB by `hono/body-limit` (2026-09-26)
-- [ ] undeclared upload size skips quota: an upload requested without `fileSizeBytes`
-      (`packages/api/src/lib/upload/request-upload.ts`, `fileSizeBytes ?? 0`) reserves no quota,
-      and the internal upload route writes the real size without a quota check, so such uploads
-      never count against the tenant or workspace quota; a body smaller than declared also
-      leaves the larger reservation in place. Fix: reconcile reserved and actual bytes when the
-      upload completes. Found while fixing the upload body size limit (2026-09-26)
+- [x] undeclared upload size skips quota: an upload requested without `fileSizeBytes`
+      reserved no quota and the real size was never reconciled with the reservation.
+      Shipped: `fileSizeBytes` is required (400 otherwise); the declared size is reserved
+      atomically with the file and session; each session is settled exactly once (stored bytes
+      replace the reservation, a failed, cut-off or expired upload releases it, a 5-minute sweep
+      reclaims stale sessions); deletes release and close sessions in the same transaction
+      (2026-09-26)
 
 ## Completed
 

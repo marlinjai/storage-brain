@@ -1,73 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import type { D1Database } from '@cloudflare/workers-types';
+import { makeD1Adapter, seedFile as seedUpload } from '../../test-utils/d1-sqlite';
 import { D1DatabaseAdapter } from './d1';
 
-const MIGRATIONS_DIR = fileURLToPath(new URL('../../../migrations', import.meta.url));
-
-/**
- * Minimal D1Database shim over node:sqlite, enough for the tenant code paths the
- * adapter exercises (prepare().bind().run()/first()/all()).
- */
-function createD1(sqlite: DatabaseSync): D1Database {
-  return {
-    prepare(sql: string) {
-      let bound: unknown[] = [];
-      const stmt = {
-        bind(...args: unknown[]) {
-          bound = args;
-          return stmt;
-        },
-        run() {
-          const r = sqlite.prepare(sql).run(...(bound as never[]));
-          return Promise.resolve({
-            success: true,
-            meta: { changes: Number(r.changes), last_row_id: Number(r.lastInsertRowid) },
-          });
-        },
-        first() {
-          const row = sqlite.prepare(sql).get(...(bound as never[]));
-          return Promise.resolve(row ?? null);
-        },
-        all() {
-          const results = sqlite.prepare(sql).all(...(bound as never[]));
-          return Promise.resolve({ success: true, results, meta: {} });
-        },
-      };
-      return stmt;
-    },
-  } as unknown as D1Database;
-}
-
-/**
- * Apply every D1 migration (0001..0005) in order. 0004 is a Postgres-only column
- * widening (ALTER COLUMN ... TYPE) that SQLite cannot parse; it is a no-op for
- * SQLite (key_prefix already has TEXT affinity), so we tolerate only that file
- * throwing. Any other migration failing is a real error.
- */
-function applyMigrations(sqlite: DatabaseSync): void {
-  const files = readdirSync(MIGRATIONS_DIR)
-    .filter((f) => f.endsWith('.sql'))
-    .sort();
-
-  for (const file of files) {
-    const sql = readFileSync(`${MIGRATIONS_DIR}/${file}`, 'utf8');
-    try {
-      sqlite.exec(sql);
-    } catch (err) {
-      if (!file.startsWith('0004')) {
-        throw new Error(`Migration ${file} failed: ${(err as Error).message}`);
-      }
-    }
-  }
-}
-
-function makeAdapter() {
-  const sqlite = new DatabaseSync(':memory:');
-  applyMigrations(sqlite);
-  return new D1DatabaseAdapter(createD1(sqlite));
+function makeAdapter(): D1DatabaseAdapter {
+  return makeD1Adapter();
 }
 
 const baseTenant = {
@@ -205,39 +141,42 @@ describe('D1DatabaseAdapter upload_sessions tenant stamping', () => {
   beforeEach(async () => {
     db = makeAdapter();
     await db.createTenant({ id: TENANT, ...baseTenant, name: 'Upload Tenant' });
-    await db.createFile({
-      id: FILE,
-      tenantId: TENANT,
-      originalName: 'x.png',
-      storedPath: `tenants/${TENANT}/${FILE}.png`,
-      fileType: 'image/png',
-      sizeBytes: 10,
-      context: 'default',
-      tags: null,
-    });
   });
 
   it('stamps and round-trips the owning tenant on the session', async () => {
-    await db.createUploadSession({
-      fileId: FILE,
-      tenantId: TENANT,
-      presignedUrl: '/_internal/upload/x',
-      expiresAt: Date.now() + 1000,
-    });
+    await seedUpload(
+      db,
+      {
+        id: FILE,
+        tenantId: TENANT,
+        originalName: 'x.png',
+        storedPath: `tenants/${TENANT}/${FILE}.png`,
+        fileType: 'image/png',
+        sizeBytes: 10,
+        context: 'default',
+        tags: null,
+      },
+      { pending: true }
+    );
 
     const session = await db.getUploadSessionByFileId(FILE);
     expect(session?.tenantId).toBe(TENANT);
+    expect(session?.status).toBe('pending');
   });
 
-  it('leaves tenantId null when not stamped (backfillable, no regression)', async () => {
-    await db.createUploadSession({
-      fileId: FILE,
-      presignedUrl: '/_internal/upload/x',
-      expiresAt: Date.now() + 1000,
+  it('stores an upload requested without a context under the default context', async () => {
+    await seedUpload(db, {
+      id: 'file-noctx',
+      tenantId: TENANT,
+      originalName: 'n.png',
+      storedPath: `tenants/${TENANT}/file-noctx.png`,
+      fileType: 'image/png',
+      sizeBytes: 10,
+      context: null,
+      tags: null,
     });
 
-    const session = await db.getUploadSessionByFileId(FILE);
-    expect(session?.tenantId).toBeNull();
+    expect((await db.getFileById('file-noctx', TENANT))?.context).toBe('default');
   });
 });
 
@@ -252,7 +191,7 @@ describe('D1DatabaseAdapter migrateFilesToWorkspace', () => {
     id: string,
     opts: { size: number; tags?: Record<string, string>; workspaceId?: string; deleted?: boolean }
   ): Promise<void> {
-    await db.createFile({
+    await seedUpload(db, {
       id,
       tenantId: TENANT,
       originalName: `${id}.bin`,
@@ -264,7 +203,7 @@ describe('D1DatabaseAdapter migrateFilesToWorkspace', () => {
       workspaceId: opts.workspaceId,
     });
     if (opts.deleted) {
-      await db.softDeleteFile(id, TENANT);
+      await db.deleteFileAndReleaseQuota(id, TENANT);
     }
   }
 
@@ -272,7 +211,7 @@ describe('D1DatabaseAdapter migrateFilesToWorkspace', () => {
     db = makeAdapter();
     await db.createTenant({ id: TENANT, ...baseTenant, name: 'Migration Tenant' });
     await db.createWorkspace({ id: TARGET, tenantId: TENANT, name: 'Target', slug: 'target' });
-    // Source has an explicit quota so we can seed its used_bytes via reserve.
+    // Source has an explicit quota; seeding a file into it counts its bytes.
     await db.createWorkspace({
       id: SOURCE,
       tenantId: TENANT,
@@ -287,8 +226,8 @@ describe('D1DatabaseAdapter migrateFilesToWorkspace', () => {
     await seedFile('f-notags', { size: 10 });
     await seedFile('f-in-source', { size: 300, tags: { env: 'production' }, workspaceId: SOURCE });
     await seedFile('f-deleted', { size: 999, tags: { env: 'production' }, deleted: true });
-    // Reflect f-in-source's bytes in the source workspace usage.
-    await db.reserveWorkspaceQuota(SOURCE, 300);
+    // f-in-source's 300 bytes were reserved in the source workspace by the
+    // upload itself, so its usage already reflects them.
   });
 
   it('migrates unassigned files matching a tag and adds bytes to the target', async () => {
@@ -410,7 +349,7 @@ describe('D1DatabaseAdapter renameFile', () => {
     db = makeAdapter();
     await db.createTenant({ id: TENANT_A, ...baseTenant, name: 'Tenant A' });
     await db.createTenant({ id: TENANT_B, ...baseTenant, name: 'Tenant B' });
-    await db.createFile({
+    await seedUpload(db, {
       id: 'f-a',
       tenantId: TENANT_A,
       originalName: 'original.png',
@@ -439,7 +378,7 @@ describe('D1DatabaseAdapter renameFile', () => {
   });
 
   it('returns null for a soft-deleted file', async () => {
-    await db.softDeleteFile('f-a', TENANT_A);
+    await db.deleteFileAndReleaseQuota('f-a', TENANT_A);
 
     const result = await db.renameFile('f-a', TENANT_A, 'renamed.png');
 
@@ -463,7 +402,7 @@ describe('D1DatabaseAdapter aggregateFileContexts', () => {
     id: string,
     opts: { size: number; context?: string | null; workspaceId?: string; deleted?: boolean }
   ): Promise<void> {
-    await db.createFile({
+    await seedUpload(db, {
       id,
       tenantId: TENANT,
       originalName: `${id}.bin`,
@@ -475,7 +414,7 @@ describe('D1DatabaseAdapter aggregateFileContexts', () => {
       workspaceId: opts.workspaceId,
     });
     if (opts.deleted) {
-      await db.softDeleteFile(id, TENANT);
+      await db.deleteFileAndReleaseQuota(id, TENANT);
     }
   }
 
@@ -635,7 +574,7 @@ describe('D1DatabaseAdapter erasure ledger + resolution (migration 0008)', () =>
     await db.createTenant({ id: 'sb-2', ...baseTenant, name: 'B' });
 
     const mkFile = async (tenantId: string, id: string, deleted = false): Promise<void> => {
-      await db.createFile({
+      await seedUpload(db, {
         id,
         tenantId,
         originalName: `${id}.png`,
@@ -645,7 +584,7 @@ describe('D1DatabaseAdapter erasure ledger + resolution (migration 0008)', () =>
         context: 'default',
         tags: null,
       });
-      if (deleted) await db.softDeleteFile(id, tenantId);
+      if (deleted) await db.deleteFileAndReleaseQuota(id, tenantId);
     };
 
     await mkFile('sb-1', 'live');

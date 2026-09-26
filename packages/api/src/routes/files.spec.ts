@@ -56,15 +56,11 @@ function createMockDb() {
     getTenantByName: vi.fn(),
     getTenantById: vi.fn(),
     updateTenantApiKeyHash: vi.fn(),
-    createFile: vi.fn(),
     getFileById: vi.fn().mockResolvedValue(mockFile),
     getFileByIdUnscoped: vi.fn().mockResolvedValue(mockFile),
     getFileByStoredPath: vi.fn(),
     listFilesByTenant: vi.fn().mockResolvedValue({ files: [mockFile], nextCursor: null, total: 1 }),
-    softDeleteFile: vi.fn(),
     updateFileMetadata: vi.fn(),
-    updateFileProcessingStatus: vi.fn(),
-    updateFileSizeBytes: vi.fn(),
     renameFile: vi.fn().mockResolvedValue(mockFile),
     createWorkspace: vi.fn(),
     getWorkspaceById: vi.fn(),
@@ -72,18 +68,19 @@ function createMockDb() {
     updateWorkspace: vi.fn(),
     deleteWorkspace: vi.fn(),
     getActiveFilesByWorkspace: vi.fn(),
-    softDeleteFilesByWorkspace: vi.fn(),
-    createUploadSession: vi.fn(),
     getUploadSessionByFileId: vi.fn(),
-    updateUploadSessionStatus: vi.fn(),
+    createPendingUpload: vi.fn().mockResolvedValue({ created: true, sessionId: 'session-1' }),
+    claimUploadSession: vi.fn().mockResolvedValue(true),
+    settleUploadSession: vi.fn().mockResolvedValue(true),
+    expireStaleUploadSessions: vi.fn().mockResolvedValue(0),
+    deleteFileAndReleaseQuota: vi.fn().mockResolvedValue(null),
+    deleteWorkspaceFilesAndReleaseQuota: vi.fn().mockResolvedValue(0),
     checkQuota: vi.fn().mockResolvedValue({
       hasCapacity: true,
       quotaBytes: 500 * 1024 * 1024,
       usedBytes: 0,
       availableBytes: 500 * 1024 * 1024,
     }),
-    reserveQuota: vi.fn(),
-    releaseQuota: vi.fn(),
     getQuotaUsage: vi.fn().mockResolvedValue({
       quotaBytes: 500 * 1024 * 1024,
       usedBytes: 0,
@@ -92,8 +89,6 @@ function createMockDb() {
     }),
     recalculateQuota: vi.fn(),
     checkWorkspaceQuota: vi.fn(),
-    reserveWorkspaceQuota: vi.fn(),
-    releaseWorkspaceQuota: vi.fn(),
     aggregateFileContexts: vi.fn().mockResolvedValue([]),
     migrate: vi.fn(),
   };
@@ -759,13 +754,12 @@ describe('file routes', () => {
       const body: TestResponseBody = await res.json();
       expect(body.success).toBe(true);
       expect(storage.delete).toHaveBeenCalledWith(mockFile.storedPath);
-      expect(db.softDeleteFile).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
-      expect(db.releaseQuota).toHaveBeenCalledWith(TENANT_ID, mockFile.sizeBytes);
-      // File has no workspace, so no workspace-level release
-      expect(db.releaseWorkspaceQuota).not.toHaveBeenCalled();
+      // Soft delete, tenant + workspace release and session close are one
+      // atomic adapter call (covered by the adapter specs).
+      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
     });
 
-    it('also releases workspace quota when the file belongs to a workspace', async () => {
+    it('deletes a workspace file through the same atomic call', async () => {
       const workspaceId = '770e8400-e29b-41d4-a716-446655440002';
       db.getFileById.mockResolvedValueOnce({ ...mockFile, workspaceId });
 
@@ -779,8 +773,7 @@ describe('file routes', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(db.releaseQuota).toHaveBeenCalledWith(TENANT_ID, mockFile.sizeBytes);
-      expect(db.releaseWorkspaceQuota).toHaveBeenCalledWith(workspaceId, mockFile.sizeBytes);
+      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
     });
 
     it('still completes the DB cleanup when the storage delete fails', async () => {
@@ -798,8 +791,7 @@ describe('file routes', () => {
       expect(res.status).toBe(200);
       const body: TestResponseBody = await res.json();
       expect(body.success).toBe(true);
-      expect(db.softDeleteFile).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
-      expect(db.releaseQuota).toHaveBeenCalledWith(TENANT_ID, mockFile.sizeBytes);
+      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
     });
 
     it('returns 404 if file not found and touches neither storage nor quota', async () => {
@@ -815,8 +807,7 @@ describe('file routes', () => {
       );
       expect(res.status).toBe(404);
       expect(storage.delete).not.toHaveBeenCalled();
-      expect(db.softDeleteFile).not.toHaveBeenCalled();
-      expect(db.releaseQuota).not.toHaveBeenCalled();
+      expect(db.deleteFileAndReleaseQuota).not.toHaveBeenCalled();
     });
   });
 });
