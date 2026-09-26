@@ -5,12 +5,17 @@ import { fileURLToPath } from 'node:url';
 import type {
   DatabaseAdapter,
   CreateTenantInput,
-  CreateFileInput,
   ListFilesResult,
   CreateWorkspaceInput,
   UpdateWorkspaceInput,
   QuotaCheckResult,
-  CreateUploadSessionInput,
+  CreatePendingUploadInput,
+  CreatePendingUploadResult,
+  UploadSessionOutcome,
+  UploadSessionStatus,
+  OpenUploadSessionStatus,
+  ExpireStaleUploadSessionsResult,
+  DeleteWorkspaceFilesResult,
   MigrateFilesToWorkspaceInput,
   MigrateFilesToWorkspaceResult,
   FileContextAggregate,
@@ -26,7 +31,6 @@ import type {
   RecordErasureEventInput,
   QuotaResponse,
   AllowedMimeType,
-  UploadSessionStatus,
   ProcessingStatus,
 } from '@storage-brain/shared';
 import { hashApiKey, verifyApiKey } from '../../utils/crypto';
@@ -222,14 +226,6 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
   // Files
   // ============================================================================
 
-  async createFile(input: CreateFileInput): Promise<void> {
-    const now = Date.now();
-    await this.sql`
-      INSERT INTO files (id, tenant_id, workspace_id, original_name, stored_path, file_type, size_bytes, context, tags, metadata, processing_status, webhook_url, created_at, updated_at)
-      VALUES (${input.id}, ${input.tenantId}, ${input.workspaceId ?? null}, ${input.originalName}, ${input.storedPath}, ${input.fileType}, ${input.sizeBytes}, ${input.context}, ${input.tags ? JSON.stringify(input.tags) : null}, ${null}, ${'pending'}, ${input.webhookUrl ?? null}, ${now}, ${now})
-    `;
-  }
-
   async getFileById(fileId: string, tenantId: string): Promise<StoredFile | null> {
     const rows = await this.sql`
       SELECT * FROM files WHERE id = ${fileId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
@@ -302,14 +298,6 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     return { files, nextCursor, total };
   }
 
-  async softDeleteFile(fileId: string, tenantId: string): Promise<void> {
-    const now = Date.now();
-    await this.sql`
-      UPDATE files SET deleted_at = ${now}, updated_at = ${now}
-      WHERE id = ${fileId} AND tenant_id = ${tenantId}
-    `;
-  }
-
   async updateFileMetadata(
     fileId: string,
     metadata: Record<string, unknown>,
@@ -319,20 +307,6 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     await this.sql`
       UPDATE files SET metadata = ${JSON.stringify(metadata)}, processing_status = ${status}, updated_at = ${now}
       WHERE id = ${fileId}
-    `;
-  }
-
-  async updateFileProcessingStatus(fileId: string, status: ProcessingStatus): Promise<void> {
-    const now = Date.now();
-    await this.sql`
-      UPDATE files SET processing_status = ${status}, updated_at = ${now} WHERE id = ${fileId}
-    `;
-  }
-
-  async updateFileSizeBytes(fileId: string, sizeBytes: number): Promise<void> {
-    const now = Date.now();
-    await this.sql`
-      UPDATE files SET size_bytes = ${sizeBytes}, updated_at = ${now} WHERE id = ${fileId}
     `;
   }
 
@@ -421,14 +395,6 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
       SELECT * FROM files WHERE workspace_id = ${workspaceId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
     `;
     return rows.map((row) => this.mapFileRow(row));
-  }
-
-  async softDeleteFilesByWorkspace(workspaceId: string, tenantId: string): Promise<void> {
-    const now = Date.now();
-    await this.sql`
-      UPDATE files SET deleted_at = ${now}, updated_at = ${now}
-      WHERE workspace_id = ${workspaceId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
-    `;
   }
 
   async migrateFilesToWorkspace(
@@ -544,17 +510,57 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
   }
 
   // ============================================================================
-  // Upload Sessions
+  // Upload Sessions and quota accounting (contract: DatabaseAdapter)
+  //
+  // Lock order is always file row before session row, in every method that
+  // takes both, so a delete racing a settle serialises instead of deadlocking.
   // ============================================================================
 
-  async createUploadSession(input: CreateUploadSessionInput): Promise<string> {
-    const id = crypto.randomUUID();
+  async createPendingUpload(input: CreatePendingUploadInput): Promise<CreatePendingUploadResult> {
+    const { file, session } = input;
+    const size = file.sizeBytes;
+    const workspaceId = file.workspaceId ?? null;
+    const sessionId = crypto.randomUUID();
     const now = Date.now();
-    await this.sql`
-      INSERT INTO upload_sessions (id, file_id, tenant_id, presigned_url, expires_at, status, created_at)
-      VALUES (${id}, ${input.fileId}, ${input.tenantId ?? null}, ${input.presignedUrl}, ${input.expiresAt}, ${'pending'}, ${now})
-    `;
-    return id;
+
+    try {
+      return await this.sql.begin(async (tx) => {
+        const sql = tx as unknown as postgres.Sql;
+
+        // Conditional increments: the row lock taken by UPDATE serialises
+        // concurrent reservations, and each re-checks the capacity it sees.
+        const tenantRows = await sql`
+          UPDATE tenants SET used_bytes = used_bytes + ${size}, updated_at = ${now}
+          WHERE id = ${file.tenantId} AND (quota_bytes - used_bytes) >= ${size}
+          RETURNING id
+        `;
+        if (tenantRows.length === 0) throw new NoCapacity();
+
+        if (workspaceId) {
+          const wsRows = await sql`
+            UPDATE workspaces SET used_bytes = used_bytes + ${size}, updated_at = ${now}
+            WHERE id = ${workspaceId} AND tenant_id = ${file.tenantId}
+              AND (quota_bytes IS NULL OR (quota_bytes - used_bytes) >= ${size})
+            RETURNING id
+          `;
+          // Rolls back the tenant increment with the rest of the transaction.
+          if (wsRows.length === 0) throw new NoCapacity();
+        }
+
+        await sql`
+          INSERT INTO files (id, tenant_id, workspace_id, original_name, stored_path, file_type, size_bytes, context, tags, metadata, processing_status, webhook_url, created_at, updated_at)
+          VALUES (${file.id}, ${file.tenantId}, ${workspaceId}, ${file.originalName}, ${file.storedPath}, ${file.fileType}, ${size}, ${file.context}, ${file.tags ? JSON.stringify(file.tags) : null}, ${null}, ${'pending'}, ${file.webhookUrl ?? null}, ${now}, ${now})
+        `;
+        await sql`
+          INSERT INTO upload_sessions (id, file_id, tenant_id, presigned_url, expires_at, status, created_at)
+          VALUES (${sessionId}, ${file.id}, ${file.tenantId}, ${session.presignedUrl}, ${session.expiresAt}, ${'pending'}, ${now})
+        `;
+        return { created: true as const, sessionId };
+      });
+    } catch (err) {
+      if (err instanceof NoCapacity) return { created: false };
+      throw err;
+    }
   }
 
   async getUploadSessionByFileId(fileId: string): Promise<UploadSession | null> {
@@ -565,10 +571,152 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     return row ? this.mapUploadSessionRow(row) : null;
   }
 
-  async updateUploadSessionStatus(sessionId: string, status: UploadSessionStatus): Promise<void> {
-    await this.sql`
-      UPDATE upload_sessions SET status = ${status} WHERE id = ${sessionId}
+  async claimUploadSession(sessionId: string): Promise<boolean> {
+    const rows = await this.sql`
+      UPDATE upload_sessions SET status = ${'uploading'}
+      WHERE id = ${sessionId} AND status = ${'pending'}
+      RETURNING id
     `;
+    return rows.length > 0;
+  }
+
+  async settleUploadSession(
+    sessionId: string,
+    outcome: UploadSessionOutcome,
+    fromStatus?: OpenUploadSessionStatus
+  ): Promise<boolean> {
+    const now = Date.now();
+    const from: OpenUploadSessionStatus[] = fromStatus ? [fromStatus] : ['pending', 'uploading'];
+    const actualBytes = outcome.status === 'completed' ? outcome.actualBytes : 0;
+    const processingStatus: ProcessingStatus =
+      outcome.status === 'completed' ? 'completed' : 'failed';
+
+    return this.sql.begin(async (tx) => {
+      const sql = tx as unknown as postgres.Sql;
+
+      const sessions = await sql`SELECT file_id FROM upload_sessions WHERE id = ${sessionId}`;
+      const fileId = sessions[0]?.file_id as string | undefined;
+      if (!fileId) return false;
+
+      // File row first (see the lock-order note above).
+      const files = await sql`
+        SELECT tenant_id, workspace_id, size_bytes, deleted_at FROM files
+        WHERE id = ${fileId} FOR UPDATE
+      `;
+
+      // The status guard makes settling exactly-once: a second settle, or one
+      // racing a delete that already closed the session, matches no row.
+      const settled = await sql`
+        UPDATE upload_sessions SET status = ${outcome.status}
+        WHERE id = ${sessionId} AND status IN ${sql(from)}
+        RETURNING id
+      `;
+      if (settled.length === 0) return false;
+
+      const file = files[0];
+      if (!file || file.deleted_at !== null) return true;
+
+      const delta = actualBytes - Number(file.size_bytes);
+      if (delta !== 0) {
+        await sql`
+          UPDATE tenants SET used_bytes = GREATEST(0, used_bytes + ${delta}), updated_at = ${now}
+          WHERE id = ${file.tenant_id as string}
+        `;
+        if (file.workspace_id) {
+          await sql`
+            UPDATE workspaces SET used_bytes = GREATEST(0, used_bytes + ${delta}), updated_at = ${now}
+            WHERE id = ${file.workspace_id as string}
+          `;
+        }
+      }
+      await sql`
+        UPDATE files SET size_bytes = ${actualBytes}, processing_status = ${processingStatus}, updated_at = ${now}
+        WHERE id = ${fileId}
+      `;
+      return true;
+    });
+  }
+
+  async expireStaleUploadSessions(
+    now: number,
+    uploadingGraceMs: number,
+    limit: number
+  ): Promise<ExpireStaleUploadSessionsResult> {
+    const rows = await this.sql`
+      SELECT id, status FROM upload_sessions
+      WHERE (status = ${'pending'} AND expires_at < ${now})
+         OR (status = ${'uploading'} AND expires_at < ${now - uploadingGraceMs})
+      ORDER BY expires_at
+      LIMIT ${limit}
+    `;
+    let expired = 0;
+    for (const row of rows) {
+      // Settle from the state it was selected in: a pending session a transfer
+      // claimed since the SELECT is left alone until its grace period is over.
+      const settled = await this.settleUploadSession(
+        row.id as string,
+        { status: 'expired' },
+        row.status as OpenUploadSessionStatus
+      );
+      if (settled) expired += 1;
+    }
+    return { scanned: rows.length, expired };
+  }
+
+  async deleteFileAndReleaseQuota(fileId: string, tenantId: string): Promise<StoredFile | null> {
+    const now = Date.now();
+    return this.sql.begin(async (tx) => {
+      const sql = tx as unknown as postgres.Sql;
+
+      // The UPDATE locks the file row and returns the size as of any settle
+      // that committed before it, so the release is always the current value.
+      const rows = await sql`
+        UPDATE files SET deleted_at = ${now}, updated_at = ${now}
+        WHERE id = ${fileId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
+        RETURNING *
+      `;
+      const row = rows[0];
+      if (!row) return null;
+      const file = this.mapFileRow(row);
+
+      await releaseBytes(sql, file.tenantId, file.workspaceId, file.sizeBytes, now);
+      await sql`
+        UPDATE upload_sessions SET status = ${'failed'}
+        WHERE file_id = ${fileId} AND status IN ${sql(['pending', 'uploading'])}
+      `;
+      return file;
+    });
+  }
+
+  async deleteWorkspaceFilesAndReleaseQuota(
+    workspaceId: string,
+    tenantId: string
+  ): Promise<DeleteWorkspaceFilesResult> {
+    const now = Date.now();
+    return this.sql.begin(async (tx) => {
+      const sql = tx as unknown as postgres.Sql;
+
+      // RETURNING yields exactly the rows this statement soft-deleted, which
+      // are the ones released below and whose objects the caller removes.
+      const rows = await sql`
+        UPDATE files SET deleted_at = ${now}, updated_at = ${now}
+        WHERE workspace_id = ${workspaceId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
+        RETURNING id, stored_path, size_bytes
+      `;
+      if (rows.length === 0) return { releasedBytes: 0, files: [] };
+
+      const total = rows.reduce((sum, r) => sum + Number(r.size_bytes), 0);
+      await releaseBytes(sql, tenantId, workspaceId, total, now);
+      await sql`
+        UPDATE upload_sessions SET status = ${'failed'}
+        WHERE file_id IN ${sql(rows.map((r) => r.id as string))}
+          AND status IN ${sql(['pending', 'uploading'])}
+      `;
+      return {
+        releasedBytes: total,
+        files: rows.map((r) => ({ id: r.id as string, storedPath: r.stored_path as string })),
+      };
+    });
   }
 
   // ============================================================================
@@ -591,28 +739,6 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     const hasCapacity = availableBytes >= fileSizeBytes;
 
     return { hasCapacity, quotaBytes, usedBytes, availableBytes };
-  }
-
-  async reserveQuota(tenantId: string, sizeBytes: number): Promise<void> {
-    const now = Date.now();
-    const result = await this.sql`
-      UPDATE tenants
-      SET used_bytes = used_bytes + ${sizeBytes}, updated_at = ${now}
-      WHERE id = ${tenantId} AND (quota_bytes - used_bytes) >= ${sizeBytes}
-    `;
-
-    if (result.count === 0) {
-      throw new Error('Insufficient quota or tenant not found');
-    }
-  }
-
-  async releaseQuota(tenantId: string, sizeBytes: number): Promise<void> {
-    const now = Date.now();
-    await this.sql`
-      UPDATE tenants
-      SET used_bytes = GREATEST(0, used_bytes - ${sizeBytes}), updated_at = ${now}
-      WHERE id = ${tenantId}
-    `;
   }
 
   async getQuotaUsage(tenantId: string): Promise<QuotaResponse> {
@@ -672,28 +798,6 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     const hasCapacity = availableBytes >= fileSizeBytes;
 
     return { hasCapacity, quotaBytes, usedBytes, availableBytes };
-  }
-
-  async reserveWorkspaceQuota(workspaceId: string, sizeBytes: number): Promise<void> {
-    const now = Date.now();
-    const result = await this.sql`
-      UPDATE workspaces
-      SET used_bytes = used_bytes + ${sizeBytes}, updated_at = ${now}
-      WHERE id = ${workspaceId} AND (quota_bytes IS NULL OR (quota_bytes - used_bytes) >= ${sizeBytes})
-    `;
-
-    if (result.count === 0) {
-      throw new Error('Insufficient workspace quota or workspace not found');
-    }
-  }
-
-  async releaseWorkspaceQuota(workspaceId: string, sizeBytes: number): Promise<void> {
-    const now = Date.now();
-    await this.sql`
-      UPDATE workspaces
-      SET used_bytes = GREATEST(0, used_bytes - ${sizeBytes}), updated_at = ${now}
-      WHERE id = ${workspaceId}
-    `;
   }
 
   // ============================================================================
@@ -802,5 +906,29 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
       status: row.status as UploadSessionStatus,
       createdAt: Number(row.created_at),
     };
+  }
+}
+
+/** Thrown inside a reservation transaction to roll it back: no room left. */
+class NoCapacity extends Error {}
+
+/** Release bytes from a tenant and, when set, one of its workspaces (clamped at 0). */
+async function releaseBytes(
+  sql: postgres.Sql,
+  tenantId: string,
+  workspaceId: string | null,
+  bytes: number,
+  now: number
+): Promise<void> {
+  if (bytes <= 0) return;
+  await sql`
+    UPDATE tenants SET used_bytes = GREATEST(0, used_bytes - ${bytes}), updated_at = ${now}
+    WHERE id = ${tenantId}
+  `;
+  if (workspaceId) {
+    await sql`
+      UPDATE workspaces SET used_bytes = GREATEST(0, used_bytes - ${bytes}), updated_at = ${now}
+      WHERE id = ${workspaceId}
+    `;
   }
 }

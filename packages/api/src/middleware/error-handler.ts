@@ -9,10 +9,6 @@ export class ApiError extends BaseApiError {
     return new ApiError(400, 'INVALID_FILE_TYPE', message);
   }
 
-  static fileTooLarge(message = 'File size exceeds maximum allowed') {
-    return new ApiError(400, 'FILE_TOO_LARGE', message);
-  }
-
   /** 413: the request body itself is larger than the route accepts. */
   static payloadTooLarge(message = 'Request body too large') {
     return new ApiError(413, 'PAYLOAD_TOO_LARGE', message);

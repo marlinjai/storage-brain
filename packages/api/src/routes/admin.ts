@@ -463,14 +463,11 @@ adminRoutes.delete('/tenants/:tenantId/files/:fileId', async (c) => {
     // Best-effort deletion: continue even if storage delete fails
   }
 
-  // Soft delete the row (deleted_at stays set for the audit trail)
-  await db.softDeleteFile(fileId, tenantId);
-
-  // Release the bytes at tenant level, and at workspace level if assigned
-  await db.releaseQuota(tenantId, file.sizeBytes);
-  if (file.workspaceId) {
-    await db.releaseWorkspaceQuota(file.workspaceId, file.sizeBytes);
-  }
+  // Soft delete the row (deleted_at stays set for the audit trail), release
+  // its bytes at tenant and workspace level and close any open upload
+  // session, atomically. A concurrent DELETE that got there first makes this
+  // a no-op, so the bytes are released exactly once.
+  await db.deleteFileAndReleaseQuota(fileId, tenantId);
 
   return c.json({ success: true });
 });

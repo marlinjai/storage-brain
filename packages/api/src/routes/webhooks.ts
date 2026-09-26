@@ -59,7 +59,7 @@ webhookRoutes.post('/r2-upload-complete', async (c) => {
 
   // R2 event notification payload structure
   // https://developers.cloudflare.com/r2/buckets/event-notifications/
-  const { object } = body as { object?: { key?: string } };
+  const { object } = body as { object?: { key?: string; size?: unknown } };
 
   if (!object?.key) {
     return c.json({ error: 'Invalid webhook payload' }, 400);
@@ -89,18 +89,62 @@ webhookRoutes.post('/r2-upload-complete', async (c) => {
     return c.json({ status: 'ignored' });
   }
 
-  // Update session status
-  await db.updateUploadSessionStatus(session.id, 'completed');
-
-  // Get file record
+  // Settle the session with the size R2 reports for the stored object, which
+  // replaces the reservation with the real bytes. Without a usable size the
+  // reservation (the declared size) is kept as the file's size. Only a session
+  // still `pending` is settled here, atomically: the internal upload route
+  // claims its session (`uploading`) before writing, and its own put fires
+  // this same event, so settling an `uploading` session would race that route
+  // and could make it delete the object it just stored. A session that is
+  // already settled (a redelivered event) changes nothing either.
   const file = await db.getFileById(fileId, tenantId);
   if (!file) {
     console.error(`File record not found: ${fileId}`);
     return c.json({ error: 'File record not found' }, 404);
   }
 
-  // Mark file as completed immediately
-  await db.updateFileProcessingStatus(file.id, 'completed');
+  // The event must be for this file's own object, not merely a key under its
+  // prefix: settling or deleting anything else would act on the wrong bytes.
+  if (file.storedPath !== storedPath) {
+    console.warn(`Ignoring upload event for unexpected key of file ${fileId}: ${storedPath}`);
+    return c.json({ status: 'ignored' });
+  }
+
+  const reportedSize = (object as { size?: unknown }).size;
+  const usableSize =
+    typeof reportedSize === 'number' && Number.isSafeInteger(reportedSize) && reportedSize >= 0
+      ? reportedSize
+      : null;
+
+  // More bytes than were declared (and reserved) are refused, as the internal
+  // upload route refuses them with a 413: the quota was only checked for the
+  // declared size. The reservation is released and the object removed.
+  const declaredSize = file.sizeBytes;
+  if (usableSize !== null && declaredSize > 0 && usableSize > declaredSize) {
+    const rejected = await db.settleUploadSession(session.id, { status: 'failed' }, 'pending');
+    if (!rejected) {
+      return c.json({ status: 'ignored' });
+    }
+    try {
+      await c.get('storage').delete(storedPath);
+    } catch (err) {
+      console.error(`Failed to delete oversized upload ${storedPath}:`, err);
+    }
+    console.warn(
+      `Rejected upload of ${usableSize} bytes for file ${fileId}: ${declaredSize} bytes were declared`
+    );
+    return c.json({ status: 'rejected', fileId });
+  }
+
+  const actualBytes = usableSize ?? declaredSize;
+  const settled = await db.settleUploadSession(
+    session.id,
+    { status: 'completed', actualBytes },
+    'pending'
+  );
+  if (!settled) {
+    return c.json({ status: 'ignored' });
+  }
   console.log(`File marked as completed: ${fileId}`);
 
   // Fire webhook if configured (non-blocking via waitUntil)
@@ -110,7 +154,7 @@ webhookRoutes.post('/r2-upload-complete', async (c) => {
       url: `/api/v1/files/${file.id}/download`,
       originalName: file.originalName,
       fileType: file.fileType,
-      sizeBytes: file.sizeBytes,
+      sizeBytes: actualBytes,
       context: file.context,
       tags: file.tags,
       metadata: file.metadata,

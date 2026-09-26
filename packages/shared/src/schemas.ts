@@ -35,12 +35,16 @@ export const fileNameSchema = z
 export const requestUploadSchema = z.object({
   fileType: fileTypeSchema,
   fileName: fileNameSchema,
+  // Required: the declared size is what quota is reserved for, and the upload
+  // route refuses any body larger than it.
   fileSizeBytes: z
-    .number()
-    .int()
-    .positive()
-    .max(MAX_FILE_SIZE_BYTES, `File size exceeds maximum of ${MAX_FILE_SIZE_BYTES} bytes`)
-    .optional(),
+    .number({
+      required_error: 'fileSizeBytes is required: declare the exact size of the file in bytes',
+      invalid_type_error: 'fileSizeBytes must be a number of bytes',
+    })
+    .int('fileSizeBytes must be a whole number of bytes')
+    .positive('fileSizeBytes must be greater than 0: empty files cannot be uploaded')
+    .max(MAX_FILE_SIZE_BYTES, `File size exceeds maximum of ${MAX_FILE_SIZE_BYTES} bytes`),
   context: z.string().max(100).optional(),
   tags: tagsSchema,
   webhookUrl: z.string().url().optional(),

@@ -45,13 +45,12 @@ function file(): StoredFile {
 function createMockDb() {
   return {
     getUploadSessionByFileId: vi.fn().mockResolvedValue({ id: 'sess-1', status: 'pending' }),
-    updateUploadSessionStatus: vi.fn().mockResolvedValue(undefined),
+    settleUploadSession: vi.fn().mockResolvedValue(true),
     getFileById: vi.fn().mockResolvedValue(file()),
-    updateFileProcessingStatus: vi.fn().mockResolvedValue(undefined),
   };
 }
 
-function createMockStorage(): StorageAdapter {
+function createMockStorage() {
   return {
     put: vi.fn(),
     get: vi.fn(),
@@ -63,12 +62,17 @@ function createMockStorage(): StorageAdapter {
 
 describe('POST /webhooks/r2-upload-complete signature gate', () => {
   let db: ReturnType<typeof createMockDb>;
+  let storage: ReturnType<typeof createMockStorage>;
   let app: ReturnType<typeof createApp>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     db = createMockDb();
-    app = createApp({ db: db as unknown as DatabaseAdapter, storage: createMockStorage() });
+    storage = createMockStorage();
+    app = createApp({
+      db: db as unknown as DatabaseAdapter,
+      storage: storage as unknown as StorageAdapter,
+    });
   });
 
   function post(
@@ -90,7 +94,95 @@ describe('POST /webhooks/r2-upload-complete signature gate', () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: 'completed', fileId: FILE_ID });
-    expect(db.updateFileProcessingStatus).toHaveBeenCalledWith(FILE_ID, 'completed');
+    // No size in the event: the reservation (the file's declared size) stands.
+    // Pending-only: the webhook never settles a transfer the internal route claimed.
+    expect(db.settleUploadSession).toHaveBeenCalledWith(
+      'sess-1',
+      { status: 'completed', actualBytes: 2048 },
+      'pending'
+    );
+  });
+
+  it('settles with the object size R2 reports, replacing the reservation', async () => {
+    const body = JSON.stringify({
+      object: { key: `tenants/${TENANT_ID}/files/${FILE_ID}/photo.png`, size: 1500 },
+    });
+    const signature = await signWebhookBody(body, SECRET);
+
+    const res = await post(body, { 'X-Webhook-Signature': signature });
+
+    expect(res.status).toBe(200);
+    expect(db.settleUploadSession).toHaveBeenCalledWith(
+      'sess-1',
+      { status: 'completed', actualBytes: 1500 },
+      'pending'
+    );
+  });
+
+  it('ignores the event for an upload the internal route claimed, leaving the object alone', async () => {
+    // The adapter refuses a pending-only settle of an `uploading` session.
+    db.getUploadSessionByFileId.mockResolvedValueOnce({ id: 'sess-1', status: 'uploading' });
+    db.settleUploadSession.mockResolvedValueOnce(false);
+    const signature = await signWebhookBody(RAW_BODY, SECRET);
+
+    const res = await post(RAW_BODY, { 'X-Webhook-Signature': signature });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: 'ignored' });
+    expect(db.settleUploadSession).toHaveBeenCalledWith('sess-1', expect.anything(), 'pending');
+    expect(storage.delete).not.toHaveBeenCalled();
+  });
+
+  it('refuses an object larger than the declared size: fails the session and deletes it', async () => {
+    const key = `tenants/${TENANT_ID}/files/${FILE_ID}/photo.png`;
+    const body = JSON.stringify({ object: { key, size: 4096 } });
+    const signature = await signWebhookBody(body, SECRET);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const res = await post(body, { 'X-Webhook-Signature': signature });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: 'rejected', fileId: FILE_ID });
+    expect(db.settleUploadSession).toHaveBeenCalledTimes(1);
+    expect(db.settleUploadSession).toHaveBeenCalledWith('sess-1', { status: 'failed' }, 'pending');
+    expect(storage.delete).toHaveBeenCalledWith(key);
+  });
+
+  it('leaves an oversized object alone when the session was already settled elsewhere', async () => {
+    const body = JSON.stringify({
+      object: { key: `tenants/${TENANT_ID}/files/${FILE_ID}/photo.png`, size: 4096 },
+    });
+    db.settleUploadSession.mockResolvedValueOnce(false);
+    const signature = await signWebhookBody(body, SECRET);
+
+    const res = await post(body, { 'X-Webhook-Signature': signature });
+
+    expect(await res.json()).toEqual({ status: 'ignored' });
+    expect(storage.delete).not.toHaveBeenCalled();
+  });
+
+  it("ignores an event whose key is not the file's own object", async () => {
+    const body = JSON.stringify({
+      object: { key: `tenants/${TENANT_ID}/files/${FILE_ID}/other.png`, size: 10 },
+    });
+    const signature = await signWebhookBody(body, SECRET);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const res = await post(body, { 'X-Webhook-Signature': signature });
+
+    expect(await res.json()).toEqual({ status: 'ignored' });
+    expect(db.settleUploadSession).not.toHaveBeenCalled();
+    expect(storage.delete).not.toHaveBeenCalled();
+  });
+
+  it('ignores a redelivered event for an already settled session', async () => {
+    db.settleUploadSession.mockResolvedValueOnce(false);
+    const signature = await signWebhookBody(RAW_BODY, SECRET);
+
+    const res = await post(RAW_BODY, { 'X-Webhook-Signature': signature });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: 'ignored' });
   });
 
   it('rejects a request with an invalid signature (401), no side effects', async () => {
@@ -99,7 +191,7 @@ describe('POST /webhooks/r2-upload-complete signature gate', () => {
     const res = await post(RAW_BODY, { 'X-Webhook-Signature': badSignature });
 
     expect(res.status).toBe(401);
-    expect(db.updateFileProcessingStatus).not.toHaveBeenCalled();
+    expect(db.settleUploadSession).not.toHaveBeenCalled();
   });
 
   it('rejects a request whose body was tampered after signing (401)', async () => {
@@ -116,7 +208,7 @@ describe('POST /webhooks/r2-upload-complete signature gate', () => {
     const res = await post(RAW_BODY, {});
 
     expect(res.status).toBe(401);
-    expect(db.updateFileProcessingStatus).not.toHaveBeenCalled();
+    expect(db.settleUploadSession).not.toHaveBeenCalled();
   });
 
   it('fails closed with 500 when the signing secret is unset (misconfig)', async () => {
@@ -128,7 +220,7 @@ describe('POST /webhooks/r2-upload-complete signature gate', () => {
     const res = await post(RAW_BODY, { 'X-Webhook-Signature': signature }, envWithout);
 
     expect(res.status).toBe(500);
-    expect(db.updateFileProcessingStatus).not.toHaveBeenCalled();
+    expect(db.settleUploadSession).not.toHaveBeenCalled();
   });
 
   it('fails closed with 500 when the signing secret is too short (misconfig)', async () => {
@@ -143,6 +235,6 @@ describe('POST /webhooks/r2-upload-complete signature gate', () => {
     );
 
     expect(res.status).toBe(500);
-    expect(db.updateFileProcessingStatus).not.toHaveBeenCalled();
+    expect(db.settleUploadSession).not.toHaveBeenCalled();
   });
 });

@@ -1,63 +1,11 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import type { D1Database } from '@cloudflare/workers-types';
 import type { StorageAdapter } from '@storage-brain/shared';
 import { D1DatabaseAdapter } from '../adapters/database/d1';
 import { createApp } from '../app';
 import { signErasureBody, ERASURE_SIGNATURE_HEADER } from '../lib/erasure/signature';
+import { makeD1Adapter, seedFile as seedUpload } from '../test-utils/d1-sqlite';
 
-const MIGRATIONS_DIR = fileURLToPath(new URL('../../migrations', import.meta.url));
 const SECRET = 'erasure-webhook-secret';
-
-// --- D1-over-node:sqlite shim (same pattern as d1.spec.ts) ------------------
-function createD1(sqlite: DatabaseSync): D1Database {
-  return {
-    prepare(sql: string) {
-      let bound: unknown[] = [];
-      const stmt = {
-        bind(...args: unknown[]) {
-          bound = args;
-          return stmt;
-        },
-        run() {
-          const r = sqlite.prepare(sql).run(...(bound as never[]));
-          return Promise.resolve({
-            success: true,
-            meta: { changes: Number(r.changes), last_row_id: Number(r.lastInsertRowid) },
-          });
-        },
-        first() {
-          const row = sqlite.prepare(sql).get(...(bound as never[]));
-          return Promise.resolve(row ?? null);
-        },
-        all() {
-          const results = sqlite.prepare(sql).all(...(bound as never[]));
-          return Promise.resolve({ success: true, results, meta: {} });
-        },
-      };
-      return stmt;
-    },
-  } as unknown as D1Database;
-}
-
-function applyMigrations(sqlite: DatabaseSync): void {
-  const files = readdirSync(MIGRATIONS_DIR)
-    .filter((f) => f.endsWith('.sql'))
-    .sort();
-  for (const file of files) {
-    const sql = readFileSync(`${MIGRATIONS_DIR}/${file}`, 'utf8');
-    try {
-      sqlite.exec(sql);
-    } catch (err) {
-      // 0004 is a Postgres-only ALTER COLUMN TYPE that SQLite cannot parse.
-      if (!file.startsWith('0004')) {
-        throw new Error(`Migration ${file} failed: ${(err as Error).message}`);
-      }
-    }
-  }
-}
 
 const baseTenant = {
   apiKeyHash: 'hash',
@@ -76,9 +24,7 @@ interface Harness {
 }
 
 function makeHarness(): Harness {
-  const sqlite = new DatabaseSync(':memory:');
-  applyMigrations(sqlite);
-  const db = new D1DatabaseAdapter(createD1(sqlite));
+  const db = makeD1Adapter();
   const deleteMock: Mock = vi.fn().mockResolvedValue(undefined);
   const storage: StorageAdapter = {
     put: vi.fn(),
@@ -105,21 +51,24 @@ async function seedFile(
   db: D1DatabaseAdapter,
   tenantId: string,
   id: string,
-  opts: { workspaceId?: string; deleted?: boolean } = {}
+  opts: { workspaceId?: string; deleted?: boolean; pending?: boolean } = {}
 ): Promise<string> {
   const storedPath = `tenants/${tenantId}/files/${id}/${id}.png`;
-  await db.createFile({
-    id,
-    tenantId,
-    originalName: `${id}.png`,
-    storedPath,
-    fileType: 'image/png',
-    sizeBytes: 10,
-    context: 'default',
-    tags: null,
-    workspaceId: opts.workspaceId,
-  });
-  if (opts.deleted) await db.softDeleteFile(id, tenantId);
+  await seedUpload(
+    db,
+    {
+      id,
+      tenantId,
+      originalName: `${id}.png`,
+      storedPath,
+      fileType: 'image/png',
+      sizeBytes: 10,
+      context: 'default',
+      tags: null,
+      workspaceId: opts.workspaceId,
+    },
+    { pending: opts.pending, deleted: opts.deleted }
+  );
   return storedPath;
 }
 
@@ -206,15 +155,10 @@ describe('POST /api/v1/internal/erasure — tenant.erased cascade', () => {
       authTenantId: 'company-A',
     });
     await h.db.createWorkspace({ id: 'ws-A', tenantId: 'sb-A', name: 'WS A', slug: 'ws-a' });
-    await seedFile(h.db, 'sb-A', 'a-1', { workspaceId: 'ws-A' });
+    // a-1's upload is still open, so it also has a pending upload session.
+    await seedFile(h.db, 'sb-A', 'a-1', { workspaceId: 'ws-A', pending: true });
     await seedFile(h.db, 'sb-A', 'a-2');
     await seedFile(h.db, 'sb-A', 'a-gone', { deleted: true });
-    await h.db.createUploadSession({
-      fileId: 'a-1',
-      tenantId: 'sb-A',
-      presignedUrl: '/_internal/upload/a-1',
-      expiresAt: Date.now() + 1000,
-    });
 
     // Company W: matched by a legacy auth_workspace_id binding only.
     await h.db.createTenant({

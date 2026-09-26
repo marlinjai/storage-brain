@@ -32,38 +32,33 @@ function createMockDb() {
     getTenantByName: vi.fn(),
     getTenantById: vi.fn(),
     updateTenantApiKeyHash: vi.fn(),
-    createFile: vi.fn(),
     getFileById: vi.fn(),
     getFileByIdUnscoped: vi.fn(),
     getFileByStoredPath: vi.fn(),
     listFilesByTenant: vi.fn(),
-    softDeleteFile: vi.fn(),
     updateFileMetadata: vi.fn(),
-    updateFileProcessingStatus: vi.fn(),
-    updateFileSizeBytes: vi.fn(),
     createWorkspace: vi.fn(),
     getWorkspaceById: vi.fn(),
     listWorkspacesByTenant: vi.fn(),
     updateWorkspace: vi.fn(),
     deleteWorkspace: vi.fn(),
     getActiveFilesByWorkspace: vi.fn(),
-    softDeleteFilesByWorkspace: vi.fn(),
-    createUploadSession: vi.fn().mockResolvedValue('session-1'),
     getUploadSessionByFileId: vi.fn(),
-    updateUploadSessionStatus: vi.fn(),
+    createPendingUpload: vi.fn().mockResolvedValue({ created: true, sessionId: 'session-1' }),
+    claimUploadSession: vi.fn().mockResolvedValue(true),
+    settleUploadSession: vi.fn().mockResolvedValue(true),
+    expireStaleUploadSessions: vi.fn().mockResolvedValue({ scanned: 0, expired: 0 }),
+    deleteFileAndReleaseQuota: vi.fn().mockResolvedValue(null),
+    deleteWorkspaceFilesAndReleaseQuota: vi.fn().mockResolvedValue({ releasedBytes: 0, files: [] }),
     checkQuota: vi.fn().mockResolvedValue({
       hasCapacity: true,
       quotaBytes: 500 * 1024 * 1024,
       usedBytes: 0,
       availableBytes: 500 * 1024 * 1024,
     }),
-    reserveQuota: vi.fn(),
-    releaseQuota: vi.fn(),
     getQuotaUsage: vi.fn(),
     recalculateQuota: vi.fn(),
     checkWorkspaceQuota: vi.fn(),
-    reserveWorkspaceQuota: vi.fn(),
-    releaseWorkspaceQuota: vi.fn(),
     migrate: vi.fn(),
   };
 }
@@ -134,11 +129,10 @@ describe('upload routes', () => {
         ENV
       );
 
-      expect(db.createFile).toHaveBeenCalledTimes(1);
-      expect(db.createUploadSession).toHaveBeenCalledTimes(1);
+      expect(db.createPendingUpload).toHaveBeenCalledTimes(1);
     });
 
-    it('reserves quota for non-zero file size', async () => {
+    it('reserves the declared size with the file record', async () => {
       await app.request(
         '/api/v1/upload/request',
         {
@@ -152,7 +146,11 @@ describe('upload routes', () => {
         ENV
       );
 
-      expect(db.reserveQuota).toHaveBeenCalledWith(TENANT_ID, 1024);
+      expect(db.createPendingUpload).toHaveBeenCalledWith(
+        expect.objectContaining({
+          file: expect.objectContaining({ tenantId: TENANT_ID, sizeBytes: 1024 }) as unknown,
+        })
+      );
     });
 
     it('rejects invalid MIME type format', async () => {

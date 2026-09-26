@@ -6,7 +6,7 @@ import type {
   ListFilesInput,
   QuotaResponse,
 } from './types';
-import type { AllowedMimeType, UploadSessionStatus, ProcessingStatus } from './constants';
+import type { AllowedMimeType, ProcessingStatus } from './constants';
 
 export interface CreateTenantInput {
   id: string;
@@ -61,13 +61,54 @@ export interface QuotaCheckResult {
   availableBytes: number;
 }
 
-export interface CreateUploadSessionInput {
-  fileId: string;
-  presignedUrl: string;
-  expiresAt: number;
-  /** Owning tenant, stamped so the token-only upload route can scope lookups. */
-  tenantId?: string;
+/**
+ * How an upload session ended. `completed` stores `actualBytes`; `failed` (the
+ * transfer was rejected, cut off or could not be stored) and `expired` (the
+ * signed URL lapsed unused, or a transfer never finished) store nothing.
+ */
+export type UploadSessionOutcome =
+  | { status: 'completed'; actualBytes: number }
+  | { status: 'failed' }
+  | { status: 'expired' };
+
+/** The two states an upload session can be settled from (it is still open). */
+export type OpenUploadSessionStatus = 'pending' | 'uploading';
+
+/** What one call to `expireStaleUploadSessions` did. */
+export interface ExpireStaleUploadSessionsResult {
+  /** Stale sessions selected for this batch (at most the requested limit). */
+  scanned: number;
+  /** Of those, how many this call settled as `expired` (the rest were settled elsewhere first). */
+  expired: number;
 }
+
+/** A file soft-deleted by a bulk delete, with the key of its storage object. */
+export interface DeletedFileRef {
+  id: string;
+  storedPath: string;
+}
+
+export interface DeleteWorkspaceFilesResult {
+  /** Bytes released from the tenant and the workspace counters. */
+  releasedBytes: number;
+  /**
+   * Exactly the files this delete soft-deleted, selected in the same
+   * transaction, so the caller removes the storage object of every one of them
+   * (including a file created after any earlier listing).
+   */
+  files: DeletedFileRef[];
+}
+
+export interface CreatePendingUploadInput {
+  /** The file row to create; `sizeBytes` is the declared size, reserved as quota. */
+  file: CreateFileInput;
+  session: { presignedUrl: string; expiresAt: number };
+}
+
+export type CreatePendingUploadResult =
+  | { created: true; sessionId: string }
+  /** Nothing was written: the tenant (or workspace) had no room for the reservation. */
+  | { created: false };
 
 /** Selector for which of a tenant's files to migrate — by tag or by explicit IDs. */
 export type MigrateFilesFilter = { tag: { key: string; value: string } } | { fileIds: string[] };
@@ -152,7 +193,6 @@ export interface DatabaseAdapter {
   deleteTenant(tenantId: string): Promise<boolean>;
 
   // Files
-  createFile(input: CreateFileInput): Promise<void>;
   getFileById(fileId: string, tenantId: string): Promise<StoredFile | null>;
   getFileByIdUnscoped(fileId: string): Promise<StoredFile | null>;
   getFileByStoredPath(storedPath: string): Promise<StoredFile | null>;
@@ -163,14 +203,11 @@ export interface DatabaseAdapter {
    * unspecified.
    */
   getAllStoredPathsByTenant(tenantId: string): Promise<string[]>;
-  softDeleteFile(fileId: string, tenantId: string): Promise<void>;
   updateFileMetadata(
     fileId: string,
     metadata: Record<string, unknown>,
     status: ProcessingStatus
   ): Promise<void>;
-  updateFileProcessingStatus(fileId: string, status: ProcessingStatus): Promise<void>;
-  updateFileSizeBytes(fileId: string, sizeBytes: number): Promise<void>;
   /**
    * Rename a file's display name (the `originalName` field only). The
    * backing storage object keeps its original key — nothing moves in R2/S3,
@@ -190,7 +227,6 @@ export interface DatabaseAdapter {
   ): Promise<Workspace | null>;
   deleteWorkspace(workspaceId: string, tenantId: string): Promise<void>;
   getActiveFilesByWorkspace(workspaceId: string, tenantId: string): Promise<StoredFile[]>;
-  softDeleteFilesByWorkspace(workspaceId: string, tenantId: string): Promise<void>;
   /**
    * Bulk-move matching active files into a target workspace, keeping workspace
    * quota (`used_bytes`) consistent: bytes are added to the target and released
@@ -208,22 +244,83 @@ export interface DatabaseAdapter {
    */
   aggregateFileContexts(tenantId: string, workspaceId?: string): Promise<FileContextAggregate[]>;
 
-  // Upload sessions
-  createUploadSession(input: CreateUploadSessionInput): Promise<string>;
+  // Upload sessions and quota accounting
+  //
+  // Quota contract: `used_bytes` of a tenant (and of a workspace) is the sum of
+  // `size_bytes` over its live files. A file whose upload is still open holds
+  // its declared size there as a reservation; settling the upload replaces the
+  // reservation with the bytes actually stored (0 when nothing was stored).
+  // Every method below changes the files, the sessions and both counters
+  // together, atomically, so the invariant survives concurrency and retries.
+
+  /**
+   * Reserve `file.sizeBytes` at tenant level (and workspace level when the file
+   * has one) and create the file row and its pending upload session, all or
+   * nothing. The reservation is conditional on free capacity at the moment of
+   * the write, so concurrent requests can never push `used_bytes` past a quota.
+   */
+  createPendingUpload(input: CreatePendingUploadInput): Promise<CreatePendingUploadResult>;
   getUploadSessionByFileId(fileId: string): Promise<UploadSession | null>;
-  updateUploadSessionStatus(sessionId: string, status: UploadSessionStatus): Promise<void>;
+  /**
+   * Move a session from `pending` to `uploading`. Returns false when it was not
+   * pending (another transfer claimed it, or it was already settled).
+   */
+  claimUploadSession(sessionId: string): Promise<boolean>;
+  /**
+   * Settle an open (`pending` or `uploading`) session exactly once: record the
+   * outcome, set the file's size to the stored bytes (0 unless completed),
+   * adjust both counters by the difference to the reservation, and mark the
+   * file `completed` or `failed`. Returns false, changing nothing, when the
+   * session was already settled, so a retry can never release twice. A file
+   * deleted meanwhile keeps its counters untouched (the delete released them).
+   *
+   * `fromStatus` narrows which open state may be settled, checked atomically
+   * with the settle itself: `'pending'` settles only a session no transfer has
+   * claimed (the R2 completion webhook must never settle a transfer the
+   * internal upload route is running), `'uploading'` only a claimed one.
+   * Without it, either open state is settled.
+   */
+  settleUploadSession(
+    sessionId: string,
+    outcome: UploadSessionOutcome,
+    fromStatus?: OpenUploadSessionStatus
+  ): Promise<boolean>;
+  /**
+   * Settle as `expired` up to `limit` sessions still `pending` after their
+   * `expiresAt`, or still `uploading` `uploadingGraceMs` after it, oldest
+   * first. Each is settled from the state it was selected in, so a session
+   * claimed after selection keeps its in-flight grace period. A caller drains
+   * a backlog by calling again while `scanned === limit`.
+   */
+  expireStaleUploadSessions(
+    now: number,
+    uploadingGraceMs: number,
+    limit: number
+  ): Promise<ExpireStaleUploadSessionsResult>;
+  /**
+   * Soft-delete a live file, release its bytes from both counters and close
+   * its open upload session, atomically. Returns null (changing nothing) when
+   * the file does not exist or is already deleted.
+   */
+  deleteFileAndReleaseQuota(fileId: string, tenantId: string): Promise<StoredFile | null>;
+  /**
+   * Soft-delete every live file of a workspace, release their bytes from both
+   * counters and close their open upload sessions, atomically. Returns the
+   * bytes released and exactly the files it soft-deleted, which is the list
+   * whose storage objects the caller must remove.
+   */
+  deleteWorkspaceFilesAndReleaseQuota(
+    workspaceId: string,
+    tenantId: string
+  ): Promise<DeleteWorkspaceFilesResult>;
 
   // Quota — tenant level
   checkQuota(tenantId: string, fileSizeBytes: number): Promise<QuotaCheckResult>;
-  reserveQuota(tenantId: string, sizeBytes: number): Promise<void>;
-  releaseQuota(tenantId: string, sizeBytes: number): Promise<void>;
   getQuotaUsage(tenantId: string): Promise<QuotaResponse>;
   recalculateQuota(tenantId: string): Promise<number>;
 
   // Quota — workspace level
   checkWorkspaceQuota(workspaceId: string, fileSizeBytes: number): Promise<QuotaCheckResult | null>;
-  reserveWorkspaceQuota(workspaceId: string, sizeBytes: number): Promise<void>;
-  releaseWorkspaceQuota(workspaceId: string, sizeBytes: number): Promise<void>;
 
   // Erasure webhook idempotency ledger
   /** Look up a previously-processed erasure delivery by its event id. */

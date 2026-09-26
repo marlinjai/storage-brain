@@ -1,7 +1,12 @@
 import { serve } from '@hono/node-server';
+import type { DatabaseAdapter } from '@storage-brain/shared';
 import { createApp } from './app';
 import { S3StorageAdapter } from './adapters/storage/s3';
 import { PostgresDatabaseAdapter } from './adapters/database/postgres';
+import {
+  expireStaleUploads,
+  EXPIRE_STALE_UPLOADS_INTERVAL_MS,
+} from './lib/upload/expire-stale-uploads';
 
 function required(name: string): string {
   const value = process.env[name];
@@ -74,6 +79,7 @@ function main(): void {
     .then(() => {
       console.log('Migrations complete.');
       ready = true;
+      startStaleUploadSweep(db);
     })
     .catch((err) => {
       console.error('Migration failed:', err);
@@ -89,6 +95,25 @@ function main(): void {
 
   process.on('SIGTERM', () => void shutdown());
   process.on('SIGINT', () => void shutdown());
+}
+
+/**
+ * Periodically release the quota held by upload sessions that will never
+ * complete (see expireStaleUploads). Runs once right away so a restart does
+ * not wait a full interval. unref() keeps it from holding the process open.
+ */
+function startStaleUploadSweep(db: DatabaseAdapter): void {
+  const sweep = (): void => {
+    expireStaleUploads(db)
+      .then(({ expired, truncated }) => {
+        if (expired > 0) console.log(`Expired ${expired} stale upload session(s).`);
+        if (truncated)
+          console.warn('Stale upload sweep hit its time budget; the next run continues.');
+      })
+      .catch((err) => console.error('Stale upload sweep failed:', err));
+  };
+  sweep();
+  setInterval(sweep, EXPIRE_STALE_UPLOADS_INTERVAL_MS).unref();
 }
 
 try {

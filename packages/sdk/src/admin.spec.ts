@@ -225,7 +225,11 @@ describe('StorageBrainAdmin SDK', () => {
       );
 
       await expect(
-        admin.requestTenantUpload('t1', { fileName: 'a.png', fileType: 'image/png' })
+        admin.requestTenantUpload('t1', {
+          fileName: 'a.png',
+          fileType: 'image/png',
+          fileSizeBytes: 1024,
+        })
       ).rejects.toThrow();
     });
   });

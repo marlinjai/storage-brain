@@ -36,40 +36,35 @@ function createMockDb() {
     getTenantByName: vi.fn(),
     getTenantById: vi.fn().mockResolvedValue(mockTenant),
     updateTenantApiKeyHash: vi.fn(),
-    createFile: vi.fn(),
     getFileById: vi.fn(),
     getFileByIdUnscoped: vi.fn(),
     getFileByStoredPath: vi.fn(),
     listFilesByTenant: vi.fn(),
-    softDeleteFile: vi.fn(),
     updateFileMetadata: vi.fn(),
-    updateFileProcessingStatus: vi.fn(),
-    updateFileSizeBytes: vi.fn(),
     createWorkspace: vi.fn(),
     getWorkspaceById: vi.fn().mockResolvedValue({ id: WORKSPACE_ID, tenantId: TENANT_ID }),
     listWorkspacesByTenant: vi.fn(),
     updateWorkspace: vi.fn(),
     deleteWorkspace: vi.fn(),
     getActiveFilesByWorkspace: vi.fn(),
-    softDeleteFilesByWorkspace: vi.fn(),
-    createUploadSession: vi.fn().mockResolvedValue('session-1'),
     getUploadSessionByFileId: vi.fn(),
-    updateUploadSessionStatus: vi.fn(),
+    createPendingUpload: vi.fn().mockResolvedValue({ created: true, sessionId: 'session-1' }),
+    claimUploadSession: vi.fn().mockResolvedValue(true),
+    settleUploadSession: vi.fn().mockResolvedValue(true),
+    expireStaleUploadSessions: vi.fn().mockResolvedValue({ scanned: 0, expired: 0 }),
+    deleteFileAndReleaseQuota: vi.fn().mockResolvedValue(null),
+    deleteWorkspaceFilesAndReleaseQuota: vi.fn().mockResolvedValue({ releasedBytes: 0, files: [] }),
     checkQuota: vi.fn().mockResolvedValue({
       hasCapacity: true,
       quotaBytes: 500 * 1024 * 1024,
       usedBytes: 0,
       availableBytes: 500 * 1024 * 1024,
     }),
-    reserveQuota: vi.fn(),
-    releaseQuota: vi.fn(),
     getQuotaUsage: vi.fn(),
     recalculateQuota: vi.fn(),
     checkWorkspaceQuota: vi
       .fn()
       .mockResolvedValue({ hasCapacity: true, quotaBytes: 100, usedBytes: 0 }),
-    reserveWorkspaceQuota: vi.fn(),
-    releaseWorkspaceQuota: vi.fn(),
     migrate: vi.fn(),
   };
 }
@@ -103,9 +98,58 @@ describe('requestUpload (shared helper)', () => {
     expect(handshake.presignedUrl).toContain('/_internal/upload/');
     expect(handshake.expiresAt).toBeDefined();
     expect(handshake.uploadMetadata.maxSizeBytes).toBe(100 * 1024 * 1024);
-    expect(db.createFile).toHaveBeenCalledTimes(1);
-    expect(db.createUploadSession).toHaveBeenCalledTimes(1);
-    expect(db.reserveQuota).toHaveBeenCalledWith(TENANT_ID, 1024);
+    // One atomic call reserves the declared size and creates file + session.
+    expect(db.createPendingUpload).toHaveBeenCalledTimes(1);
+    const [input] = db.createPendingUpload.mock.calls[0] as [
+      {
+        file: { id: string; tenantId: string; sizeBytes: number };
+        session: { presignedUrl: string };
+      },
+    ];
+    expect(input.file).toMatchObject({
+      id: handshake.fileId,
+      tenantId: TENANT_ID,
+      sizeBytes: 1024,
+    });
+    expect(input.session.presignedUrl).toBe(handshake.presignedUrl);
+  });
+
+  it('rejects a request without a declared size with 400 and writes nothing', async () => {
+    const withoutSize: Record<string, unknown> = { ...validBody };
+    delete withoutSize.fileSizeBytes;
+
+    await expect(
+      requestUpload({
+        db: db as unknown as DatabaseAdapter,
+        tenant: mockTenant,
+        body: withoutSize,
+        urlSigningSecret: 'test-secret',
+      })
+    ).rejects.toMatchObject({
+      issues: [
+        expect.objectContaining({
+          path: ['fileSizeBytes'],
+          message: 'fileSizeBytes is required: declare the exact size of the file in bytes',
+        }),
+      ],
+    });
+    expect(db.createPendingUpload).not.toHaveBeenCalled();
+  });
+
+  it('answers 403 when a concurrent request took the last free bytes (atomic reserve lost)', async () => {
+    db.createPendingUpload.mockResolvedValueOnce({ created: false });
+
+    await expect(
+      requestUpload({
+        db: db as unknown as DatabaseAdapter,
+        tenant: mockTenant,
+        body: validBody,
+        urlSigningSecret: 'test-secret',
+      })
+    ).rejects.toMatchObject({
+      code: 'QUOTA_EXCEEDED',
+      message: 'Quota exceeded: no room left to reserve 1024 bytes for this upload',
+    });
   });
 
   it('rejects a disallowed MIME type for a restricted tenant', async () => {
@@ -225,6 +269,7 @@ describe('tenant vs admin upload-request parity', () => {
       },
     },
     { name: 'too large', body: { ...validBody, fileSizeBytes: 200 * 1024 * 1024 } },
+    { name: 'size missing', body: { fileType: 'image/png', fileName: 'test.png' } },
     {
       name: 'tenant quota exceeded',
       body: validBody,

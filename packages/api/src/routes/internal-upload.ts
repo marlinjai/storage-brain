@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../env';
 import { sendWebhook } from '../services/webhook';
-import type { FileResponse } from '@storage-brain/shared';
+import type { DatabaseAdapter, FileResponse } from '@storage-brain/shared';
 import { MAX_FILE_SIZE_BYTES } from '@storage-brain/shared';
 import { verifyUploadToken } from '../services/signed-url';
 import { ApiError } from '../middleware/error-handler';
@@ -84,24 +84,30 @@ internalUploadRoutes.put('/upload/*', async (c) => {
     return c.json({ error: 'Upload session not found' }, 404);
   }
 
-  // Check if session is expired
-  if (Date.now() > session.expiresAt) {
-    await db.updateUploadSessionStatus(session.id, 'expired');
+  // A pending session whose URL lapsed is settled as expired here, which
+  // releases its reservation (the periodic sweep does the same for sessions
+  // nobody comes back to).
+  if (session.status === 'pending' && Date.now() > session.expiresAt) {
+    await db.settleUploadSession(session.id, { status: 'expired' }, 'pending');
     return c.json({ error: 'Upload session expired' }, 410);
   }
 
-  // Check if session is still pending
   if (session.status !== 'pending') {
     return c.json({ error: `Upload session already ${session.status}` }, 409);
+  }
+
+  // Claim the session so exactly one transfer runs against this reservation.
+  if (!(await db.claimUploadSession(session.id))) {
+    return c.json({ error: 'Upload session is no longer pending' }, 409);
   }
 
   // Get the content type from request header (fallback to file record)
   const contentType = c.req.header('Content-Type') ?? file.fileType;
 
   // The body may be no larger than the size declared when the upload was
-  // requested (that is what quota was reserved for), and never larger than the
-  // global maximum. A declared size of 0 means the caller did not declare one,
-  // so only the global maximum applies.
+  // requested (that is the quota reserved for it), and never larger than the
+  // global maximum. Sessions requested before the declared size became
+  // mandatory can still carry 0; for those only the global maximum applies.
   const declaredSize = file.sizeBytes;
   const limit =
     declaredSize > 0 ? Math.min(declaredSize, MAX_FILE_SIZE_BYTES) : MAX_FILE_SIZE_BYTES;
@@ -115,34 +121,50 @@ internalUploadRoutes.put('/upload/*', async (c) => {
     );
   };
 
-  // Read the body counting bytes as they stream, so a missing or lying
-  // Content-Length is cut off at the limit instead of buffered whole.
-  let body: ArrayBuffer;
+  // From here every way out settles the session: a transfer that is rejected,
+  // cut off or cannot be stored releases its whole reservation, and the
+  // client requests a new upload (as the SDK and the dashboard already do).
+  let actualSize: number;
   try {
-    body = await readBodyWithLimit(c.req.raw, limit);
-  } catch (err) {
-    if (err instanceof BodyTooLargeError) {
-      throw tooLarge(err.declaredBytes);
+    // Read the body counting bytes as they stream, so a missing or lying
+    // Content-Length is cut off at the limit instead of buffered whole.
+    let body: ArrayBuffer;
+    try {
+      body = await readBodyWithLimit(c.req.raw, limit);
+    } catch (err) {
+      if (err instanceof BodyTooLargeError) {
+        throw tooLarge(err.declaredBytes);
+      }
+      throw err;
     }
+    actualSize = body.byteLength;
+
+    if (actualSize === 0) {
+      throw ApiError.badRequest('Empty file body');
+    }
+
+    await storage.put(storedPath, body, { contentType });
+  } catch (err) {
+    await settleFailed(db, session.id);
     throw err;
   }
-  const actualSize = body.byteLength;
 
-  if (actualSize === 0) {
-    return c.json({ error: 'Empty file body' }, 400);
+  // Replace the reservation with the bytes actually stored (releasing the
+  // unused part when the file is smaller than declared) and complete the file.
+  // Only this transfer's claim ('uploading') is settled here; the R2
+  // completion webhook settles pending sessions only, so it cannot race this.
+  const settled = await db.settleUploadSession(
+    session.id,
+    { status: 'completed', actualBytes: actualSize },
+    'uploading'
+  );
+  if (!settled) {
+    // The session was closed while the bytes were in flight (the file was
+    // deleted, or the sweep reclaimed it after the grace period): its quota is
+    // already gone, so the object must not stay behind either.
+    await storage.delete(storedPath).catch(() => {});
+    return c.json({ error: 'Upload session was closed before the upload finished' }, 409);
   }
-
-  // Upload to storage
-  await storage.put(storedPath, body, { contentType });
-
-  // Update file size in database (use actual uploaded size)
-  await db.updateFileSizeBytes(file.id, actualSize);
-
-  // Update upload session status
-  await db.updateUploadSessionStatus(session.id, 'completed');
-
-  // Mark file as completed (no processing)
-  await db.updateFileProcessingStatus(file.id, 'completed');
 
   // Fire webhook if configured (non-blocking via waitUntil)
   if (file.webhookUrl) {
@@ -181,3 +203,16 @@ internalUploadRoutes.put('/upload/*', async (c) => {
     sizeBytes: actualSize,
   });
 });
+
+/**
+ * Settle a failed transfer, without letting a settle error mask the error that
+ * failed the upload. If the settle itself fails, the sweep reclaims the
+ * reservation once the in-flight grace period is over.
+ */
+async function settleFailed(db: DatabaseAdapter, sessionId: string): Promise<void> {
+  try {
+    await db.settleUploadSession(sessionId, { status: 'failed' }, 'uploading');
+  } catch (settleErr) {
+    console.error(`Failed to settle upload session ${sessionId} as failed:`, settleErr);
+  }
+}

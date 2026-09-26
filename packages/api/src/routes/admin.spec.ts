@@ -33,30 +33,27 @@ function createMockDb() {
     listTenants: vi.fn().mockResolvedValue({ tenants: [], nextCursor: null, total: 0 }),
     updateTenant: vi.fn(),
     deleteTenant: vi.fn().mockResolvedValue(true),
-    createFile: vi.fn(),
     getFileById: vi.fn(),
     getFileByIdUnscoped: vi.fn(),
     getFileByStoredPath: vi.fn(),
     listFilesByTenant: vi.fn().mockResolvedValue({ files: [], nextCursor: null, total: 0 }),
-    softDeleteFile: vi.fn(),
     updateFileMetadata: vi.fn(),
-    updateFileProcessingStatus: vi.fn(),
-    updateFileSizeBytes: vi.fn(),
     createWorkspace: vi.fn(),
     getWorkspaceById: vi.fn(),
     listWorkspacesByTenant: vi.fn(),
     updateWorkspace: vi.fn(),
     deleteWorkspace: vi.fn(),
     getActiveFilesByWorkspace: vi.fn(),
-    softDeleteFilesByWorkspace: vi.fn(),
     migrateFilesToWorkspace: vi.fn(),
     aggregateFileContexts: vi.fn().mockResolvedValue([]),
-    createUploadSession: vi.fn(),
     getUploadSessionByFileId: vi.fn(),
-    updateUploadSessionStatus: vi.fn(),
+    createPendingUpload: vi.fn().mockResolvedValue({ created: true, sessionId: 'session-1' }),
+    claimUploadSession: vi.fn().mockResolvedValue(true),
+    settleUploadSession: vi.fn().mockResolvedValue(true),
+    expireStaleUploadSessions: vi.fn().mockResolvedValue({ scanned: 0, expired: 0 }),
+    deleteFileAndReleaseQuota: vi.fn().mockResolvedValue(null),
+    deleteWorkspaceFilesAndReleaseQuota: vi.fn().mockResolvedValue({ releasedBytes: 0, files: [] }),
     checkQuota: vi.fn(),
-    reserveQuota: vi.fn(),
-    releaseQuota: vi.fn(),
     getQuotaUsage: vi.fn().mockResolvedValue({
       quotaBytes: 500 * 1024 * 1024,
       usedBytes: 1000,
@@ -65,8 +62,6 @@ function createMockDb() {
     }),
     recalculateQuota: vi.fn(),
     checkWorkspaceQuota: vi.fn(),
-    reserveWorkspaceQuota: vi.fn(),
-    releaseWorkspaceQuota: vi.fn(),
     migrate: vi.fn(),
   };
 }
@@ -544,12 +539,12 @@ describe('admin routes', () => {
       const body = await res.json<TestResponseBody>();
       expect(body.success).toBe(true);
       expect(storage.delete).toHaveBeenCalledWith(mockFile.storedPath);
-      expect(db.softDeleteFile).toHaveBeenCalledWith(FILE_ID, 'tenant-123');
-      expect(db.releaseQuota).toHaveBeenCalledWith('tenant-123', mockFile.sizeBytes);
-      expect(db.releaseWorkspaceQuota).not.toHaveBeenCalled();
+      // Soft delete, tenant + workspace release and session close are one
+      // atomic adapter call (covered by the adapter specs).
+      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(FILE_ID, 'tenant-123');
     });
 
-    it('also releases workspace quota when the file belongs to a workspace', async () => {
+    it('deletes a workspace file through the same atomic call', async () => {
       const workspaceId = '770e8400-e29b-41d4-a716-446655440002';
       db.getFileById.mockResolvedValueOnce({ ...mockFile, workspaceId });
 
@@ -563,8 +558,7 @@ describe('admin routes', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(db.releaseQuota).toHaveBeenCalledWith('tenant-123', mockFile.sizeBytes);
-      expect(db.releaseWorkspaceQuota).toHaveBeenCalledWith(workspaceId, mockFile.sizeBytes);
+      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(FILE_ID, 'tenant-123');
     });
 
     it('still completes the DB cleanup when the storage delete fails', async () => {
@@ -581,8 +575,7 @@ describe('admin routes', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(db.softDeleteFile).toHaveBeenCalledWith(FILE_ID, 'tenant-123');
-      expect(db.releaseQuota).toHaveBeenCalledWith('tenant-123', mockFile.sizeBytes);
+      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(FILE_ID, 'tenant-123');
     });
 
     it('returns 404 for unknown file and touches neither storage nor quota', async () => {
@@ -599,8 +592,7 @@ describe('admin routes', () => {
 
       expect(res.status).toBe(404);
       expect(storage.delete).not.toHaveBeenCalled();
-      expect(db.softDeleteFile).not.toHaveBeenCalled();
-      expect(db.releaseQuota).not.toHaveBeenCalled();
+      expect(db.deleteFileAndReleaseQuota).not.toHaveBeenCalled();
     });
   });
 
@@ -616,7 +608,6 @@ describe('admin routes', () => {
         usedBytes: 0,
         availableBytes: 500 * 1024 * 1024,
       });
-      db.createUploadSession.mockResolvedValue('session-1');
       Object.assign(db, overrides);
     }
 
@@ -647,8 +638,7 @@ describe('admin routes', () => {
       expect(body.presignedUrl).toContain('/_internal/upload/');
       expect(body.expiresAt).toBeDefined();
       expect(body.uploadMetadata?.maxSizeBytes).toBeDefined();
-      expect(db.createFile).toHaveBeenCalledTimes(1);
-      expect(db.createUploadSession).toHaveBeenCalledTimes(1);
+      expect(db.createPendingUpload).toHaveBeenCalledTimes(1);
     });
 
     it('requires the admin key (401 without it)', async () => {

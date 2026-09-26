@@ -386,14 +386,17 @@ describe('StorageBrain SDK', () => {
         expect(mockFetch).toHaveBeenCalledTimes(1);
       });
 
-      it.each([408, 429, 500, 503])('retries a %i and succeeds when it recovers', async (status) => {
-        mockFetch
-          .mockResolvedValueOnce(errorResponse(status, 'TRANSIENT', 'later'))
-          .mockResolvedValueOnce(jsonResponse({ id: 'f1' }));
-        const result = await settle(retrying.getFile('f1'));
-        expect(result).toEqual({ value: { id: 'f1' } });
-        expect(mockFetch).toHaveBeenCalledTimes(2);
-      });
+      it.each([408, 429, 500, 503])(
+        'retries a %i and succeeds when it recovers',
+        async (status) => {
+          mockFetch
+            .mockResolvedValueOnce(errorResponse(status, 'TRANSIENT', 'later'))
+            .mockResolvedValueOnce(jsonResponse({ id: 'f1' }));
+          const result = await settle(retrying.getFile('f1'));
+          expect(result).toEqual({ value: { id: 'f1' } });
+          expect(mockFetch).toHaveBeenCalledTimes(2);
+        }
+      );
 
       it('retries a network failure and succeeds when it recovers', async () => {
         mockFetch
