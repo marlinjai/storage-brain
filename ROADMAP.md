@@ -69,6 +69,12 @@ plan when the item carries a decision or a sequence.
 - [ ] bring your own S3 bucket: per-tenant S3/R2/GCS bucket configuration for data sovereignty
       and cost isolation [plan](docs/plans/2026-04-06-bring-your-own-s3.md) : still wanted,
       not started (2026-09-10)
+- [ ] upload body size limit: `packages/api/src/routes/internal-upload.ts` buffers the whole
+      request body (`c.req.arrayBuffer()`) without enforcing the 100 MB `MAX_FILE_SIZE_BYTES`;
+      only the size declared when the upload is requested is checked, so an oversized or
+      lying client can exhaust the container's memory. Fix: enforce the limit while reading
+      the body (reject early on a too-large `Content-Length`, count bytes while streaming)
+      and answer 413. Found while fixing the download socket leak (PR #33) (2026-09-26)
 
 ## Completed
 
