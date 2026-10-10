@@ -42,12 +42,19 @@ plan when the item carries a decision or a sequence.
       [plan](docs/plans/2026-08-13-tenant-scope-rebinding.md) : code side is shipped (the
       `authTenantId` route accepts it); only this operator cutover is left, needs Marlin
       because it is a production/secret action (2026-09-10)
-- [ ] company isolation: delete 361 orphaned `kie-input` files (371 MB) in lola-stories'
-      tenant, produced only by lumitra-studio during a 2026-06 borrowed-key window
-      [plan](docs/plans/2026-07-27-company-isolation.md) : deletion is irreversible, needs
-      Marlin's go; every other slice of this plan (company-scoped keys, webhook signing,
-      per-tenant URL key derivation, the erasure webhook, the rate-limit fix) already shipped
-      (2026-09-10)
+- [x] company isolation: the 361 orphaned `kie-input` files (371 MB) in lola-stories' tenant,
+      produced only by lumitra-studio during a 2026-06 borrowed-key window, were cleaned up on
+      2026-08-09. Marlin answered "delete all of them except one distinct file of each", so
+      348 files were deleted and 13 kept (one copy of each distinct reference image), which
+      reclaimed 354 MB and took the tenant from 1.33 GB to 1005 MB used. The deletes went
+      through the single-file delete route only after pull request #23 (delete the stored
+      object and release quota, where it used to only flag the row) was merged and deployed the
+      same day, so the objects are really gone. Evidence is the executing session's own staged
+      selection, deletion log (319 of 319 paced deletes after 29 earlier ones, no failures) and
+      the closing count of exactly 13 undeleted `kie-input` rows in that tenant; this
+      repository recorded none of it until this line, and the plan's reality update of
+      2026-09-10 still said "not yet acted on".
+      [plan](docs/plans/2026-07-27-company-isolation.md) (2026-10-10)
 - [ ] permanent-URL revocation: design a per-file revocation token for `getPermanentUrl`,
       since today revocation is only whole-tenant, not per-file
       [notes](backlog/intents/storage-brain-permanent-url-revocation-all-or-nothing.md) :
