@@ -1,6 +1,6 @@
 ---
 type: plan
-status: in-progress
+status: completed
 date: 2026-07-27
 title: Storage-brain company isolation (platform identity end-state)
 summary: Align storage-brain with the platform model: storage tenants keyed to auth-brain COMPANIES, company-scoped machine keys accepted, an app_grants door, the shared five-app key split per company, and the token/webhook hygiene the recon surfaced. Pre-launch gate item 11.
@@ -68,3 +68,16 @@ files (371 MB) in lola-stories' tenant from a borrowed-key window, recommended f
 but not yet acted on (still needs Marlin's go, listed on the roadmap). The one item
 explicitly deferred rather than shipped is the dashboard per-company `can()` filtering
 (item 6, "recorded, not scheduled").
+
+## Reality update (2026-10-10)
+
+The `kie-input` leftover above is closed, and it was closed on 2026-08-09, a month before the
+update above said it was not acted on. Marlin's answer that day was to delete every file in
+that context except one distinct file of each reference image, so 348 files were deleted and 13
+kept, reclaiming 354 MB (the tenant went from 1.33 GB to 1005 MB used). The deletes ran through
+the single-file delete route only after pull request #23 (delete the stored object and release
+quota, instead of only flagging the row) was merged and deployed, so the objects are gone from
+R2 and not only hidden. The evidence is the executing session's staged selection, deletion log
+and closing count of 13 undeleted rows; this repository had not recorded it. Every slice is now
+shipped or explicitly out of scope, so the plan is `completed`; the dashboard per-company
+`can()` filtering stays "recorded, not scheduled" under Out of scope above.
