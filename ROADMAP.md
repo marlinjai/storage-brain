@@ -31,13 +31,13 @@ plan when the item carries a decision or a sequence.
       Infisical identity, and visually confirm the dashboard Tenants page lists all 5 tenants
       in prod [notes](backlog/intents/storage-brain-authbrain-cutover-residuals.md) : needs
       Marlin, all three are production or secret actions only he can do; the fourth sub-item
-      in the note (auth-brain #41's push.ts fix) is already merged (2026-07-16) (2026-09-10)
+      in the note (auth-brain #41's push.ts fix) is already merged (2026-07-16) (2026-10-12)
 - [ ] tenant-scope rebinding: issue the tenant-scoped service-account key for lola-stories in
       auth.lumitra.co, store it in the lola-stories Infisical project, redeploy, then revoke
       the old workspace-scoped key plus one unused orphaned key
       [plan](docs/plans/2026-08-13-tenant-scope-rebinding.md) : code side is shipped (the
       `authTenantId` route accepts it); only this operator cutover is left, needs Marlin
-      because it is a production/secret action (2026-09-10)
+      because it is a production/secret action (2026-10-12)
 - [x] company isolation: the 361 orphaned `kie-input` files (371 MB) in lola-stories' tenant,
       produced only by lumitra-studio during a 2026-06 borrowed-key window, were cleaned up on
       2026-08-09. Marlin answered "delete all of them except one distinct file of each", so
@@ -58,7 +58,7 @@ plan when the item carries a decision or a sequence.
       migration story for existing permanent URLs; note the all-tenants-at-once blast radius
       this note originally described is already narrowed to per-tenant (per-tenant HKDF key
       derivation shipped as part of company isolation S3), so what remains open is per-file
-      granularity specifically (2026-09-10)
+      granularity specifically (2026-10-12)
 
 ## Planned
 
@@ -71,7 +71,7 @@ plan when the item carries a decision or a sequence.
       review before a pull request (2026-09-25)
 - [ ] bring your own S3 bucket: per-tenant S3/R2/GCS bucket configuration for data sovereignty
       and cost isolation [plan](docs/plans/2026-04-06-bring-your-own-s3.md) : still wanted,
-      not started (2026-09-10)
+      not started (2026-10-12)
 - [x] upload body size limit: `packages/api/src/routes/internal-upload.ts` buffered the whole
       request body (`c.req.arrayBuffer()`) without enforcing the 100 MB `MAX_FILE_SIZE_BYTES`;
       only the size declared when the upload is requested was checked, so an oversized or
