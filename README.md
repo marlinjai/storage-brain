@@ -218,15 +218,22 @@ await storage.deleteWorkspace(ws.id);
 
 ## Deployment
 
-### Cloudflare Workers
+### Production (Coolify)
 
-```bash
-cd packages/api
-wrangler secret put ADMIN_API_KEY
-wrangler secret put URL_SIGNING_SECRET
-wrangler d1 migrations apply storage-brain-db
-wrangler deploy
-```
+Production is the Node service (`packages/api/src/node.ts`) on Coolify at
+`api.storage-brain.lumitra.co`. A push to `main` that touches the API builds the
+image and triggers the Coolify deploy (`.github/workflows/deploy-api.yml`), which
+then checks `/health`. The service reads its configuration from Infisical at
+start: Postgres through `DATABASE_URL`, and the object store through `S3_BUCKET`,
+`S3_REGION`, `S3_ENDPOINT`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. The
+bucket is `storage-brain-files-eu`, a Cloudflare R2 bucket in the EU
+jurisdiction, which answers only on the `<account>.eu.r2.cloudflarestorage.com`
+host.
+
+The Cloudflare Workers entry point (`packages/api/src/index.ts`,
+`packages/api/wrangler.toml`) is kept for local development with
+`pnpm dev:workers` only. No Worker is deployed, and the package has no deploy
+script.
 
 ### Self-Hosted (Docker)
 
@@ -244,7 +251,8 @@ pnpm publish:sdk
 
 ```bash
 pnpm install           # Install dependencies
-pnpm dev               # Start local dev server (Wrangler)
+pnpm dev               # Start local dev server (Node, with Postgres and MinIO in Docker)
+pnpm dev:workers       # Start the Workers entry point locally (Wrangler)
 pnpm build             # Build all packages
 pnpm typecheck         # Type check all packages
 pnpm lint              # Lint

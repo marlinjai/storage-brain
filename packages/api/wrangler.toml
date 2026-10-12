@@ -8,10 +8,16 @@ binding = "DB"
 database_name = "storage-brain-db"
 database_id = "4ed90c66-738c-4199-893a-158f24b5c50b"
 
-# R2 Bucket binding
+# R2 Bucket binding, for local `wrangler dev` only (`pnpm dev:workers`), where
+# the bucket is simulated on disk and the name is just a local namespace.
+# This Worker is not deployed: production is the Node service on Coolify
+# (src/node.ts, api.storage-brain.lumitra.co), which reaches the EU bucket
+# `storage-brain-files-eu` over the S3 protocol with config from Infisical.
+# The binding used to name `storage-brain-files`, the pre-EU production bucket,
+# which was deleted on 2026-10-12 (docs/plans/2026-09-20-eu-data-residency.md).
 [[r2_buckets]]
 binding = "BUCKET"
-bucket_name = "storage-brain-files"
+bucket_name = "storage-brain-local-dev"
 
 # Every 5 minutes: settle upload sessions that will never complete as expired,
 # releasing their quota reservation (src/index.ts scheduled handler).

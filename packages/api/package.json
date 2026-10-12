@@ -6,8 +6,6 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "deploy:staging": "wrangler deploy --env staging",
     "typecheck": "tsc --noEmit",
     "start:node": "tsx src/node.ts",
     "db:migrate": "wrangler d1 migrations apply storage-brain-db",

@@ -1,7 +1,7 @@
 ---
 title: Move Storage Brain's objects into the EU jurisdiction
 type: plan
-status: decided
+status: completed
 date: 2026-09-20
 summary: Storage Brain keeps every project's uploaded files in an R2 bucket created without a jurisdiction, so Cloudflare may hold them anywhere. This moves them to an EU-jurisdiction bucket, which every project that stores files through Storage Brain inherits, and lets their privacy policies say the files rest in the EU.
 tags: [storage, r2, gdpr, data-residency, cloudflare]
@@ -88,6 +88,80 @@ the deletion of the old bucket.
 and `AWS_SECRET_ACCESS_KEY` from their `_PRE_EU` copies, set `S3_BUCKET` back to
 `storage-brain-files` and `S3_ENDPOINT` back to the default host, redeploy. The
 old bucket is untouched and still holds every object.
+
+## Reality update (2026-10-12): the old bucket is deleted, the plan is complete
+
+Step 6 is done. Marlin gave the explicit go on 2026-10-12, and the three things
+that were one rollback went in one pass, in this order.
+
+**The final comparison** (run through the secrets proxy, listing both buckets
+with the production key):
+
+| | Old `storage-brain-files` | New `storage-brain-files-eu` |
+|---|---|---|
+| Objects | 2052 | 3349 |
+| Bytes | 3560872814 | 7237010717 |
+| Newest object | 2026-09-20 08:54 UTC | 2026-10-11 22:49 UTC |
+
+- Only in the old bucket: 0.
+- In both: 2052, with zero size mismatches and zero ETag (the storage checksum)
+  mismatches, and identical bytes on both sides.
+- Only in the new bucket: 1297 objects, 3676137903 bytes, every one dated after
+  the cutover (earliest 2026-09-20 10:34 UTC).
+- The old bucket's newest object predates the first object of the EU bucket
+  (2026-09-20 10:07 UTC), and its count was still the 2052 of the cutover: nothing
+  wrote to it during the soak. It had no incomplete multipart uploads.
+- In the Cloudflare dashboard the old bucket had no public `r2.dev` access, no
+  custom domain, no event notification rule and no Worker bound to it, and the
+  EU bucket has the same settings (only the default rule that aborts incomplete
+  multipart uploads after seven days).
+
+**What was removed:**
+
+1. The Cloudflare account API token `storage-brain-hetzner` (issued 2026-04-04,
+   scoped to the old bucket only). Afterwards the `_PRE_EU` pair answered 401 on
+   both buckets, the production key still listed the EU bucket, `/health` 200.
+2. `AWS_ACCESS_KEY_ID_PRE_EU` and `AWS_SECRET_ACCESS_KEY_PRE_EU` in Infisical
+   (`production`, path `/`), with the secrets proxy's `delete_secret`. The four
+   live keys (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET`,
+   `S3_ENDPOINT`) were confirmed still present by name.
+3. The bucket `storage-brain-files`: 2052 objects deleted in three batches with
+   no errors, then the bucket itself. It now answers `NoSuchBucket`.
+
+**Proof afterwards:** the EU bucket held the same 3349 objects and 7237010717
+bytes as before the deletion; `/health` 200; three pre-migration files (dated
+2026-04-08, 2026-07-24 and 2026-09-20) downloaded through the API at exactly
+their recorded sizes (269986, 1384257 and 5067205 bytes); a test upload through
+the admin handshake on a throwaway tenant landed in the EU bucket, downloaded
+byte-identical, and was removed again together with the tenant.
+
+**There is no rollback any more.** The EU bucket is the only copy, with no
+versioning and no second bucket, which is the same single-copy posture as before
+2026-09-20. Production keeps running on the account-wide R2 key (decided
+2026-09-20, Marlin's call), so `R2_MIGRATION_ACCESS_KEY_ID` and
+`R2_MIGRATION_SECRET_ACCESS_KEY` stay.
+
+**Two caveats, recorded so nobody takes the soak for more than it was:**
+
+- **No service logs for 2026-09-20 to 2026-09-26.** Coolify keeps logs only for
+  the running container, and the service was redeployed four times on
+  2026-09-26. The logs that exist (2026-09-26 13:43 UTC to 2026-10-11, 210910
+  lines) show no 5xx response and no storage error across 7518 successful
+  upload, download and file requests. For the first six days the evidence is
+  indirect: objects kept landing in the EU bucket on five of those days.
+- **Cloudflare Pages bindings were not readable.** The dashboard's listing call
+  for Pages projects answered 400, so a Pages project bound to the old bucket
+  could not be ruled out that way. No Worker had such a binding, and no code in
+  any repository names the bucket.
+
+**Also tidied in the same pull request:** `packages/api/wrangler.toml` no longer
+names the deleted bucket (the binding stays for local `wrangler dev` under a
+local-only name), and the `deploy` scripts for the Worker are gone, because no
+Worker is deployed and production is the Node service on Coolify.
+
+**Step 7, the texts, is now unblocked and is not part of this repository.** The
+Lumitra Mail landing page and ŌPUNTIA's privacy policy may say the files rest in
+the EU; ŌPUNTIA's needs a new consent version when it does.
 
 ## Steps
 
