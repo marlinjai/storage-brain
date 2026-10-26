@@ -739,7 +739,11 @@ describe('file routes', () => {
 
     it('counts deletes per tenant, so a second API key of the same tenant shares the budget', async () => {
       for (let i = 0; i < 1000; i++) {
-        const res = await app.request(`/api/v1/files/${FILE_ID}`, { method: 'DELETE', headers: AUTH }, ENV);
+        const res = await app.request(
+          `/api/v1/files/${FILE_ID}`,
+          { method: 'DELETE', headers: AUTH },
+          ENV
+        );
         expect(res.status).toBe(200);
       }
       // Both keys resolve to the same tenant in this app's database mock.
