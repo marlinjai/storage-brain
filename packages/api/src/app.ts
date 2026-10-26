@@ -131,6 +131,10 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
   // dedicated, generous bucket instead of sharing the 100/60s API-operation
   // budget (tenant-keyed like the rest of the public group).
   const downloadRateLimit = rateLimiter({ windowMs: 60_000, max: 1000, keyFn: tenantKeyFn });
+  // File deletes arrive one-per-file too: deleting a project, a brand or a
+  // company removes every file it holds, so a project of a few hundred images
+  // must not run into the 100/60s budget half way and fail.
+  const deleteRateLimit = rateLimiter({ windowMs: 60_000, max: 1000, keyFn: tenantKeyFn });
   // Admin & internal limiters stay IP-keyed: admin auth is a single shared key
   // (per-key keying gives no isolation) and the internal uploader is one trusted
   // caller, so per-tenant keying does not apply.
@@ -164,14 +168,17 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
   app.use('/api/v1/files/:fileId/signed-url', downloadRateLimit);
   app.use('/api/v1/files/:fileId/permanent-url', downloadRateLimit);
 
-  // Remaining /files API operations (list, get, rename, delete) — genuine
-  // API operations, not per-file URL vending — stay on the 100/60s bucket.
+  // Remaining /files API operations (list, get, rename: genuine API
+  // operations, not per-file URL vending) stay on the 100/60s bucket. A
+  // DELETE of one file goes to the delete bucket instead.
   // Matched by single-segment patterns (bare collection + one :fileId segment)
   // so the two-segment vending/download routes mounted above are NOT also
   // caught here: a broad /files/* wildcard would double-meter them onto the
   // 100/60s budget and re-introduce the gallery-load 429s.
   app.use('/api/v1/files', apiRateLimit);
-  app.use('/api/v1/files/:fileId', apiRateLimit);
+  app.use('/api/v1/files/:fileId', (c, next) =>
+    c.req.method === 'DELETE' ? deleteRateLimit(c, next) : apiRateLimit(c, next)
+  );
 
   // Data routes (all use tenant authMiddleware)
   app.use('/api/v1/upload/*', apiRateLimit);

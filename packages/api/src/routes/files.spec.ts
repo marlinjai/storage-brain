@@ -713,6 +713,43 @@ describe('file routes', () => {
       }
     });
 
+    // Deleting a project removes its files one request each: a few hundred
+    // must go through in one window, on a bucket of their own.
+    it('meters file deletes on their own generous bucket', async () => {
+      for (let i = 0; i < 300; i++) {
+        const res = await app.request(
+          `/api/v1/files/${FILE_ID}`,
+          { method: 'DELETE', headers: AUTH },
+          ENV
+        );
+        expect(res.status).toBe(200);
+      }
+      // The deletes did not spend the API bucket: a rename still goes through.
+      const rename = await app.request(
+        `/api/v1/files/${FILE_ID}`,
+        {
+          method: 'PATCH',
+          headers: { ...AUTH, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ originalName: 'renamed.png' }),
+        },
+        ENV
+      );
+      expect(rename.status).toBe(200);
+    });
+
+    it('still meters a single-file read on the 100/60s bucket', async () => {
+      let sawRateLimit = false;
+      for (let i = 0; i < 150; i++) {
+        const res = await app.request(`/api/v1/files/${FILE_ID}`, { headers: AUTH }, ENV);
+        if (res.status === 429) {
+          sawRateLimit = true;
+          break;
+        }
+        expect(res.status).toBe(200);
+      }
+      expect(sawRateLimit).toBe(true);
+    });
+
     it('keeps rate-limit buckets isolated between tenants', async () => {
       // Exhaust tenant A's 100/60s API bucket.
       let aRateLimited = false;
