@@ -4,6 +4,7 @@ import { logger } from 'hono/logger';
 import { secureHeaders } from 'hono/secure-headers';
 import { requestId } from 'hono/request-id';
 import { bodyLimit } from 'hono/body-limit';
+import { createMiddleware } from 'hono/factory';
 import { MAX_JSON_BODY_BYTES } from '@storage-brain/shared';
 
 import type { AppEnv, Env } from './env';
@@ -18,6 +19,7 @@ import { internalUploadRoutes } from './routes/internal-upload';
 import { internalErasureRoutes } from './routes/internal-erasure';
 import { ApiError, errorHandler } from './middleware/error-handler';
 import { rateLimiter, tenantKeyFn } from './middleware/rate-limit';
+import { authMiddleware } from './middleware/auth';
 import { requestLifecycle } from './middleware/request-lifecycle';
 import { publicDownloadHandler } from './routes/public-download';
 
@@ -131,6 +133,25 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
   // dedicated, generous bucket instead of sharing the 100/60s API-operation
   // budget (tenant-keyed like the rest of the public group).
   const downloadRateLimit = rateLimiter({ windowMs: 60_000, max: 1000, keyFn: tenantKeyFn });
+  // File deletes arrive one-per-file too: deleting a project, a brand or a
+  // company removes every file it holds, so a project of a few hundred images
+  // must not run into the 100/60s budget half way and fail. This bucket is
+  // keyed by the RESOLVED tenant, not the credential, so a tenant holding
+  // several API keys still gets one budget: the request is authenticated
+  // first (authMiddleware then skips itself in fileRoutes).
+  const deleteRateLimit = rateLimiter({
+    windowMs: 60_000,
+    max: 1000,
+    keyFn: (c) => `tenant:${c.get('tenant').id}`,
+  });
+  const fileOperationRateLimit = createMiddleware<AppEnv>(async (c, next) => {
+    if (c.req.method !== 'DELETE') return apiRateLimit(c, next);
+    let refused: Response | void = undefined;
+    await authMiddleware(c, async () => {
+      refused = await deleteRateLimit(c, next);
+    });
+    return refused;
+  });
   // Admin & internal limiters stay IP-keyed: admin auth is a single shared key
   // (per-key keying gives no isolation) and the internal uploader is one trusted
   // caller, so per-tenant keying does not apply.
@@ -164,14 +185,15 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
   app.use('/api/v1/files/:fileId/signed-url', downloadRateLimit);
   app.use('/api/v1/files/:fileId/permanent-url', downloadRateLimit);
 
-  // Remaining /files API operations (list, get, rename, delete) — genuine
-  // API operations, not per-file URL vending — stay on the 100/60s bucket.
+  // Remaining /files API operations (list, get, rename: genuine API
+  // operations, not per-file URL vending) stay on the 100/60s bucket. A
+  // DELETE of one file goes to the delete bucket instead.
   // Matched by single-segment patterns (bare collection + one :fileId segment)
   // so the two-segment vending/download routes mounted above are NOT also
   // caught here: a broad /files/* wildcard would double-meter them onto the
   // 100/60s budget and re-introduce the gallery-load 429s.
   app.use('/api/v1/files', apiRateLimit);
-  app.use('/api/v1/files/:fileId', apiRateLimit);
+  app.use('/api/v1/files/:fileId', fileOperationRateLimit);
 
   // Data routes (all use tenant authMiddleware)
   app.use('/api/v1/upload/*', apiRateLimit);

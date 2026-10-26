@@ -30,6 +30,12 @@ import {
  * the auth-brain branch is skipped entirely (legacy keys only).
  */
 export async function authMiddleware(c: Context<AppEnv>, next: Next): Promise<void> {
+  // Already resolved earlier in this request (the delete rate limiter
+  // authenticates first so it can count per tenant): do not verify twice.
+  if (c.get('tenant')) {
+    await next();
+    return;
+  }
   const authHeader = c.req.header('Authorization');
   if (!authHeader) {
     throw ApiError.unauthorized('Missing Authorization header');
