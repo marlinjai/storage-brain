@@ -4,6 +4,7 @@ import { logger } from 'hono/logger';
 import { secureHeaders } from 'hono/secure-headers';
 import { requestId } from 'hono/request-id';
 import { bodyLimit } from 'hono/body-limit';
+import { createMiddleware } from 'hono/factory';
 import { MAX_JSON_BODY_BYTES } from '@storage-brain/shared';
 
 import type { AppEnv, Env } from './env';
@@ -135,6 +136,9 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
   // company removes every file it holds, so a project of a few hundred images
   // must not run into the 100/60s budget half way and fail.
   const deleteRateLimit = rateLimiter({ windowMs: 60_000, max: 1000, keyFn: tenantKeyFn });
+  const fileOperationRateLimit = createMiddleware<AppEnv>((c, next) =>
+    c.req.method === 'DELETE' ? deleteRateLimit(c, next) : apiRateLimit(c, next)
+  );
   // Admin & internal limiters stay IP-keyed: admin auth is a single shared key
   // (per-key keying gives no isolation) and the internal uploader is one trusted
   // caller, so per-tenant keying does not apply.
@@ -176,9 +180,7 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
   // caught here: a broad /files/* wildcard would double-meter them onto the
   // 100/60s budget and re-introduce the gallery-load 429s.
   app.use('/api/v1/files', apiRateLimit);
-  app.use('/api/v1/files/:fileId', (c, next) =>
-    c.req.method === 'DELETE' ? deleteRateLimit(c, next) : apiRateLimit(c, next)
-  );
+  app.use('/api/v1/files/:fileId', fileOperationRateLimit);
 
   // Data routes (all use tenant authMiddleware)
   app.use('/api/v1/upload/*', apiRateLimit);
