@@ -737,6 +737,28 @@ describe('file routes', () => {
       expect(rename.status).toBe(200);
     });
 
+    it('counts deletes per tenant, so a second API key of the same tenant shares the budget', async () => {
+      for (let i = 0; i < 1000; i++) {
+        const res = await app.request(`/api/v1/files/${FILE_ID}`, { method: 'DELETE', headers: AUTH }, ENV);
+        expect(res.status).toBe(200);
+      }
+      // Both keys resolve to the same tenant in this app's database mock.
+      const other = await app.request(
+        `/api/v1/files/${FILE_ID}`,
+        { method: 'DELETE', headers: { Authorization: 'Bearer sk_live_secondkey' } },
+        ENV
+      );
+      expect(other.status).toBe(429);
+      expect(other.headers.get('Retry-After')).toBeTruthy();
+    });
+
+    it('authenticates a delete once and refuses a missing credential before counting it', async () => {
+      const res = await app.request(`/api/v1/files/${FILE_ID}`, { method: 'DELETE' }, ENV);
+      expect(res.status).toBe(401);
+      await app.request(`/api/v1/files/${FILE_ID}`, { method: 'DELETE', headers: AUTH }, ENV);
+      expect(db.getTenantByApiKey).toHaveBeenCalledTimes(1);
+    });
+
     it('still meters a single-file read on the 100/60s bucket', async () => {
       let sawRateLimit = false;
       for (let i = 0; i < 150; i++) {

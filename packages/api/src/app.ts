@@ -19,6 +19,7 @@ import { internalUploadRoutes } from './routes/internal-upload';
 import { internalErasureRoutes } from './routes/internal-erasure';
 import { ApiError, errorHandler } from './middleware/error-handler';
 import { rateLimiter, tenantKeyFn } from './middleware/rate-limit';
+import { authMiddleware } from './middleware/auth';
 import { requestLifecycle } from './middleware/request-lifecycle';
 import { publicDownloadHandler } from './routes/public-download';
 
@@ -134,11 +135,23 @@ export function createApp(config: AppConfig): Hono<AppEnv> {
   const downloadRateLimit = rateLimiter({ windowMs: 60_000, max: 1000, keyFn: tenantKeyFn });
   // File deletes arrive one-per-file too: deleting a project, a brand or a
   // company removes every file it holds, so a project of a few hundred images
-  // must not run into the 100/60s budget half way and fail.
-  const deleteRateLimit = rateLimiter({ windowMs: 60_000, max: 1000, keyFn: tenantKeyFn });
-  const fileOperationRateLimit = createMiddleware<AppEnv>((c, next) =>
-    c.req.method === 'DELETE' ? deleteRateLimit(c, next) : apiRateLimit(c, next)
-  );
+  // must not run into the 100/60s budget half way and fail. This bucket is
+  // keyed by the RESOLVED tenant, not the credential, so a tenant holding
+  // several API keys still gets one budget: the request is authenticated
+  // first (authMiddleware then skips itself in fileRoutes).
+  const deleteRateLimit = rateLimiter({
+    windowMs: 60_000,
+    max: 1000,
+    keyFn: (c) => `tenant:${c.get('tenant').id}`,
+  });
+  const fileOperationRateLimit = createMiddleware<AppEnv>(async (c, next) => {
+    if (c.req.method !== 'DELETE') return apiRateLimit(c, next);
+    let refused: Response | void = undefined;
+    await authMiddleware(c, async () => {
+      refused = await deleteRateLimit(c, next);
+    });
+    return refused;
+  });
   // Admin & internal limiters stay IP-keyed: admin auth is a single shared key
   // (per-key keying gives no isolation) and the internal uploader is one trusted
   // caller, so per-tenant keying does not apply.
