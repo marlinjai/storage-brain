@@ -174,19 +174,27 @@ fileRoutes.delete('/:fileId', async (c) => {
     throw ApiError.notFound('File not found');
   }
 
-  // Delete the binary from storage. Best-effort, mirroring tenant deletion:
-  // an object that is already gone must not block the DB cleanup.
+  // Delete the binary from storage. A failed storage delete must never be
+  // swallowed: log it and leave `purged_at` unset so the purge sweeper retries
+  // the delete. An object that is already gone counts as purged (R2 and S3
+  // `delete` answer a missing key without an error).
+  let purgedAt: number | null = Date.now();
   try {
     await storage.delete(file.storedPath);
-  } catch {
-    // Best-effort deletion: continue even if storage delete fails
+  } catch (err) {
+    purgedAt = null;
+    console.error(
+      `Storage delete failed for file ${file.id} (tenant ${tenant.id}, path ${file.storedPath}); the purge sweeper will retry:`,
+      err
+    );
   }
 
-  // Soft delete the row (deleted_at stays set for the audit trail), release
-  // its bytes at tenant and workspace level and close any open upload
-  // session, atomically. A concurrent DELETE that got there first makes this
-  // a no-op, so the bytes are released exactly once.
-  await db.deleteFileAndReleaseQuota(fileId, tenant.id);
+  // Soft delete the row (deleted_at stays set for the audit trail, purged_at
+  // records whether the object is really gone), release its bytes at tenant
+  // and workspace level and close any open upload session, atomically. A
+  // concurrent DELETE that got there first makes this a no-op, so the bytes
+  // are released exactly once.
+  await db.deleteFileAndReleaseQuota(fileId, tenant.id, purgedAt);
 
   return c.json({ success: true });
 });

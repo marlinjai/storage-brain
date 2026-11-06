@@ -99,6 +99,42 @@ export interface DeleteWorkspaceFilesResult {
   files: DeletedFileRef[];
 }
 
+/**
+ * A soft-deleted file whose storage object has not been confirmed gone yet
+ * (`deleted_at` set, `purged_at` NULL). The purge sweeper retries the R2/S3
+ * delete for exactly these rows.
+ */
+export interface PendingPurgeFile {
+  id: string;
+  tenantId: string;
+  storedPath: string;
+}
+
+/**
+ * An operator alert row. Mirrors Studio's `operatorAlert` pattern: an alert is
+ * a fact in the database with a unique key, not a timer in memory, so repeated
+ * failures raise exactly one row per subject and a restart never loses it.
+ */
+export interface AlertRecord {
+  id: string;
+  kind: string;
+  tenantId: string | null;
+  fileId: string | null;
+  storedPath: string;
+  payload: Record<string, unknown> | null;
+  createdAt: number;
+  updatedAt: number;
+  acknowledgedAt: number | null;
+}
+
+export interface RaiseAlertInput {
+  kind: string;
+  tenantId: string | null;
+  fileId: string | null;
+  storedPath: string;
+  payload?: Record<string, unknown>;
+}
+
 export interface CreatePendingUploadInput {
   /** The file row to create; `sizeBytes` is the declared size, reserved as quota. */
   file: CreateFileInput;
@@ -301,8 +337,18 @@ export interface DatabaseAdapter {
    * Soft-delete a live file, release its bytes from both counters and close
    * its open upload session, atomically. Returns null (changing nothing) when
    * the file does not exist or is already deleted.
+   *
+   * `purgedAt` records whether the caller confirmed the storage object is gone
+   * (`deleted_at` set, `purged_at` set) or not (`purged_at` stays NULL, so the
+   * purge sweeper retries the delete). Pass null (or omit) when the storage
+   * delete failed; pass a timestamp when it succeeded or the object was
+   * already missing.
    */
-  deleteFileAndReleaseQuota(fileId: string, tenantId: string): Promise<StoredFile | null>;
+  deleteFileAndReleaseQuota(
+    fileId: string,
+    tenantId: string,
+    purgedAt?: number | null
+  ): Promise<StoredFile | null>;
   /**
    * Soft-delete every live file of a workspace, release their bytes from both
    * counters and close their open upload sessions, atomically. Returns the
@@ -313,6 +359,39 @@ export interface DatabaseAdapter {
     workspaceId: string,
     tenantId: string
   ): Promise<DeleteWorkspaceFilesResult>;
+
+  // Purge tracking and the sweeper's reads
+  /**
+   * Up to `limit` soft-deleted files whose storage object has not been
+   * confirmed gone (`deleted_at` set, `purged_at` NULL), oldest delete first.
+   * The purge sweeper drains this in bounded batches.
+   */
+  listUnpurgedFiles(limit: number): Promise<PendingPurgeFile[]>;
+  /**
+   * Record that a soft-deleted file's storage object is gone. Only touches a
+   * row that is actually soft-deleted, so a live file can never be marked
+   * purged.
+   */
+  setFilePurgedAt(fileId: string, purgedAt: number): Promise<void>;
+  /**
+   * Every stored object key known to the database, across tenants, INCLUDING
+   * soft-deleted and failed rows. The orphan report uses this to tell apart
+   * storage keys that have a database row from keys that are truly orphaned.
+   */
+  getAllStoredPaths(): Promise<string[]>;
+
+  // Alerts
+  /**
+   * Write one alert, idempotent per (kind, fileId): a repeat failure for the
+   * same object bumps the existing row (updated_at, payload) instead of
+   * inserting a second one. This is what makes "a repeated failure raises
+   * exactly one alert" hold across sweeper cycles and restarts.
+   */
+  raiseAlert(input: RaiseAlertInput): Promise<void>;
+  /** Every unacknowledged alert, newest first. */
+  listOpenAlerts(): Promise<AlertRecord[]>;
+  /** Acknowledge one open alert. Returns false if it was already acknowledged or missing. */
+  acknowledgeAlert(id: string): Promise<boolean>;
 
   // Quota — tenant level
   checkQuota(tenantId: string, fileSizeBytes: number): Promise<QuotaCheckResult>;

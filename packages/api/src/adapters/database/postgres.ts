@@ -32,6 +32,9 @@ import type {
   QuotaResponse,
   AllowedMimeType,
   ProcessingStatus,
+  PendingPurgeFile,
+  AlertRecord,
+  RaiseAlertInput,
 } from '@storage-brain/shared';
 import { hashApiKey, verifyApiKey } from '../../utils/crypto';
 
@@ -663,15 +666,21 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
     return { scanned: rows.length, expired };
   }
 
-  async deleteFileAndReleaseQuota(fileId: string, tenantId: string): Promise<StoredFile | null> {
+  async deleteFileAndReleaseQuota(
+    fileId: string,
+    tenantId: string,
+    purgedAt: number | null = null
+  ): Promise<StoredFile | null> {
     const now = Date.now();
     return this.sql.begin(async (tx) => {
       const sql = tx as unknown as postgres.Sql;
 
       // The UPDATE locks the file row and returns the size as of any settle
       // that committed before it, so the release is always the current value.
+      // `purged_at` is set only when the caller confirmed the storage object is
+      // gone (null leaves it unset so the purge sweeper retries).
       const rows = await sql`
-        UPDATE files SET deleted_at = ${now}, updated_at = ${now}
+        UPDATE files SET deleted_at = ${now}, purged_at = ${purgedAt}, updated_at = ${now}
         WHERE id = ${fileId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
         RETURNING *
       `;
@@ -717,6 +726,67 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
         files: rows.map((r) => ({ id: r.id as string, storedPath: r.stored_path as string })),
       };
     });
+  }
+
+  // ============================================================================
+  // Purge tracking and alerts
+  // ============================================================================
+
+  async listUnpurgedFiles(limit: number): Promise<PendingPurgeFile[]> {
+    const rows = await this.sql`
+      SELECT id, tenant_id, stored_path FROM files
+      WHERE deleted_at IS NOT NULL AND purged_at IS NULL
+      ORDER BY deleted_at
+      LIMIT ${limit}
+    `;
+    return rows.map((row) => ({
+      id: row.id as string,
+      tenantId: row.tenant_id as string,
+      storedPath: row.stored_path as string,
+    }));
+  }
+
+  async setFilePurgedAt(fileId: string, purgedAt: number): Promise<void> {
+    await this.sql`
+      UPDATE files SET purged_at = ${purgedAt}, updated_at = ${purgedAt}
+      WHERE id = ${fileId} AND deleted_at IS NOT NULL
+    `;
+  }
+
+  async getAllStoredPaths(): Promise<string[]> {
+    const rows = await this.sql`SELECT DISTINCT stored_path FROM files`;
+    return rows.map((row) => row.stored_path as string);
+  }
+
+  async raiseAlert(input: RaiseAlertInput): Promise<void> {
+    const now = Date.now();
+    const id = crypto.randomUUID();
+    const payload = input.payload ? JSON.stringify(input.payload) : null;
+    // The partial unique index (kind, file_id) makes this exactly-once per
+    // object: a repeat failure bumps the existing row instead of adding one.
+    await this.sql`
+      INSERT INTO alerts (id, kind, tenant_id, file_id, stored_path, payload, created_at, updated_at, acknowledged_at)
+      VALUES (${id}, ${input.kind}, ${input.tenantId}, ${input.fileId}, ${input.storedPath}, ${payload}, ${now}, ${now}, null)
+      ON CONFLICT (kind, file_id) WHERE file_id IS NOT NULL
+      DO UPDATE SET updated_at = EXCLUDED.updated_at,
+                    stored_path = EXCLUDED.stored_path,
+                    payload = EXCLUDED.payload
+    `;
+  }
+
+  async listOpenAlerts(): Promise<AlertRecord[]> {
+    const rows = await this.sql`
+      SELECT * FROM alerts WHERE acknowledged_at IS NULL ORDER BY created_at DESC
+    `;
+    return rows.map((row) => this.mapAlertRow(row));
+  }
+
+  async acknowledgeAlert(id: string): Promise<boolean> {
+    const result = await this.sql`
+      UPDATE alerts SET acknowledged_at = ${Date.now()}
+      WHERE id = ${id} AND acknowledged_at IS NULL
+    `;
+    return result.count > 0;
   }
 
   // ============================================================================
@@ -877,6 +947,21 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
       createdAt: Number(row.created_at),
       updatedAt: Number(row.updated_at),
       deletedAt: row.deleted_at ? Number(row.deleted_at) : null,
+      purgedAt: row.purged_at ? Number(row.purged_at) : null,
+    };
+  }
+
+  private mapAlertRow(row: postgres.Row): AlertRecord {
+    return {
+      id: row.id as string,
+      kind: row.kind as string,
+      tenantId: (row.tenant_id as string) ?? null,
+      fileId: (row.file_id as string) ?? null,
+      storedPath: row.stored_path as string,
+      payload: row.payload ? (JSON.parse(row.payload as string) as Record<string, unknown>) : null,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+      acknowledgedAt: row.acknowledged_at ? Number(row.acknowledged_at) : null,
     };
   }
 

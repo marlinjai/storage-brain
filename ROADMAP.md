@@ -77,6 +77,16 @@ plan when the item carries a decision or a sequence.
       an ops backfill (it sets used_bytes to the sum of the live files, which also repairs
       the 8.913 vs 9.636 GB gap), and schedule it periodically (daily) so the counter
       self-corrects. (2026-11-06)
+- [x] file deletes never fail silently, and a purge sweeper closes the gap: every delete path
+      now records whether the storage object is really gone (`purged_at`), logs a failed R2/S3
+      delete instead of swallowing it, and leaves such rows unpurged for a sweeper that retries
+      them in bounded batches and raises exactly one operator alert per object that keeps
+      failing (admin API lists and acknowledges them, SDK methods added). The delete paths
+      changed are the tenant file delete, the admin per-file delete, the workspace bulk delete
+      and the internal upload route; the R2 upload-complete webhook already logged its delete
+      failures. The HTTP contract of `DELETE /files/:id` is unchanged (row deleted, quota
+      released), so Studio's transaction-and-rollback handling keeps working. First production
+      sweep and orphan report numbers are in the pull request that shipped this. (2026-11-06)
 
 ## Planned
 
@@ -104,12 +114,19 @@ plan when the item carries a decision or a sequence.
       replace the reservation, a failed, cut-off or expired upload releases it, a 5-minute sweep
       reclaims stale sessions); deletes release and close sessions in the same transaction
       (2026-09-26)
-- [ ] orphaned objects after a crash mid-upload: when a server process dies after writing an
+- [x] orphaned objects after a crash mid-upload: when a server process dies after writing an
       upload's object but before settling its session, the expiry sweep reclaims the quota
       after the one-hour grace period, but the object already written to storage stays behind,
-      uncounted in any quota and attached only to a failed zero-byte file record. Needs an
-      orphan sweep that lists storage keys without an active completed file row (or writes a
-      pre-write intent record) and deletes them after a grace period (2026-11-06)
+      uncounted in any quota and attached only to a failed zero-byte file record. Shipped
+      (report half, 2026-11-06): the purge sweeper runs an orphan report that lists storage
+      keys without any file row, older than 24 hours, with sizes; report-only, deletion is
+      OFF. The report's production counts and total size are in the pull request. Deleting
+      orphans is a destructive production action and awaits Marlin's decision after the
+      numbers; the line below holds it. (2026-11-06)
+- [ ] delete orphaned objects (the second half of the orphan sweep): after Marlin sees the
+      orphan report numbers, enable deletion of the listed storage keys that have no file row
+      and are older than 24 hours (the sweeper already selects them; deletion is deliberately
+      off until this decides) (2026-11-06)
 
 ## Completed
 

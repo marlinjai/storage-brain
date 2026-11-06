@@ -29,6 +29,9 @@ import type {
   AllowedMimeType,
   UploadSessionStatus,
   ProcessingStatus,
+  PendingPurgeFile,
+  AlertRecord,
+  RaiseAlertInput,
 } from '@storage-brain/shared';
 import { hashApiKey, verifyApiKey } from '../../utils/crypto';
 
@@ -781,7 +784,11 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
     return { scanned: rows.results.length, expired };
   }
 
-  async deleteFileAndReleaseQuota(fileId: string, tenantId: string): Promise<StoredFile | null> {
+  async deleteFileAndReleaseQuota(
+    fileId: string,
+    tenantId: string,
+    purgedAt: number | null = null
+  ): Promise<StoredFile | null> {
     const file = await this.getFileById(fileId, tenantId);
     if (!file) return null;
 
@@ -812,8 +819,8 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
         )
         .bind(fileId, fileId, tenantId),
       this.db
-        .prepare(`UPDATE files SET deleted_at = ?, updated_at = ? WHERE ${live}`)
-        .bind(now, now, fileId, tenantId),
+        .prepare(`UPDATE files SET deleted_at = ?, purged_at = ?, updated_at = ? WHERE ${live}`)
+        .bind(now, purgedAt, now, fileId, tenantId),
     ]);
 
     return (results[3]?.meta.changes ?? 0) > 0 ? file : null;
@@ -865,6 +872,84 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       releasedBytes: rows.reduce((sum, r) => sum + Number(r.size_bytes), 0),
       files: rows.map((r) => ({ id: r.id, storedPath: r.stored_path })),
     };
+  }
+
+  // ============================================================================
+  // Purge tracking and alerts
+  // ============================================================================
+
+  async listUnpurgedFiles(limit: number): Promise<PendingPurgeFile[]> {
+    const result = await this.db
+      .prepare(
+        `SELECT id, tenant_id, stored_path FROM files
+         WHERE deleted_at IS NOT NULL AND purged_at IS NULL
+         ORDER BY deleted_at
+         LIMIT ?`
+      )
+      .bind(limit)
+      .all<{ id: string; tenant_id: string; stored_path: string }>();
+    return result.results.map((row) => ({
+      id: row.id,
+      tenantId: row.tenant_id,
+      storedPath: row.stored_path,
+    }));
+  }
+
+  async setFilePurgedAt(fileId: string, purgedAt: number): Promise<void> {
+    await this.db
+      .prepare(
+        'UPDATE files SET purged_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NOT NULL'
+      )
+      .bind(purgedAt, purgedAt, fileId)
+      .run();
+  }
+
+  async getAllStoredPaths(): Promise<string[]> {
+    const result = await this.db
+      .prepare('SELECT DISTINCT stored_path FROM files')
+      .all<{ stored_path: string }>();
+    return result.results.map((row) => row.stored_path);
+  }
+
+  async raiseAlert(input: RaiseAlertInput): Promise<void> {
+    const now = Date.now();
+    // The partial unique index (kind, file_id) makes this exactly-once per
+    // object: a repeat failure bumps the existing row instead of adding one.
+    await this.db
+      .prepare(
+        `INSERT INTO alerts (id, kind, tenant_id, file_id, stored_path, payload, created_at, updated_at, acknowledged_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+         ON CONFLICT (kind, file_id) WHERE file_id IS NOT NULL
+         DO UPDATE SET updated_at = excluded.updated_at,
+                       stored_path = excluded.stored_path,
+                       payload = excluded.payload`
+      )
+      .bind(
+        crypto.randomUUID(),
+        input.kind,
+        input.tenantId,
+        input.fileId,
+        input.storedPath,
+        input.payload ? JSON.stringify(input.payload) : null,
+        now,
+        now
+      )
+      .run();
+  }
+
+  async listOpenAlerts(): Promise<AlertRecord[]> {
+    const result = await this.db
+      .prepare('SELECT * FROM alerts WHERE acknowledged_at IS NULL ORDER BY created_at DESC')
+      .all();
+    return result.results.map((row) => this.mapAlertRow(row));
+  }
+
+  async acknowledgeAlert(id: string): Promise<boolean> {
+    const result = await this.db
+      .prepare('UPDATE alerts SET acknowledged_at = ? WHERE id = ? AND acknowledged_at IS NULL')
+      .bind(Date.now(), id)
+      .run();
+    return (result.meta.changes ?? 0) > 0;
   }
 
   // ============================================================================
@@ -1043,6 +1128,21 @@ export class D1DatabaseAdapter implements DatabaseAdapter {
       createdAt: row.created_at as number,
       updatedAt: row.updated_at as number,
       deletedAt: (row.deleted_at as number) ?? null,
+      purgedAt: (row.purged_at as number | null) ?? null,
+    };
+  }
+
+  private mapAlertRow(row: Record<string, unknown>): AlertRecord {
+    return {
+      id: row.id as string,
+      kind: row.kind as string,
+      tenantId: (row.tenant_id as string) ?? null,
+      fileId: (row.file_id as string) ?? null,
+      storedPath: row.stored_path as string,
+      payload: row.payload ? (JSON.parse(row.payload as string) as Record<string, unknown>) : null,
+      createdAt: row.created_at as number,
+      updatedAt: row.updated_at as number,
+      acknowledgedAt: (row.acknowledged_at as number | null) ?? null,
     };
   }
 

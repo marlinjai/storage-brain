@@ -32,6 +32,7 @@ function makeHarness(): Harness {
     delete: deleteMock,
     exists: vi.fn(),
     head: vi.fn(),
+    listObjects: vi.fn().mockResolvedValue([]),
   };
   const app = createApp({ db, storage });
   return { db, storage, deleteMock, app };
