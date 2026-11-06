@@ -64,6 +64,19 @@ export class R2StorageAdapter implements StorageAdapter {
     await this.bucket.delete(key);
   }
 
+  async listObjects(): Promise<Array<{ key: string; size: number; lastModified: Date }>> {
+    const out: Array<{ key: string; size: number; lastModified: Date }> = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.bucket.list(cursor ? { cursor } : {});
+      for (const object of page.objects) {
+        out.push({ key: object.key, size: object.size, lastModified: object.uploaded });
+      }
+      cursor = page.truncated ? page.cursor : undefined;
+    } while (cursor);
+    return out;
+  }
+
   async exists(key: string): Promise<boolean> {
     const head = await this.bucket.head(key);
     return head !== null;

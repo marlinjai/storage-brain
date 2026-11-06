@@ -70,6 +70,12 @@ export interface StoredFile {
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
+  /**
+   * When the storage object was confirmed gone (the R2/S3 delete succeeded).
+   * Nullable: a soft-deleted row (`deletedAt` set) with `purgedAt` unset
+   * still has its object in storage and is retried by the purge sweeper.
+   */
+  purgedAt: number | null;
 }
 
 /**

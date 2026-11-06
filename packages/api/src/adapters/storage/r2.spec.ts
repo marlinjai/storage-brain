@@ -12,6 +12,7 @@ function createMockBucket() {
     get: vi.fn(),
     delete: vi.fn().mockResolvedValue(undefined),
     head: vi.fn(),
+    list: vi.fn(),
   };
 }
 
@@ -22,6 +23,31 @@ describe('R2StorageAdapter', () => {
   beforeEach(() => {
     bucket = createMockBucket();
     adapter = new R2StorageAdapter(bucket as never);
+  });
+
+  describe('listObjects', () => {
+    it('pages through the bucket and returns every object', async () => {
+      bucket.list
+        .mockResolvedValueOnce({
+          objects: [{ key: 'a.png', size: 10, uploaded: new Date('2026-01-01') }],
+          truncated: true,
+          cursor: 'cursor-2',
+        })
+        .mockResolvedValueOnce({
+          objects: [{ key: 'b.pdf', size: 20, uploaded: new Date('2026-02-01') }],
+          truncated: false,
+        });
+
+      const objects = await adapter.listObjects();
+
+      expect(objects).toEqual([
+        { key: 'a.png', size: 10, lastModified: new Date('2026-01-01') },
+        { key: 'b.pdf', size: 20, lastModified: new Date('2026-02-01') },
+      ]);
+      expect(bucket.list).toHaveBeenCalledTimes(2);
+      expect(bucket.list).toHaveBeenNthCalledWith(1, {});
+      expect(bucket.list).toHaveBeenNthCalledWith(2, { cursor: 'cursor-2' });
+    });
   });
 
   describe('put', () => {

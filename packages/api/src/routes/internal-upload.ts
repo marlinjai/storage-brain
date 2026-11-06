@@ -161,8 +161,18 @@ internalUploadRoutes.put('/upload/*', async (c) => {
   if (!settled) {
     // The session was closed while the bytes were in flight (the file was
     // deleted, or the sweep reclaimed it after the grace period): its quota is
-    // already gone, so the object must not stay behind either.
-    await storage.delete(storedPath).catch(() => {});
+    // already gone, so the object must not stay behind either. A failed delete
+    // is logged, never swallowed: if the row is soft-deleted the purge
+    // sweeper will retry it, and if it is not, the error at least is not
+    // silent.
+    try {
+      await storage.delete(storedPath);
+    } catch (err) {
+      console.error(
+        `Failed to delete orphaned upload object ${storedPath} after its session closed:`,
+        err
+      );
+    }
     return c.json({ error: 'Upload session was closed before the upload finished' }, 409);
   }
 

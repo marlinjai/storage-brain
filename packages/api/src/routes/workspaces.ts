@@ -160,15 +160,21 @@ workspaceRoutes.delete('/:workspaceId', async (c) => {
     tenant.id
   );
 
-  // Delete their binaries from storage. Best-effort, mirroring tenant deletion:
-  // an object that is already gone (or was never written) must not fail the
-  // request. An upload still in flight for one of these files finds its
-  // session closed when it settles and deletes the object it wrote itself.
+  // Delete their binaries from storage. A failed storage delete must never be
+  // swallowed: log it and leave `purged_at` unset for that file so the purge
+  // sweeper retries it. An object that is already gone (or was never written)
+  // counts as purged (R2 and S3 `delete` answer a missing key without an
+  // error). An upload still in flight for one of these files finds its session
+  // closed when it settles and deletes the object it wrote itself.
   for (const file of deletedFiles) {
     try {
       await storage.delete(file.storedPath);
+      await db.setFilePurgedAt(file.id, Date.now());
     } catch (err) {
-      console.error(`Failed to delete storage object ${file.storedPath}:`, err);
+      console.error(
+        `Failed to delete storage object ${file.storedPath} (file ${file.id}, tenant ${tenant.id}); the purge sweeper will retry:`,
+        err
+      );
     }
   }
 

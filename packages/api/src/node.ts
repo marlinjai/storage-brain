@@ -7,6 +7,7 @@ import {
   expireStaleUploads,
   EXPIRE_STALE_UPLOADS_INTERVAL_MS,
 } from './lib/upload/expire-stale-uploads';
+import { runPurgeSweep, runOrphanReport } from './lib/purge/purge-sweeper';
 
 function required(name: string): string {
   const value = process.env[name];
@@ -80,6 +81,7 @@ function main(): void {
       console.log('Migrations complete.');
       ready = true;
       startStaleUploadSweep(db);
+      startMaintenanceSweep(db, storage);
     })
     .catch((err) => {
       console.error('Migration failed:', err);
@@ -114,6 +116,44 @@ function startStaleUploadSweep(db: DatabaseAdapter): void {
   };
   sweep();
   setInterval(sweep, EXPIRE_STALE_UPLOADS_INTERVAL_MS).unref();
+}
+
+/**
+ * Purge sweep + orphan report loop. The purge sweep retries the object delete
+ * for every soft-deleted file whose `purged_at` is unset (a delete that failed
+ * earlier), in bounded batches, and raises exactly one alert per object that
+ * keeps failing. The orphan report lists storage keys with no file row, REPORT
+ * ONLY (deletion of orphans is a separate, human decision).
+ *
+ * Runs in-process rather than as a Coolify scheduled task because Coolify
+ * scheduled tasks run by `docker exec` without Infisical secrets, so they
+ * could not reach the database or the object store. Runs once at boot, then
+ * every interval; unref() keeps it from holding the process open.
+ */
+const PURGE_SWEEP_INTERVAL_MS = 15 * 60 * 1000;
+const ORPHAN_REPORT_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+function startMaintenanceSweep(db: DatabaseAdapter, storage: S3StorageAdapter): void {
+  let lastOrphanReport = 0;
+  const tick = (): void => {
+    runPurgeSweep({ db, storage })
+      .then((outcome) => {
+        if (outcome.scanned > 0) {
+          console.log(
+            `[purge] scanned=${outcome.scanned} purged=${outcome.purged} failed=${outcome.failed}`
+          );
+        }
+        if (Date.now() - lastOrphanReport >= ORPHAN_REPORT_INTERVAL_MS) {
+          lastOrphanReport = Date.now();
+          void runOrphanReport({ db, storage }).catch((err) => {
+            console.error('Orphan report failed:', err);
+          });
+        }
+      })
+      .catch((err) => console.error('Purge sweep failed:', err));
+  };
+  tick();
+  setInterval(tick, PURGE_SWEEP_INTERVAL_MS).unref();
 }
 
 try {

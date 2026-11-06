@@ -70,7 +70,14 @@ function createMockDb() {
 }
 
 function createMockStorage(): StorageAdapter {
-  return { put: vi.fn(), get: vi.fn(), delete: vi.fn(), exists: vi.fn(), head: vi.fn() };
+  return {
+    put: vi.fn(),
+    get: vi.fn(),
+    delete: vi.fn(),
+    exists: vi.fn(),
+    head: vi.fn(),
+    listObjects: vi.fn().mockResolvedValue([]),
+  };
 }
 
 const validBody = {
