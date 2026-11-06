@@ -59,6 +59,24 @@ plan when the item carries a decision or a sequence.
       this note originally described is already narrowed to per-tenant (per-tenant HKDF key
       derivation shipped as part of company isolation S3), so what remains open is per-file
       granularity specifically (2026-10-12)
+- [ ] The tenant quota counter can drift from the files table, and nothing reconciles it:
+      on 2026-11-06 the `lumitra-studio` tenant (shared by every Studio company, 2,382
+      files) read 8.913 GB used while its files table summed 9.636 GB, and the counter was
+      what refused Studio's uploads when the quota filled (164 failed jobs that day). The
+      investigation of that day found Studio is NOT the cause: Studio's calls declare the
+      exact byte size, so under the reconcile logic below its uploads keep counter and table
+      consistent. Storage Brain already settles each NEW upload exactly (the fix of
+      2026-09-26, #35: the declared size is reserved atomically, completion replaces the
+      reservation with the stored bytes by adjusting the counter by the difference, a
+      failed or expired upload releases its reservation, a 5-minute sweep reclaims stale
+      sessions, and deletes release in the same transaction). What is still missing is a
+      reconciliation: `recalculateQuota` (postgres.ts and d1.ts) exists but is never called
+      at runtime, so (a) drift accumulated before #35 (or before its deploy) is never
+      repaired, and (b) any future divergence (a bug, a manual database edit, an admin
+      tenant repoint) has no self-healing. Fix: run `recalculateQuota` once per tenant as
+      an ops backfill (it sets used_bytes to the sum of the live files, which also repairs
+      the 8.913 vs 9.636 GB gap), and schedule it periodically (daily) so the counter
+      self-corrects. (2026-11-06)
 
 ## Planned
 
@@ -91,7 +109,7 @@ plan when the item carries a decision or a sequence.
       after the one-hour grace period, but the object already written to storage stays behind,
       uncounted in any quota and attached only to a failed zero-byte file record. Needs an
       orphan sweep that lists storage keys without an active completed file row (or writes a
-      pre-write intent record) and deletes them after a grace period (2026-09-26)
+      pre-write intent record) and deletes them after a grace period (2026-11-06)
 
 ## Completed
 
