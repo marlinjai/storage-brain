@@ -118,15 +118,10 @@ plan when the item carries a decision or a sequence.
       upload's object but before settling its session, the expiry sweep reclaims the quota
       after the one-hour grace period, but the object already written to storage stays behind,
       uncounted in any quota and attached only to a failed zero-byte file record. Shipped
-      (report half, 2026-11-06): the purge sweeper runs an orphan report that lists storage
-      keys without any file row, older than 24 hours, with sizes; report-only, deletion is
-      OFF. The report's production counts and total size are in the pull request. Deleting
-      orphans is a destructive production action and awaits Marlin's decision after the
-      numbers; the line below holds it. (2026-11-06)
-- [ ] delete orphaned objects (the second half of the orphan sweep): after Marlin sees the
-      orphan report numbers, enable deletion of the listed storage keys that have no file row
-      and are older than 24 hours (the sweeper already selects them; deletion is deliberately
-      off until this decides) (2026-11-06)
+      (2026-11-06 report half, 2026-11-07 deletion half): the orphan sweep lists storage keys
+      without any file row, older than 24 hours, with sizes, and deletes them (age-gated and
+      row-gated). Marlin approved deletion on 2026-11-07 after the report showed 0 orphans on
+      production. (2026-11-07)
 
 ## Completed
 

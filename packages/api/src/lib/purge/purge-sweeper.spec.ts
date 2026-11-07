@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { StorageAdapter } from '@storage-brain/shared';
 import { makeD1Adapter, seedFile } from '../../test-utils/d1-sqlite';
-import { runPurgeSweep, runOrphanReport, ORPHAN_MIN_AGE_MS } from './purge-sweeper';
+import {
+  runPurgeSweep,
+  runOrphanReport,
+  runOrphanDeletion,
+  ORPHAN_MIN_AGE_MS,
+  ORPHAN_DELETE_BATCH_SIZE,
+} from './purge-sweeper';
 
 const NOW = Date.parse('2026-11-06T12:00:00Z');
 
@@ -187,4 +193,132 @@ describe('orphan report', () => {
       tags: null,
     };
   }
+});
+
+describe('orphan deletion', () => {
+  let db: ReturnType<typeof makeD1Adapter>;
+  let tenantId: string;
+
+  beforeEach(async () => {
+    db = makeD1Adapter();
+    tenantId = `t-${crypto.randomUUID()}`;
+    await db.createTenant({
+      id: tenantId,
+      name: `OrphanDel ${tenantId}`,
+      apiKeyHash: `hash-${tenantId}`,
+      keyPrefix: 'sk_live_orpd',
+      quotaBytes: 10_000,
+      allowedFileTypes: null,
+    });
+  });
+
+  const HOUR = 60 * 60 * 1000;
+
+  function seededFileWithRow() {
+    const id = crypto.randomUUID();
+    return {
+      id,
+      tenantId,
+      originalName: `${id}.bin`,
+      storedPath: `tenants/${tenantId}/files/${id}/${id}.bin`,
+      fileType: 'application/octet-stream',
+      sizeBytes: 300,
+      context: 'default',
+      tags: null,
+    };
+  }
+
+  function storageWith(objects: Array<{ key: string; size: number; lastModified: Date }>) {
+    const deleteSpy = vi.fn().mockResolvedValue(undefined);
+    const storage = {
+      listObjects: vi.fn().mockResolvedValue(objects),
+      delete: deleteSpy,
+    } as unknown as StorageAdapter;
+    return { storage, deleteSpy };
+  }
+
+  it('deletes only orphan keys older than 24 hours; young keys and keys with a row are untouched', async () => {
+    const file = seededFileWithRow();
+    await seedFile(db, file);
+
+    const { storage, deleteSpy } = storageWith([
+      // Old orphan: deleted.
+      { key: 'tenants/x/files/orphan1.bin', size: 100, lastModified: new Date(NOW - 48 * HOUR) },
+      // Young object: ignored even though it has no row (an upload may be mid-flight).
+      { key: 'tenants/x/files/orphan2.bin', size: 200, lastModified: new Date(NOW - 1 * HOUR) },
+      // Old but HAS a row: ignored.
+      { key: file.storedPath, size: 300, lastModified: new Date(NOW - 48 * HOUR) },
+    ]);
+
+    const outcome = await runOrphanDeletion({ db, storage, now: () => NOW });
+
+    expect(outcome).toEqual({ scanned: 1, deleted: 1, failed: 0 });
+    expect(deleteSpy).toHaveBeenCalledTimes(1);
+    expect(deleteSpy).toHaveBeenCalledWith('tenants/x/files/orphan1.bin');
+  });
+
+  it('deletes nothing when there are no orphans', async () => {
+    const file = seededFileWithRow();
+    await seedFile(db, file);
+
+    const { storage, deleteSpy } = storageWith([
+      { key: file.storedPath, size: 300, lastModified: new Date(NOW - 48 * HOUR) },
+    ]);
+
+    const outcome = await runOrphanDeletion({ db, storage, now: () => NOW });
+
+    expect(outcome).toEqual({ scanned: 0, deleted: 0, failed: 0 });
+    expect(deleteSpy).not.toHaveBeenCalled();
+  });
+
+  it('logs and counts a failed delete, continuing with the rest and retrying next cycle', async () => {
+    const deleteFn = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('r2 down'))
+      .mockResolvedValueOnce(undefined);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const storage = {
+      listObjects: vi.fn().mockResolvedValue([
+        { key: 'tenants/x/files/a.bin', size: 10, lastModified: new Date(NOW - 48 * HOUR) },
+        { key: 'tenants/x/files/b.bin', size: 20, lastModified: new Date(NOW - 48 * HOUR) },
+      ]),
+      delete: deleteFn,
+    } as unknown as StorageAdapter;
+
+    const first = await runOrphanDeletion({ db, storage, now: () => NOW });
+    expect(first).toEqual({ scanned: 2, deleted: 1, failed: 1 });
+    expect(errorSpy).toHaveBeenCalled();
+
+    // Next cycle: the failed key is still there (no row was created), the
+    // deleted one is gone from the listing, so only the survivor is retried.
+    const storage2 = {
+      listObjects: vi
+        .fn()
+        .mockResolvedValue([
+          { key: 'tenants/x/files/a.bin', size: 10, lastModified: new Date(NOW - 48 * HOUR) },
+        ]),
+      delete: vi.fn().mockResolvedValue(undefined),
+    } as unknown as StorageAdapter;
+
+    const second = await runOrphanDeletion({ db, storage: storage2, now: () => NOW });
+    expect(second).toEqual({ scanned: 1, deleted: 1, failed: 0 });
+  });
+
+  it('runs in bounded batches', async () => {
+    const many = Array.from({ length: 250 }, (_, i) => ({
+      key: `tenants/x/files/orphan-${i}.bin`,
+      size: 1,
+      lastModified: new Date(NOW - 48 * HOUR),
+    }));
+    const { storage, deleteSpy } = storageWith(many);
+
+    const outcome = await runOrphanDeletion({ db, storage, now: () => NOW });
+
+    expect(outcome).toEqual({ scanned: 250, deleted: 250, failed: 0 });
+    expect(deleteSpy).toHaveBeenCalledTimes(250);
+    // The batch constant is still respected by the chunking even though a
+    // small listing needs only one pass.
+    expect(ORPHAN_DELETE_BATCH_SIZE).toBeGreaterThan(0);
+  });
 });

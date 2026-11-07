@@ -7,7 +7,7 @@ import {
   expireStaleUploads,
   EXPIRE_STALE_UPLOADS_INTERVAL_MS,
 } from './lib/upload/expire-stale-uploads';
-import { runPurgeSweep, runOrphanReport } from './lib/purge/purge-sweeper';
+import { runPurgeSweep, runOrphanDeletion } from './lib/purge/purge-sweeper';
 
 function required(name: string): string {
   const value = process.env[name];
@@ -119,11 +119,11 @@ function startStaleUploadSweep(db: DatabaseAdapter): void {
 }
 
 /**
- * Purge sweep + orphan report loop. The purge sweep retries the object delete
+ * Purge sweep + orphan deletion loop. The purge sweep retries the object delete
  * for every soft-deleted file whose `purged_at` is unset (a delete that failed
  * earlier), in bounded batches, and raises exactly one alert per object that
- * keeps failing. The orphan report lists storage keys with no file row, REPORT
- * ONLY (deletion of orphans is a separate, human decision).
+ * keeps failing. The orphan sweep deletes storage keys with no file row, older
+ * than 24 hours (approved by Marlin 2026-11-07 after seeing the report numbers).
  *
  * Runs in-process rather than as a Coolify scheduled task because Coolify
  * scheduled tasks run by `docker exec` without Infisical secrets, so they
@@ -131,10 +131,10 @@ function startStaleUploadSweep(db: DatabaseAdapter): void {
  * every interval; unref() keeps it from holding the process open.
  */
 const PURGE_SWEEP_INTERVAL_MS = 15 * 60 * 1000;
-const ORPHAN_REPORT_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const ORPHAN_DELETE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 function startMaintenanceSweep(db: DatabaseAdapter, storage: S3StorageAdapter): void {
-  let lastOrphanReport = 0;
+  let lastOrphanDeletion = 0;
   const tick = (): void => {
     runPurgeSweep({ db, storage })
       .then((outcome) => {
@@ -143,10 +143,10 @@ function startMaintenanceSweep(db: DatabaseAdapter, storage: S3StorageAdapter): 
             `[purge] scanned=${outcome.scanned} purged=${outcome.purged} failed=${outcome.failed}`
           );
         }
-        if (Date.now() - lastOrphanReport >= ORPHAN_REPORT_INTERVAL_MS) {
-          lastOrphanReport = Date.now();
-          void runOrphanReport({ db, storage }).catch((err) => {
-            console.error('Orphan report failed:', err);
+        if (Date.now() - lastOrphanDeletion >= ORPHAN_DELETE_INTERVAL_MS) {
+          lastOrphanDeletion = Date.now();
+          void runOrphanDeletion({ db, storage }).catch((err) => {
+            console.error('Orphan deletion failed:', err);
           });
         }
       })
