@@ -47,6 +47,7 @@ const mockFile: StoredFile = {
   createdAt: Date.now(),
   updatedAt: Date.now(),
   deletedAt: null,
+  purgedAt: null,
 };
 
 function createMockDb() {
@@ -75,6 +76,12 @@ function createMockDb() {
     expireStaleUploadSessions: vi.fn().mockResolvedValue({ scanned: 0, expired: 0 }),
     deleteFileAndReleaseQuota: vi.fn().mockResolvedValue(null),
     deleteWorkspaceFilesAndReleaseQuota: vi.fn().mockResolvedValue({ releasedBytes: 0, files: [] }),
+    listUnpurgedFiles: vi.fn().mockResolvedValue([]),
+    setFilePurgedAt: vi.fn(),
+    getAllStoredPaths: vi.fn().mockResolvedValue([]),
+    raiseAlert: vi.fn().mockResolvedValue(undefined),
+    listOpenAlerts: vi.fn().mockResolvedValue([]),
+    acknowledgeAlert: vi.fn().mockResolvedValue(true),
     checkQuota: vi.fn().mockResolvedValue({
       hasCapacity: true,
       quotaBytes: 500 * 1024 * 1024,
@@ -818,8 +825,13 @@ describe('file routes', () => {
       expect(body.success).toBe(true);
       expect(storage.delete).toHaveBeenCalledWith(mockFile.storedPath);
       // Soft delete, tenant + workspace release and session close are one
-      // atomic adapter call (covered by the adapter specs).
-      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
+      // atomic adapter call (covered by the adapter specs). The purge stamp is
+      // set because the storage delete succeeded.
+      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(
+        FILE_ID,
+        TENANT_ID,
+        expect.any(Number)
+      );
     });
 
     it('deletes a workspace file through the same atomic call', async () => {
@@ -836,10 +848,15 @@ describe('file routes', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
+      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(
+        FILE_ID,
+        TENANT_ID,
+        expect.any(Number)
+      );
     });
 
-    it('still completes the DB cleanup when the storage delete fails', async () => {
+    it('still completes the DB cleanup when the storage delete fails, but leaves purged_at unset', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       storage.delete.mockRejectedValueOnce(new Error('object already gone'));
 
       const res = await app.request(
@@ -854,7 +871,11 @@ describe('file routes', () => {
       expect(res.status).toBe(200);
       const body: TestResponseBody = await res.json();
       expect(body.success).toBe(true);
-      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(FILE_ID, TENANT_ID);
+      // The row is still deleted from the caller's point of view and quota is
+      // released, but purged_at is null so the purge sweeper retries the object.
+      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(FILE_ID, TENANT_ID, null);
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
     });
 
     it('returns 404 if file not found and touches neither storage nor quota', async () => {

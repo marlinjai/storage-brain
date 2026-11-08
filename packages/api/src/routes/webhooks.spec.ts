@@ -39,6 +39,7 @@ function file(): StoredFile {
     createdAt: 1700000000000,
     updatedAt: 1700000000000,
     deletedAt: null,
+    purgedAt: null,
   };
 }
 

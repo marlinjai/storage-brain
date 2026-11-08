@@ -63,6 +63,12 @@ function createMockDb() {
     expireStaleUploadSessions: vi.fn().mockResolvedValue({ scanned: 0, expired: 0 }),
     deleteFileAndReleaseQuota: vi.fn().mockResolvedValue(null),
     deleteWorkspaceFilesAndReleaseQuota: vi.fn().mockResolvedValue({ releasedBytes: 0, files: [] }),
+    listUnpurgedFiles: vi.fn().mockResolvedValue([]),
+    setFilePurgedAt: vi.fn(),
+    getAllStoredPaths: vi.fn().mockResolvedValue([]),
+    raiseAlert: vi.fn().mockResolvedValue(undefined),
+    listOpenAlerts: vi.fn().mockResolvedValue([]),
+    acknowledgeAlert: vi.fn().mockResolvedValue(true),
     checkQuota: vi.fn(),
     getQuotaUsage: vi.fn(),
     recalculateQuota: vi.fn(),
@@ -252,7 +258,11 @@ describe('workspace routes', () => {
       expect(storage.delete).toHaveBeenCalledWith(`tenants/${TENANT_ID}/files/f1/a.png`);
       expect(storage.delete).toHaveBeenCalledWith(`tenants/${TENANT_ID}/files/f2/b.pdf`);
       // Soft delete of every file plus the tenant + workspace release is one
-      // atomic adapter call (covered by the adapter specs).
+      // atomic adapter call (covered by the adapter specs). The files whose
+      // objects deleted cleanly are marked purged so the sweeper does not
+      // re-attempt them.
+      expect(db.setFilePurgedAt).toHaveBeenCalledWith('f1', expect.any(Number));
+      expect(db.setFilePurgedAt).toHaveBeenCalledWith('f2', expect.any(Number));
       expect(db.deleteWorkspaceFilesAndReleaseQuota).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
       expect(db.deleteWorkspace).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
     });
@@ -284,7 +294,7 @@ describe('workspace routes', () => {
       );
     });
 
-    it('still deletes the workspace when a storage delete fails', async () => {
+    it('still deletes the workspace when a storage delete fails, and leaves that file unpurged', async () => {
       db.deleteWorkspaceFilesAndReleaseQuota.mockResolvedValueOnce({
         releasedBytes: 500,
         files: [{ id: 'f1', storedPath: `tenants/${TENANT_ID}/files/f1/a.png` }],
@@ -303,6 +313,8 @@ describe('workspace routes', () => {
 
       expect(res.status).toBe(200);
       expect(db.deleteWorkspaceFilesAndReleaseQuota).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
+      // The failed file is NOT marked purged, so the purge sweeper retries it.
+      expect(db.setFilePurgedAt).not.toHaveBeenCalled();
       expect(db.deleteWorkspace).toHaveBeenCalledWith(WORKSPACE_ID, TENANT_ID);
     });
 

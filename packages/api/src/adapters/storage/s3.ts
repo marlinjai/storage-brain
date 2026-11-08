@@ -4,6 +4,7 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
@@ -200,6 +201,27 @@ export class S3StorageAdapter implements StorageAdapter {
       Key: key,
     });
     await this.client.send(command);
+  }
+
+  async listObjects(): Promise<Array<{ key: string; size: number; lastModified: Date }>> {
+    const out: Array<{ key: string; size: number; lastModified: Date }> = [];
+    let continuationToken: string | undefined;
+    do {
+      const command = new ListObjectsV2Command({
+        Bucket: this.bucket,
+        ...(continuationToken ? { ContinuationToken: continuationToken } : {}),
+      });
+      const result = await this.client.send(command);
+      for (const object of result.Contents ?? []) {
+        out.push({
+          key: object.Key ?? '',
+          size: object.Size ?? 0,
+          lastModified: object.LastModified ?? new Date(0),
+        });
+      }
+      continuationToken = result.IsTruncated ? result.NextContinuationToken : undefined;
+    } while (continuationToken);
+    return out;
   }
 
   async exists(key: string): Promise<boolean> {

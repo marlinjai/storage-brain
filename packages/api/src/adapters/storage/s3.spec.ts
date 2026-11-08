@@ -26,6 +26,9 @@ vi.mock('@aws-sdk/client-s3', () => {
     HeadObjectCommand: class MockHeadObjectCommand {
       constructor(public input: unknown) {}
     },
+    ListObjectsV2Command: class MockListObjectsV2Command {
+      constructor(public input: unknown) {}
+    },
   };
 });
 
@@ -218,6 +221,33 @@ describe('S3StorageAdapter', () => {
       mockSend.mockResolvedValueOnce({});
       await adapter.delete('test/file.png');
       expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('listObjects', () => {
+    it('pages through the bucket and returns every object', async () => {
+      mockSend.mockResolvedValueOnce({
+        IsTruncated: true,
+        NextContinuationToken: 'token-2',
+        Contents: [{ Key: 'a.png', Size: 10, LastModified: new Date('2026-01-01') }],
+      });
+      mockSend.mockResolvedValueOnce({
+        IsTruncated: false,
+        Contents: [{ Key: 'b.pdf', Size: 20, LastModified: new Date('2026-02-01') }],
+      });
+
+      const objects = await adapter.listObjects();
+
+      expect(objects).toEqual([
+        { key: 'a.png', size: 10, lastModified: new Date('2026-01-01') },
+        { key: 'b.pdf', size: 20, lastModified: new Date('2026-02-01') },
+      ]);
+      expect(mockSend).toHaveBeenCalledTimes(2);
+      // The second request carries the continuation token.
+      expect(mockSend.mock.calls[1]![0]).toBeInstanceOf(
+        (await import('@aws-sdk/client-s3')).ListObjectsV2Command
+      );
+      expect(mockSend.mock.calls[1]![0].input).toMatchObject({ ContinuationToken: 'token-2' });
     });
   });
 

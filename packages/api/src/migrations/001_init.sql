@@ -86,14 +86,28 @@ CREATE TABLE IF NOT EXISTS files (
   webhook_url       TEXT,
   created_at        BIGINT NOT NULL,
   updated_at        BIGINT NOT NULL,
-  deleted_at        BIGINT
+  deleted_at        BIGINT,
+  purged_at        BIGINT
 );
+
+-- When the storage object was confirmed gone (deleted_at set, purged_at NULL
+-- means "deleted but not yet purged -> the purge sweeper retries"). Nullable
+-- and idempotent for existing deployments.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'files' AND column_name = 'purged_at'
+  ) THEN
+    ALTER TABLE files ADD COLUMN purged_at BIGINT;
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_files_tenant_id ON files(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_files_created_at ON files(created_at);
 CREATE INDEX IF NOT EXISTS idx_files_context ON files(context);
 CREATE INDEX IF NOT EXISTS idx_files_tenant_deleted ON files(tenant_id, deleted_at);
 CREATE INDEX IF NOT EXISTS idx_files_workspace ON files(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_files_purge_sweep ON files(deleted_at, purged_at);
 
 -- Upload sessions
 CREATE TABLE IF NOT EXISTS upload_sessions (
@@ -134,3 +148,25 @@ CREATE TABLE IF NOT EXISTS erasure_events (
   matched_tenant_count INTEGER NOT NULL DEFAULT 0,
   processed_at         BIGINT NOT NULL
 );
+
+-- Operator alerts. The purge sweeper writes one row per object whose storage
+-- delete keeps failing; the partial unique index (kind, file_id) makes that
+-- exactly once per object, so repeated failures bump one row instead of
+-- creating new ones (mirrors Studio's operatorAlert pattern: an alert is a
+-- fact in the database, not a timer in memory). Mirrors D1 migration 0010.
+CREATE TABLE IF NOT EXISTS alerts (
+  id              TEXT PRIMARY KEY,
+  kind            TEXT NOT NULL,
+  tenant_id       TEXT,
+  file_id         TEXT,
+  stored_path     TEXT NOT NULL,
+  payload         TEXT,
+  created_at      BIGINT NOT NULL,
+  updated_at      BIGINT NOT NULL,
+  acknowledged_at  BIGINT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_alerts_kind_file
+  ON alerts(kind, file_id) WHERE file_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_alerts_open
+  ON alerts(acknowledged_at) WHERE acknowledged_at IS NULL;

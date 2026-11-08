@@ -254,13 +254,18 @@ adminRoutes.delete('/tenants/:tenantId', async (c) => {
     throw ApiError.notFound('Tenant not found');
   }
 
-  // Delete all files from storage
+  // Delete all files from storage. The tenant rows are hard-deleted below, so
+  // a failed object delete cannot be retried by the purge sweeper: log it
+  // loudly instead of swallowing it.
   const files = await db.listFilesByTenant(tenantId, { limit: 1000 });
   for (const file of files.files) {
     try {
       await storage.delete(file.storedPath);
-    } catch {
-      // Best-effort deletion — continue even if storage delete fails
+    } catch (err) {
+      console.error(
+        `Storage delete failed for file ${file.id} (tenant ${tenantId}, path ${file.storedPath}) during tenant deletion:`,
+        err
+      );
     }
   }
 
@@ -455,19 +460,27 @@ adminRoutes.delete('/tenants/:tenantId/files/:fileId', async (c) => {
     throw ApiError.notFound('File not found');
   }
 
-  // Delete the binary from storage. Best-effort, mirroring tenant deletion:
-  // an object that is already gone must not block the DB cleanup.
+  // Delete the binary from storage. A failed storage delete must never be
+  // swallowed: log it and leave `purged_at` unset so the purge sweeper retries
+  // the delete. An object that is already gone counts as purged (R2 and S3
+  // `delete` answer a missing key without an error).
+  let purgedAt: number | null = Date.now();
   try {
     await storage.delete(file.storedPath);
-  } catch {
-    // Best-effort deletion: continue even if storage delete fails
+  } catch (err) {
+    purgedAt = null;
+    console.error(
+      `Storage delete failed for file ${file.id} (tenant ${tenantId}, path ${file.storedPath}); the purge sweeper will retry:`,
+      err
+    );
   }
 
-  // Soft delete the row (deleted_at stays set for the audit trail), release
-  // its bytes at tenant and workspace level and close any open upload
-  // session, atomically. A concurrent DELETE that got there first makes this
-  // a no-op, so the bytes are released exactly once.
-  await db.deleteFileAndReleaseQuota(fileId, tenantId);
+  // Soft delete the row (deleted_at stays set for the audit trail, purged_at
+  // records whether the object is really gone), release its bytes at tenant
+  // and workspace level and close any open upload session, atomically. A
+  // concurrent DELETE that got there first makes this a no-op, so the bytes
+  // are released exactly once.
+  await db.deleteFileAndReleaseQuota(fileId, tenantId, purgedAt);
 
   return c.json({ success: true });
 });
@@ -577,4 +590,33 @@ adminRoutes.get('/tenants/:tenantId/quota', async (c) => {
   const quota = await db.getQuotaUsage(tenantId);
 
   return c.json(quota);
+});
+
+/**
+ * GET /api/v1/admin/alerts
+ * List unacknowledged operator alerts (purge failures etc.). The purge
+ * sweeper writes one alert per object whose storage delete keeps failing, so
+ * this is where an operator sees that something is stuck.
+ */
+adminRoutes.get('/alerts', async (c) => {
+  const db = c.get('db');
+  const alerts = await db.listOpenAlerts();
+  return c.json({ alerts });
+});
+
+/**
+ * PATCH /api/v1/admin/alerts/:alertId/acknowledge
+ * Mark one open alert as seen. Acknowledging twice is not an error; the first
+ * acknowledgement stands.
+ */
+adminRoutes.patch('/alerts/:alertId/acknowledge', async (c) => {
+  const db = c.get('db');
+  const alertId = c.req.param('alertId');
+
+  const acknowledged = await db.acknowledgeAlert(alertId);
+  if (!acknowledged) {
+    throw ApiError.notFound('Alert not found');
+  }
+
+  return c.json({ success: true });
 });

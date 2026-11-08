@@ -196,6 +196,19 @@ export interface MigrateFilesToWorkspaceResult {
   workspaceId: string;
 }
 
+/** An operator alert row (e.g. a purge failure the sweeper keeps hitting). */
+export interface AdminAlert {
+  id: string;
+  kind: string;
+  tenantId: string | null;
+  fileId: string | null;
+  storedPath: string;
+  payload: Record<string, unknown> | null;
+  createdAt: number;
+  updatedAt: number;
+  acknowledgedAt: number | null;
+}
+
 // ============================================================================
 // Admin Client
 // ============================================================================
@@ -370,6 +383,23 @@ export class StorageBrainAdmin {
       'POST',
       `/api/v1/admin/tenants/${tenantId}/files/migrate-workspace`,
       input
+    );
+  }
+
+  /**
+   * List unacknowledged operator alerts (purge failures etc.).
+   */
+  async listAlerts(): Promise<{ alerts: AdminAlert[] }> {
+    return this.request<{ alerts: AdminAlert[] }>('GET', '/api/v1/admin/alerts');
+  }
+
+  /**
+   * Mark one open alert as seen.
+   */
+  async acknowledgeAlert(alertId: string): Promise<void> {
+    await this.request<{ success: boolean }>(
+      'PATCH',
+      `/api/v1/admin/alerts/${alertId}/acknowledge`
     );
   }
 

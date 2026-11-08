@@ -56,6 +56,7 @@ function file(id: string, tenantId: string): StoredFile {
     createdAt: 1700000000000,
     updatedAt: 1700000000000,
     deletedAt: null,
+    purgedAt: null,
   };
 }
 
@@ -87,6 +88,7 @@ function createMockStorage(): StorageAdapter {
     delete: vi.fn(),
     exists: vi.fn(),
     head: vi.fn(),
+    listObjects: vi.fn().mockResolvedValue([]),
   };
 }
 

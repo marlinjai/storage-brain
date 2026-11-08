@@ -53,6 +53,12 @@ function createMockDb() {
     expireStaleUploadSessions: vi.fn().mockResolvedValue({ scanned: 0, expired: 0 }),
     deleteFileAndReleaseQuota: vi.fn().mockResolvedValue(null),
     deleteWorkspaceFilesAndReleaseQuota: vi.fn().mockResolvedValue({ releasedBytes: 0, files: [] }),
+    listUnpurgedFiles: vi.fn().mockResolvedValue([]),
+    setFilePurgedAt: vi.fn(),
+    getAllStoredPaths: vi.fn().mockResolvedValue([]),
+    raiseAlert: vi.fn().mockResolvedValue(undefined),
+    listOpenAlerts: vi.fn().mockResolvedValue([]),
+    acknowledgeAlert: vi.fn().mockResolvedValue(true),
     checkQuota: vi.fn(),
     getQuotaUsage: vi.fn().mockResolvedValue({
       quotaBytes: 500 * 1024 * 1024,
@@ -540,8 +546,13 @@ describe('admin routes', () => {
       expect(body.success).toBe(true);
       expect(storage.delete).toHaveBeenCalledWith(mockFile.storedPath);
       // Soft delete, tenant + workspace release and session close are one
-      // atomic adapter call (covered by the adapter specs).
-      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(FILE_ID, 'tenant-123');
+      // atomic adapter call (covered by the adapter specs). The purge stamp is
+      // set because the storage delete succeeded.
+      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(
+        FILE_ID,
+        'tenant-123',
+        expect.any(Number)
+      );
     });
 
     it('deletes a workspace file through the same atomic call', async () => {
@@ -558,10 +569,14 @@ describe('admin routes', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(FILE_ID, 'tenant-123');
+      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(
+        FILE_ID,
+        'tenant-123',
+        expect.any(Number)
+      );
     });
 
-    it('still completes the DB cleanup when the storage delete fails', async () => {
+    it('still completes the DB cleanup when the storage delete fails, but leaves purged_at unset', async () => {
       db.getFileById.mockResolvedValueOnce(mockFile);
       storage.delete.mockRejectedValueOnce(new Error('object already gone'));
 
@@ -575,7 +590,7 @@ describe('admin routes', () => {
       );
 
       expect(res.status).toBe(200);
-      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(FILE_ID, 'tenant-123');
+      expect(db.deleteFileAndReleaseQuota).toHaveBeenCalledWith(FILE_ID, 'tenant-123', null);
     });
 
     it('returns 404 for unknown file and touches neither storage nor quota', async () => {

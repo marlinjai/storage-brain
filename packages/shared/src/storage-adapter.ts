@@ -71,6 +71,12 @@ export interface StorageAdapter {
   delete(key: string): Promise<void>;
   exists(key: string): Promise<boolean>;
   head(key: string): Promise<StorageObject | null>;
+  /**
+   * List every object in the bucket with its size and last-modified time. Used
+   * by the orphan report (which storage keys have no file row). Adapters page
+   * through the whole bucket; the result is bounded by the bucket, not memory.
+   */
+  listObjects(): Promise<Array<{ key: string; size: number; lastModified: Date }>>;
   getPresignedUploadUrl?(key: string, options: PresignedUrlOptions): Promise<string>;
   getPresignedDownloadUrl?(key: string, options: PresignedUrlOptions): Promise<string>;
 }
