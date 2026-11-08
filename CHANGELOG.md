@@ -29,6 +29,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   client must not match on Zod's message text. The erasure webhook keeps
   accepting auth-brain's SHA-256 derived `event_id`s (no uuid check). The
   dashboard drops its unused `zod` dependency.
+- **Every other open Dependabot alert** closed by moving parents, not by
+  overrides (no `pnpm.overrides` remain; the `sharp` one became redundant
+  once both parents required 0.35.5): lockfile refreshed within the declared
+  ranges; wrangler 4 (miniflare no longer pins zod 3, ws 8.18, undici 5 and
+  esbuild 0.17); tsup 9 (esbuild 0.28); typescript-eslint 8 (minimatch 10);
+  Next.js 16.4.5 for the dashboard (postcss 8.5.23; `src/middleware.ts` is
+  now `src/proxy.ts`); `@hono/node-server` 2.1.6 (GHSA-rmxm-3fg6-px4f).
+  Two development-only alerts have no fix any parent allows and stay open as
+  recorded exceptions (minimatch under typescript-eslint, postcss-selector-parser
+  under the docs build), see ROADMAP.md.
 - **SDK 0.13.0 (breaking)**: `@marlinjai/storage-brain-sdk` depends on
   `@marlinjai/brain-core` `^2.0.0`, whose `zod` peer range is `^4.6.7`. An
   application installing the SDK must run Zod 4.6.7 or later (or no Zod at
