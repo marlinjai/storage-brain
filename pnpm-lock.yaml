@@ -51,8 +51,8 @@ importers:
         specifier: ^3.700.0
         version: 3.1164.0
       '@hono/node-server':
-        specifier: ^1.13.0
-        version: 1.19.18(hono@4.13.17)
+        specifier: ^2.1.6
+        version: 2.1.6(hono@4.13.17)
       '@marlinjai/auth-brain-sdk':
         specifier: ^2.0.0
         version: 2.0.0(hono@4.13.17)(zod@4.6.7)
@@ -822,11 +822,11 @@ packages:
     peerDependencies:
       three: ^0.183.0
 
-  '@hono/node-server@1.19.18':
-    resolution: {integrity: sha512-609kppIP9GITS+EwPyB6Kiq8z2yXONaYD1VHpo7MMP9celRJYbkFr9KakJncHwK0EK/XYtlogqmrLchDv5HX5w==}
-    engines: {node: '>=18.14.1'}
+  '@hono/node-server@2.1.6':
+    resolution: {integrity: sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ==}
+    engines: {node: '>=20'}
     peerDependencies:
-      hono: ^4
+      hono: ^4 || ^5.0.0-0
 
   '@humanwhocodes/config-array@0.13.0':
     resolution: {integrity: sha512-DZLEEqFWQFiyK6h5YIeynKx7JlvCYWL0cImfSRXZ9l4Sg2efkFGTuFf6vzXjK1cq6IYkU+Eg/JizXw+TD2vRNw==}
@@ -4495,7 +4495,7 @@ snapshots:
       lit: 3.3.3
       three: 0.183.2
 
-  '@hono/node-server@1.19.18(hono@4.13.17)':
+  '@hono/node-server@2.1.6(hono@4.13.17)':
     dependencies:
       hono: 4.13.17
 
