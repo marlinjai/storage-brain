@@ -3,6 +3,7 @@ import type { StorageAdapter } from '@storage-brain/shared';
 import { D1DatabaseAdapter } from '../adapters/database/d1';
 import { createApp } from '../app';
 import { signErasureBody, ERASURE_SIGNATURE_HEADER } from '../lib/erasure/signature';
+import { erasureWebhookPayloadSchema, MAX_ERASURE_WORKSPACE_IDS } from '../lib/erasure/schema';
 import { makeD1Adapter, seedFile as seedUpload } from '../test-utils/d1-sqlite';
 
 const SECRET = 'erasure-webhook-secret';
@@ -43,8 +44,8 @@ function envWith(secret: string | undefined): Record<string, unknown> {
     ENVIRONMENT: 'development',
     URL_SIGNING_SECRET: 'url-secret',
     STORAGE_ERASURE_WEBHOOK_SECRET: secret,
-    DB: {} as never,
-    BUCKET: {} as never,
+    DB: {},
+    BUCKET: {},
   };
 }
 
@@ -139,6 +140,70 @@ describe('POST /api/v1/internal/erasure — signature paths', () => {
     const sig = await signErasureBody(body, SECRET);
     const res = await post(h.app, envWith(SECRET), body, sig);
     expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /api/v1/internal/erasure: payload validation under Zod 4', () => {
+  let h: Harness;
+  beforeEach(() => {
+    h = makeHarness();
+  });
+
+  // auth-brain derives event ids from a SHA-256 digest formatted like a uuid,
+  // so most carry no RFC version or variant bits. Zod 4's uuid() would refuse
+  // them; the schema must keep accepting real deliveries.
+  it('accepts a uuid-shaped event_id without RFC version or variant bits', async () => {
+    const body = tenantErasedBody({
+      eventId: '9f86d081-884c-0d65-1a2f-eae2fc6b8e3d',
+      tenantId: 'company-nobody',
+    });
+    const sig = await signErasureBody(body, SECRET);
+    const res = await post(h.app, envWith(SECRET), body, sig);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: 'ok', idempotent: false });
+  });
+
+  it(`refuses more than ${MAX_ERASURE_WORKSPACE_IDS} workspace_ids quickly, touching nothing`, async () => {
+    const body = tenantErasedBody({
+      eventId: 'e-oversized',
+      tenantId: 'company-x',
+      // Empty strings fail the element schema, so an uncapped array would
+      // produce one issue per element.
+      workspaceIds: Array.from({ length: MAX_ERASURE_WORKSPACE_IDS + 1 }, () => ''),
+    });
+    const sig = await signErasureBody(body, SECRET);
+    const started = performance.now();
+    const res = await post(h.app, envWith(SECRET), body, sig);
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(res.status).toBe(400);
+    expect(h.deleteMock).not.toHaveBeenCalled();
+    expect(await h.db.getErasureEvent('e-oversized')).toBeNull();
+  });
+
+  it('reports a single issue for an oversized workspace_ids list', () => {
+    const result = erasureWebhookPayloadSchema.safeParse({
+      event_id: 'e-1',
+      kind: 'tenant.erased',
+      user_id: 'u-1',
+      tenant_id: 't-1',
+      workspace_ids: Array.from({ length: MAX_ERASURE_WORKSPACE_IDS + 1 }, () => ''),
+      requested_at: '2026-07-27T00:00:00.000Z',
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toHaveLength(1);
+    expect(result.error?.issues[0]?.code).toBe('too_big');
+  });
+
+  it(`accepts exactly ${MAX_ERASURE_WORKSPACE_IDS} workspace_ids`, () => {
+    const result = erasureWebhookPayloadSchema.safeParse({
+      event_id: 'e-2',
+      kind: 'tenant.erased',
+      user_id: 'u-1',
+      tenant_id: 't-1',
+      workspace_ids: Array.from({ length: MAX_ERASURE_WORKSPACE_IDS }, (_, i) => `ws-${i}`),
+      requested_at: '2026-07-27T00:00:00.000Z',
+    });
+    expect(result.success).toBe(true);
   });
 });
 

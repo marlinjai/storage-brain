@@ -60,7 +60,7 @@ function session(): UploadSession {
     status: 'pending',
     expiresAt: Date.now() + 60_000,
     createdAt: Date.now(),
-  } as UploadSession;
+  };
 }
 
 function createMockDb(declaredSize: number) {

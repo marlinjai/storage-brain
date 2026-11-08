@@ -144,15 +144,15 @@ export default function FilesPage({
         </div>
       )}
 
-      {files && files.length === 0 && !isLoading && (
+      {files?.length === 0 && !isLoading && (
         <p className="text-sm text-gray-500">No files found.</p>
       )}
 
       {files && files.length > 0 && viewMode === 'grid' && (
         <FileGrid
           files={files}
-          onFileClick={(f) => setSelectedFile(f as FileItem)}
-          onDeleteFile={(f) => setDeleteTarget(f as FileItem)}
+          onFileClick={(f) => setSelectedFile(f)}
+          onDeleteFile={(f) => setDeleteTarget(f)}
         />
       )}
 

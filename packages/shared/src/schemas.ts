@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { MAX_FILE_SIZE_BYTES } from './constants';
+import {
+  MAX_ALLOWED_FILE_TYPES,
+  MAX_FILE_SIZE_BYTES,
+  MAX_METADATA_KEYS,
+  MAX_TAGS,
+} from './constants';
 
 // Re-export shared schemas from brain-core
 export { uuidSchema, apiKeySchema, cursorSchema, workspaceSlugSchema } from '@marlinjai/brain-core';
@@ -12,9 +17,37 @@ export const fileTypeSchema = z
   .regex(/^[a-z]+\/[a-z0-9.+-]+$/i, 'Invalid MIME type format');
 
 /**
+ * A record whose entry count is checked BEFORE any entry is parsed. Zod has no
+ * `.max()` on records, and a refinement on the record itself would only run
+ * after every entry had been parsed (one issue per failing entry). The first
+ * stage of the pipe only counts keys; a pipe never runs its second stage when
+ * the first one failed, so an oversized record is refused with a single issue.
+ */
+function boundedRecord<K extends z.ZodType<string, string>, V extends z.ZodType>(
+  key: K,
+  value: V,
+  maxEntries: number
+) {
+  return z
+    .record(z.string(), z.unknown())
+    .refine((record) => Object.keys(record).length <= maxEntries, {
+      error: `Too many entries: at most ${maxEntries} are allowed`,
+      abort: true,
+    })
+    .pipe(z.record(key, value));
+}
+
+/**
  * Tags validation (string key-value pairs)
  */
-export const tagsSchema = z.record(z.string().max(100), z.string().max(500)).optional();
+export const tagsSchema = boundedRecord(
+  z.string().max(100),
+  z.string().max(500),
+  MAX_TAGS
+).optional();
+
+/** Free-form workspace metadata, bounded in its number of top-level keys. */
+const metadataSchema = boundedRecord(z.string(), z.unknown(), MAX_METADATA_KEYS);
 
 /**
  * File name validation, shared by upload and rename: no path separators or
@@ -39,16 +72,18 @@ export const requestUploadSchema = z.object({
   // route refuses any body larger than it.
   fileSizeBytes: z
     .number({
-      required_error: 'fileSizeBytes is required: declare the exact size of the file in bytes',
-      invalid_type_error: 'fileSizeBytes must be a number of bytes',
+      error: (issue) =>
+        issue.input === undefined
+          ? 'fileSizeBytes is required: declare the exact size of the file in bytes'
+          : 'fileSizeBytes must be a number of bytes',
     })
     .int('fileSizeBytes must be a whole number of bytes')
     .positive('fileSizeBytes must be greater than 0: empty files cannot be uploaded')
     .max(MAX_FILE_SIZE_BYTES, `File size exceeds maximum of ${MAX_FILE_SIZE_BYTES} bytes`),
   context: z.string().max(100).optional(),
   tags: tagsSchema,
-  webhookUrl: z.string().url().optional(),
-  workspaceId: z.string().uuid().optional(),
+  webhookUrl: z.url().optional(),
+  workspaceId: z.uuid().optional(),
 });
 
 export type RequestUploadSchema = z.infer<typeof requestUploadSchema>;
@@ -61,7 +96,7 @@ export const listFilesQuerySchema = z.object({
   cursor: z.string().optional(),
   context: z.string().max(100).optional(),
   fileType: fileTypeSchema.optional(),
-  workspaceId: z.string().uuid().optional(),
+  workspaceId: z.uuid().optional(),
 });
 
 export type ListFilesQuerySchema = z.infer<typeof listFilesQuerySchema>;
@@ -69,7 +104,7 @@ export type ListFilesQuerySchema = z.infer<typeof listFilesQuerySchema>;
 /**
  * File ID parameter validation
  */
-export const fileIdSchema = z.string().uuid('Invalid file ID format');
+export const fileIdSchema = z.uuid('Invalid file ID format');
 
 /**
  * PATCH /files/:fileId request body — rename a file's display name.
@@ -86,7 +121,8 @@ export type RenameFileSchema = z.infer<typeof renameFileSchema>;
 export const createTenantSchema = z.object({
   name: z.string().min(1).max(100),
   quotaBytes: z.number().int().positive().optional(),
-  allowedFileTypes: z.array(fileTypeSchema).optional(), // null/undefined = accept any type
+  // null/undefined = accept any type
+  allowedFileTypes: z.array(fileTypeSchema).max(MAX_ALLOWED_FILE_TYPES).optional(),
   // auth-brain bindings. Tenant binding is the default for company-wide storage;
   // workspace binding is reserved for project isolation (one company, several
   // storage tenants). See docs/plans/2026-08-13-tenant-scope-rebinding.md.
@@ -102,7 +138,7 @@ export type CreateTenantSchema = z.infer<typeof createTenantSchema>;
 export const updateTenantSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   quotaBytes: z.number().int().positive().optional(),
-  allowedFileTypes: z.array(fileTypeSchema).nullable().optional(),
+  allowedFileTypes: z.array(fileTypeSchema).max(MAX_ALLOWED_FILE_TYPES).nullable().optional(),
   // Nullable so a rebind can explicitly clear the old binding
   // (authWorkspaceId: null + authTenantId: <id> makes the binding unambiguous).
   authWorkspaceId: z.string().min(1).max(255).nullable().optional(),
@@ -124,12 +160,12 @@ export const listTenantsQuerySchema = z.object({
  */
 export const webhookPayloadSchema = z.object({
   event: z.enum(['file.uploaded', 'file.failed']),
-  fileId: z.string().uuid(),
-  tenantId: z.string().uuid(),
-  workspaceId: z.string().uuid().nullable(),
+  fileId: z.uuid(),
+  tenantId: z.uuid(),
+  workspaceId: z.uuid().nullable(),
   file: z.object({
-    id: z.string().uuid(),
-    url: z.string().url(),
+    id: z.uuid(),
+    url: z.url(),
     originalName: z.string(),
     fileType: fileTypeSchema,
     sizeBytes: z.number().int().positive(),
@@ -137,10 +173,10 @@ export const webhookPayloadSchema = z.object({
     tags: z.record(z.string(), z.string()).nullable(),
     metadata: z.record(z.string(), z.unknown()).nullable(),
     processingStatus: z.enum(['pending', 'processing', 'completed', 'failed']),
-    workspaceId: z.string().uuid().nullable(),
-    createdAt: z.string().datetime(),
+    workspaceId: z.uuid().nullable(),
+    createdAt: z.iso.datetime(),
   }),
-  timestamp: z.string().datetime(),
+  timestamp: z.iso.datetime(),
 });
 
 /**
@@ -157,7 +193,7 @@ export const createWorkspaceSchema = z.object({
       'Slug must be lowercase alphanumeric with hyphens'
     ),
   quotaBytes: z.number().int().positive().optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: metadataSchema.optional(),
 });
 
 export type CreateWorkspaceSchema = z.infer<typeof createWorkspaceSchema>;
@@ -171,7 +207,7 @@ export type CreateWorkspaceSchema = z.infer<typeof createWorkspaceSchema>;
  * that currently have no workspace, which is the common backfill case.
  */
 export const migrateWorkspaceSchema = z.object({
-  workspaceId: z.string().uuid(),
+  workspaceId: z.uuid(),
   filter: z.union([
     z.object({
       tag: z.object({
@@ -180,7 +216,7 @@ export const migrateWorkspaceSchema = z.object({
       }),
     }),
     z.object({
-      fileIds: z.array(z.string().uuid()).min(1).max(500),
+      fileIds: z.array(z.uuid()).min(1).max(500),
     }),
   ]),
   onlyUnassigned: z.boolean().default(true),
@@ -192,7 +228,7 @@ export type MigrateWorkspaceSchema = z.infer<typeof migrateWorkspaceSchema>;
  * Context aggregate query — optional workspace scope for the "folder" view.
  */
 export const listContextsQuerySchema = z.object({
-  workspaceId: z.string().uuid().optional(),
+  workspaceId: z.uuid().optional(),
 });
 
 export type ListContextsQuerySchema = z.infer<typeof listContextsQuerySchema>;
@@ -203,7 +239,7 @@ export type ListContextsQuerySchema = z.infer<typeof listContextsQuerySchema>;
 export const updateWorkspaceSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   quotaBytes: z.number().int().positive().nullable().optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: metadataSchema.optional(),
 });
 
 export type UpdateWorkspaceSchema = z.infer<typeof updateWorkspaceSchema>;

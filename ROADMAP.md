@@ -12,6 +12,16 @@ plan when the item carries a decision or a sequence.
 
 ## Now
 
+- [ ] Dependabot exceptions with no fix a parent allows (security fleet, 2026-11-08): minimatch
+      10.2.6 under typescript-eslint 8 (GHSA-g3hv-75wg-m249 is fixed only in minimatch 11.0.1,
+      and no typescript-eslint release declares 11) and postcss-selector-parser 6.0.10 under
+      @tailwindcss/typography 0.5.20, which clearify 2.2.2 pulls for the docs build
+      (GHSA-rj75-hqrm-r3gf, fixed in 6.1.5; typography pins 6.0.10 exactly in its latest
+      release). Both are build tools that only read this repository's own files; neither is
+      loaded by the API or the dashboard at runtime (no import in packages/*/src, not traced
+      into the dashboard's standalone output), though both sit in the API image, which copies
+      the whole install including dev dependencies. Close each when its parent ships a release
+      whose range allows the fix, never with an override. (2026-11-08)
 - [x] EU data residency: finished. Storage Brain's objects rest in the EU-jurisdiction
       Cloudflare R2 bucket `storage-brain-files-eu`, and the pre-EU bucket and its rollback
       are gone. The soak (a week of production traffic on the new bucket with the old one

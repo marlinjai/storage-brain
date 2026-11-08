@@ -64,17 +64,19 @@ describe('S3StorageAdapter', () => {
           connectionTimeout?: number;
           requestTimeout?: number;
           throwOnRequestTimeout?: boolean;
-          httpAgent?: { maxSockets?: number };
+          // @smithy/node-http-handler 4.14 creates the http agent lazily, on
+          // the first plain-http request; the https agent is built up front.
+          httpAgentProvider: () => Promise<{ maxSockets?: number }>;
           httpsAgent?: { maxSockets?: number };
         }>;
       };
-      return handler.configProvider.then((resolved) => {
+      return handler.configProvider.then(async (resolved) => {
         expect(resolved.connectionTimeout).toBe(5_000);
         expect(resolved.requestTimeout).toBe(30_000);
         // Without this, requestTimeout only logs a warning and the stuck
         // request keeps its socket (incident 2026-09-26).
         expect(resolved.throwOnRequestTimeout).toBe(true);
-        expect(resolved.httpAgent?.maxSockets).toBe(300);
+        expect((await resolved.httpAgentProvider()).maxSockets).toBe(300);
         expect(resolved.httpsAgent?.maxSockets).toBe(300);
       });
     });

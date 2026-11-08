@@ -58,7 +58,7 @@ export async function verifyErasureSignature(
   header: string | null | undefined,
   secret: string
 ): Promise<boolean> {
-  if (!header || !header.startsWith(SIGNATURE_PREFIX)) return false;
+  if (!header?.startsWith(SIGNATURE_PREFIX)) return false;
 
   const hex = header.slice(SIGNATURE_PREFIX.length);
   // Must be an even-length lowercase-hex string; anything else can't be a valid

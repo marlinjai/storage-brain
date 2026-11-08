@@ -5,9 +5,12 @@ import type { MiddlewareHandler } from 'hono';
  * middleware.
  *
  * 1. It touches the request's abort signal before anything else runs.
- *    @hono/node-server creates that signal lazily and only aborts it on a client
- *    disconnect if it already exists at that moment, so a route that reads the
- *    signal after an `await` could otherwise never learn that its client left.
+ *    @hono/node-server creates that signal lazily. Version 1 only aborted it
+ *    on a client disconnect if it already existed at that moment, so a route
+ *    that read the signal after an `await` never learned that its client left.
+ *    Version 2 remembers the disconnect and aborts a signal created later;
+ *    touching it first keeps the behaviour independent of the adapter version
+ *    (download-socket-release.spec.ts runs both cases on a real server).
  *
  * 2. On HEAD it cancels whatever body the route produced. Hono answers HEAD by
  *    running the GET handler and dropping its body WITHOUT cancelling it. For a

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   // Accept EITHER an auth-brain session or the legacy admin-key iron-session.
   // Deep verification (verifySession + can) happens in getDashboardSession() at
   // the route/page layer, not here: keeps the verify/can fetch off every static

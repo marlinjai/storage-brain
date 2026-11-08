@@ -67,9 +67,7 @@ export interface QuotaCheckResult {
  * signed URL lapsed unused, or a transfer never finished) store nothing.
  */
 export type UploadSessionOutcome =
-  | { status: 'completed'; actualBytes: number }
-  | { status: 'failed' }
-  | { status: 'expired' };
+  { status: 'completed'; actualBytes: number } | { status: 'failed' } | { status: 'expired' };
 
 /** The two states an upload session can be settled from (it is still open). */
 export type OpenUploadSessionStatus = 'pending' | 'uploading';
