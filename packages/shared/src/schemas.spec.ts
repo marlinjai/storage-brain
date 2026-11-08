@@ -10,6 +10,7 @@ import {
   fileTypeSchema,
   tagsSchema,
 } from './schemas';
+import { MAX_ALLOWED_FILE_TYPES, MAX_METADATA_KEYS, MAX_TAGS } from './constants';
 
 describe('fileTypeSchema', () => {
   it('accepts valid MIME types', () => {
@@ -297,5 +298,77 @@ describe('updateWorkspaceSchema', () => {
 
   it('rejects empty name', () => {
     expect(() => updateWorkspaceSchema.parse({ name: '' })).toThrow();
+  });
+});
+
+// Zod 4 migration (advisory GHSA-mrhx-c7xc-m3w5): collection caps, the
+// rewritten fileSizeBytes messages, and the stricter uuid() check.
+describe('Zod 4 behaviour', () => {
+  const tooManyEntries = (n: number, value: unknown): Record<string, unknown> =>
+    Object.fromEntries(Array.from({ length: n }, (_, i) => [`k${i}`, value]));
+
+  it('rejects a non-number fileSizeBytes with its own message', () => {
+    const result = requestUploadSchema.safeParse({
+      fileType: 'image/png',
+      fileName: 'a.png',
+      fileSizeBytes: '1024',
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe('fileSizeBytes must be a number of bytes');
+  });
+
+  it(`accepts exactly ${MAX_TAGS} tags`, () => {
+    expect(tagsSchema.parse(tooManyEntries(MAX_TAGS, 'v'))).toEqual(tooManyEntries(MAX_TAGS, 'v'));
+  });
+
+  it(`refuses more than ${MAX_TAGS} tags with one issue, before parsing any entry`, () => {
+    const started = performance.now();
+    // Every value is invalid (a number), so an uncapped record would report
+    // one issue per entry.
+    const result = tagsSchema.safeParse(tooManyEntries(MAX_TAGS * 1000, 1));
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toHaveLength(1);
+    expect(result.error?.issues[0]?.message).toBe(
+      `Too many entries: at most ${MAX_TAGS} are allowed`
+    );
+  });
+
+  it('still validates every tag entry within the cap', () => {
+    const result = tagsSchema.safeParse({ a: 1, b: 'ok' });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(['a']);
+  });
+
+  it(`refuses workspace metadata with more than ${MAX_METADATA_KEYS} keys`, () => {
+    const metadata = tooManyEntries(MAX_METADATA_KEYS + 1, 'v');
+    expect(createWorkspaceSchema.safeParse({ name: 'Ws', slug: 'ws', metadata }).success).toBe(
+      false
+    );
+    expect(updateWorkspaceSchema.safeParse({ metadata }).success).toBe(false);
+    expect(
+      updateWorkspaceSchema.safeParse({ metadata: tooManyEntries(MAX_METADATA_KEYS, 'v') }).success
+    ).toBe(true);
+  });
+
+  it(`refuses more than ${MAX_ALLOWED_FILE_TYPES} allowedFileTypes with one issue`, () => {
+    const result = createTenantSchema.safeParse({
+      name: 'T',
+      allowedFileTypes: Array.from({ length: MAX_ALLOWED_FILE_TYPES * 1000 }, () => 'bad'),
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toHaveLength(1);
+    expect(result.error?.issues[0]?.code).toBe('too_big');
+  });
+
+  it('accepts the real v4 uuids this service issues (crypto.randomUUID)', () => {
+    const id = crypto.randomUUID();
+    expect(fileIdSchema.parse(id)).toBe(id);
+  });
+
+  // File, tenant and workspace ids are all minted by crypto.randomUUID(), so
+  // the stricter RFC check of Zod 4 is safe for them. This pins the behaviour.
+  it('refuses a uuid-shaped id without RFC version or variant bits', () => {
+    expect(fileIdSchema.safeParse('9f86d081-884c-0d65-1a2f-eae2fc6b8e3d').success).toBe(false);
   });
 });

@@ -12,14 +12,13 @@
   },
   "dependencies": {
     "@google/model-viewer": "^4.2.0",
-    "@marlinjai/auth-brain-sdk": "^1.2.0",
+    "@marlinjai/auth-brain-sdk": "^2.0.0",
     "@marlinjai/storage-brain-sdk": "workspace:*",
     "iron-session": "^8.0.4",
     "next": "15.5.28",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "swr": "^2.4.1",
-    "zod": "^3.24.1"
+    "swr": "^2.4.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.1",

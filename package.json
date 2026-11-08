@@ -27,7 +27,7 @@
   "devDependencies": {
     "@commitlint/cli": "^20.4.3",
     "@commitlint/config-conventional": "^20.4.3",
-    "@marlinjai/clearify": "^1.11.0",
+    "@marlinjai/clearify": "^2.2.2",
     "@types/node": "^20.11.0",
     "@typescript-eslint/eslint-plugin": "^6.19.0",
     "@typescript-eslint/parser": "^6.19.0",

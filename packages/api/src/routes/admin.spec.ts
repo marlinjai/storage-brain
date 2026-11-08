@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createApp } from '../app';
 import type { StorageAdapter, DatabaseAdapter } from '@storage-brain/shared';
+import { MAX_ALLOWED_FILE_TYPES } from '@storage-brain/shared';
 
 const ADMIN_KEY = 'admin-secret-key';
 
@@ -222,6 +223,70 @@ describe('admin routes', () => {
       const body = await res.json<TestResponseBody>();
       expect(body.quotaBytes).toBe(1024 * 1024);
       expect(body.allowedFileTypes).toEqual(['image/png']);
+    });
+  });
+
+  // Zod 4 (brain-core 2 error handler): a schema failure must still surface as
+  // a 400 VALIDATION_ERROR with per-field details. If two Zod copies were
+  // installed, `err instanceof ZodError` in brain-core would miss and every
+  // validation failure would turn into a 500.
+  describe('request validation through the real app (Zod 4)', () => {
+    async function postTenant(body: unknown): Promise<Response> {
+      return app.request(
+        '/api/v1/admin/tenants',
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${ADMIN_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+        ENV
+      );
+    }
+
+    interface ValidationBody {
+      error: { code: string; details: { errors: Array<{ path: string; message: string }> } };
+    }
+
+    it('answers an invalid body with 400 VALIDATION_ERROR and per-field details', async () => {
+      const res = await postTenant({ name: '', quotaBytes: 'lots' });
+      expect(res.status).toBe(400);
+      const body = await res.json<ValidationBody>();
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+      expect(body.error.details.errors.map((e) => e.path).sort()).toEqual(['name', 'quotaBytes']);
+      expect(db.createTenant).not.toHaveBeenCalled();
+    });
+
+    it(`refuses more than ${MAX_ALLOWED_FILE_TYPES} allowedFileTypes with a single issue`, async () => {
+      const started = performance.now();
+      const res = await postTenant({
+        name: 'Oversized',
+        // Every element is an invalid MIME type: an uncapped array would
+        // produce one issue per element.
+        allowedFileTypes: Array.from({ length: MAX_ALLOWED_FILE_TYPES + 1 }, () => 'bad'),
+      });
+      expect(performance.now() - started).toBeLessThan(1000);
+      expect(res.status).toBe(400);
+      const body = await res.json<ValidationBody>();
+      expect(body.error.details.errors).toEqual([
+        { path: 'allowedFileTypes', message: expect.any(String) as string },
+      ]);
+      expect(db.createTenant).not.toHaveBeenCalled();
+    });
+
+    it(`refuses more than ${MAX_ALLOWED_FILE_TYPES} allowedFileTypes on update`, async () => {
+      const res = await app.request(
+        '/api/v1/admin/tenants/tenant-123',
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${ADMIN_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            allowedFileTypes: Array.from({ length: MAX_ALLOWED_FILE_TYPES + 1 }, () => 'image/png'),
+          }),
+        },
+        ENV
+      );
+      expect(res.status).toBe(400);
+      expect(db.updateTenant).not.toHaveBeenCalled();
     });
   });
 

@@ -59,6 +59,20 @@ export const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100MB per file
 export const MAX_JSON_BODY_BYTES = 1024 * 1024; // 1MB
 
 /**
+ * Element caps for the collections a caller sends in a request body. Zod parses
+ * every element of an array or record and collects one issue per failing
+ * element, so a collection without a cap lets one request produce an unbounded
+ * issue list (advisory GHSA-mrhx-c7xc-m3w5). Each cap sits far above any
+ * legitimate use and is checked before the elements are parsed.
+ */
+/** MIME types in a tenant's allow-list (the known list has 22 entries). */
+export const MAX_ALLOWED_FILE_TYPES = 200;
+/** Tag pairs on one file. */
+export const MAX_TAGS = 100;
+/** Top-level keys in a workspace's metadata object. */
+export const MAX_METADATA_KEYS = 100;
+
+/**
  * Presigned URL configuration
  */
 export const PRESIGNED_URL_EXPIRATION_SECONDS = 15 * 60; // 15 minutes

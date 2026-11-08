@@ -14,6 +14,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Security
+- **Zod 4 for the Zod denial-of-service advisory** (GHSA-mrhx-c7xc-m3w5, every
+  Zod below 4.6.6, no Zod 3 fix): the API, shared schemas and their
+  dependencies move to `zod` `^4.6.7` with the Zod 4 API, together with
+  `@marlinjai/brain-core` 2.0.0, `@marlinjai/auth-brain-shared` 2.0.0 and
+  `@marlinjai/auth-brain-sdk` 2.0.0. Every collection a caller sends is now
+  capped and checked before its elements are parsed: a tenant's
+  `allowedFileTypes` (200), a file's `tags` (100 pairs), a workspace's
+  `metadata` (100 keys) and the erasure webhook's `workspace_ids` (10,000).
+  A larger collection is refused with 400 and a single issue. Validation
+  messages Zod writes itself are worded differently in Zod 4 (the messages
+  this service writes, such as the `fileSizeBytes` ones, are unchanged), so a
+  client must not match on Zod's message text. The erasure webhook keeps
+  accepting auth-brain's SHA-256 derived `event_id`s (no uuid check). The
+  dashboard drops its unused `zod` dependency.
+- **SDK 0.13.0 (breaking)**: `@marlinjai/storage-brain-sdk` depends on
+  `@marlinjai/brain-core` `^2.0.0`, whose `zod` peer range is `^4.6.7`. An
+  application installing the SDK must run Zod 4.6.7 or later (or no Zod at
+  all); the SDK API is unchanged.
+
 ### Changed
 - **Upload quota is reserved exactly and reconciled** (fix/upload-quota-reconcile):
   `fileSizeBytes` is now required on `POST /api/v1/upload/request` and the admin
