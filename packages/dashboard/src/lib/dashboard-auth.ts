@@ -17,8 +17,7 @@ export const PLATFORM_ADMIN_REQUIREMENT = 'platform.admin';
 const PLATFORM_RESOURCE = { type: 'platform', id: 'lumitra' };
 
 export type DashboardSession =
-  | { mode: 'auth-brain'; user: User }
-  | { mode: 'legacy'; adminApiKey: string; baseUrl?: string };
+  { mode: 'auth-brain'; user: User } | { mode: 'legacy'; adminApiKey: string; baseUrl?: string };
 
 /**
  * Resolve the current dashboard session, hybrid and fail-closed:
