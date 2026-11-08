@@ -81,13 +81,15 @@ export function UploadDialog({ open, tenantId, onClose, onUploaded }: UploadDial
   }, [open, tenantId]);
 
   const addFiles = useCallback((fileList: FileList | File[]) => {
-    const incoming = Array.from(fileList).map((file) => ({
-      key: `row-${rowSeq++}`,
-      file,
-      progress: 0,
-      status: file.size > MAX_FILE_SIZE_BYTES ? ('error' as RowStatus) : ('pending' as RowStatus),
-      error: file.size > MAX_FILE_SIZE_BYTES ? UPLOAD_MESSAGES.tooLarge : undefined,
-    }));
+    const incoming = Array.from(fileList).map(
+      (file): QueueRow => ({
+        key: `row-${rowSeq++}`,
+        file,
+        progress: 0,
+        status: file.size > MAX_FILE_SIZE_BYTES ? 'error' : 'pending',
+        error: file.size > MAX_FILE_SIZE_BYTES ? UPLOAD_MESSAGES.tooLarge : undefined,
+      })
+    );
     setRows((prev) => [...prev, ...incoming]);
   }, []);
 

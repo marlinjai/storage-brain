@@ -44,8 +44,8 @@ function envWith(secret: string | undefined): Record<string, unknown> {
     ENVIRONMENT: 'development',
     URL_SIGNING_SECRET: 'url-secret',
     STORAGE_ERASURE_WEBHOOK_SECRET: secret,
-    DB: {} as never,
-    BUCKET: {} as never,
+    DB: {},
+    BUCKET: {},
   };
 }
 

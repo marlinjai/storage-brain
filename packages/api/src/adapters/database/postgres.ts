@@ -617,7 +617,7 @@ export class PostgresDatabaseAdapter implements DatabaseAdapter {
       if (settled.length === 0) return false;
 
       const file = files[0];
-      if (!file || file.deleted_at !== null) return true;
+      if (file?.deleted_at !== null) return true;
 
       const delta = actualBytes - Number(file.size_bytes);
       if (delta !== 0) {

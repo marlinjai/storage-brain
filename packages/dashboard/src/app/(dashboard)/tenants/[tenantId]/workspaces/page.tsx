@@ -136,7 +136,7 @@ export default function WorkspacesPage({
         </div>
       )}
 
-      {workspaces && workspaces.length === 0 && !isLoading && (
+      {workspaces?.length === 0 && !isLoading && (
         <p className="text-sm text-gray-500">No workspaces yet.</p>
       )}
 

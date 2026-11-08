@@ -231,7 +231,7 @@ describe('tenant vs admin upload-request parity', () => {
     db = createMockDb();
     app = createApp({
       db: db as unknown as DatabaseAdapter,
-      storage: createMockStorage() as unknown as StorageAdapter,
+      storage: createMockStorage(),
     });
   });
 

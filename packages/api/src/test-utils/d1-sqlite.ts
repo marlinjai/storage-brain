@@ -63,7 +63,7 @@ export function createD1(sqlite: DatabaseSync): D1Database {
         return Promise.resolve(results);
       } catch (err) {
         sqlite.exec('ROLLBACK');
-        return Promise.reject(err);
+        return Promise.reject(err instanceof Error ? err : new Error(String(err)));
       }
     },
   } as unknown as D1Database;

@@ -74,7 +74,7 @@ function createMockDb() {
     getTenantByAuthTenantId: vi.fn(),
     getFileById: vi.fn((fileId: string, tenantId: string) => {
       const f = FILES[fileId];
-      return Promise.resolve(f && f.tenantId === tenantId ? f : null);
+      return Promise.resolve(f?.tenantId === tenantId ? f : null);
     }),
   };
 }

@@ -31,7 +31,7 @@ export default function TenantsPage() {
         </div>
       )}
 
-      {tenants && tenants.length === 0 && !isLoading && (
+      {tenants?.length === 0 && !isLoading && (
         <p className="text-sm text-gray-500">
           No tenants yet. Create one to get started.
         </p>
