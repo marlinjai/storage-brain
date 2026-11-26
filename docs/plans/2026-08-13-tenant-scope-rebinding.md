@@ -1,6 +1,6 @@
 ---
 type: plan
-status: in-progress
+status: archived
 title: "Rebind Storage Brain tenants from auth_workspace_id to auth_tenant_id"
 summary: "Company-wide storage binds to the auth-brain tenant, not to the invisible default Main workspace. Rebind existing SB tenants and rescope the consuming service accounts to tenant scope; workspace binding stays available only for real project isolation."
 date: 2026-08-13
@@ -8,6 +8,13 @@ tags: [storage-brain, auth-brain, tenants, service-accounts, migration]
 ---
 
 # Rebind Storage Brain tenants to auth_tenant_id
+
+> [!info] Archived by decision, 2026-11-26
+> Lola Stories is archived and has no successor, and its consumer key cutover was the only step this
+> plan still had open. That cutover is **not** recorded as done. Nothing was issued or revoked by
+> archiving: the state of the old workspace-scoped key and of the unused orphaned key is unknown.
+> The binding rule (company-wide storage binds to the auth-brain tenant) and the shipped route change
+> stand.
 
 Decided with Marlin 2026-08-13. Rule going forward: **a company-wide resource
 binds to the auth-brain tenant; a workspace binding is used only when one

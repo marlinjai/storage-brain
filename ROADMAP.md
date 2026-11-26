@@ -36,18 +36,10 @@ plan when the item carries a decision or a sequence.
       this as a finding). The privacy texts of the consuming projects may now claim EU
       storage; changing them is those projects' work (ŌPUNTIA's needs a new consent version).
       [plan](docs/plans/2026-09-20-eu-data-residency.md) (2026-10-12)
-- [ ] auth-brain cutover residuals: revoke lola-stories' legacy Storage Brain tenant key after
-      a soak period, delete the dead `8263***` client secret on the Lumitra secrets-proxy
-      Infisical identity, and visually confirm the dashboard Tenants page lists all 5 tenants
-      in prod [notes](backlog/intents/storage-brain-authbrain-cutover-residuals.md) : needs
-      Marlin, all three are production or secret actions only he can do; the fourth sub-item
-      in the note (auth-brain #41's push.ts fix) is already merged (2026-07-16) Reviewed 2026-11-12, kept open and NOT verified: the current status of lola-stories' legacy tenant key and of the dead client secret is unknown (the 2026-11-07 Lola teardown may already have retired them), so this needs an investigation before any revoke; no production or secret action was taken (2026-11-12)
-- [ ] tenant-scope rebinding: issue the tenant-scoped service-account key for lola-stories in
-      auth.lumitra.co, store it in the lola-stories Infisical project, redeploy, then revoke
-      the old workspace-scoped key plus one unused orphaned key
-      [plan](docs/plans/2026-08-13-tenant-scope-rebinding.md) : code side is shipped (the
-      `authTenantId` route accepts it); only this operator cutover is left, needs Marlin
-      because it is a production/secret action Reviewed 2026-11-12, kept open and NOT verified: whether the old workspace-scoped key and the orphaned key still exist, and whether lola-stories still uses a key at all after the 2026-11-07 teardown, is unknown and needs an investigation before any revoke; no production or secret action was taken (2026-11-12)
+- [ ] auth-brain cutover residuals: visually confirm in production that the dashboard Tenants page
+      lists the tenants that exist (the count of 5 in the original wording predates the Lola teardown);
+      the Lola parts are archived, see "Archived by decision" at the end. Not re-verified when this line
+      was narrowed on 2026-11-26. (2026-11-12)
 - [x] company isolation: the 361 orphaned `kie-input` files (371 MB) in lola-stories' tenant,
       produced only by lumitra-studio during a 2026-06 borrowed-key window, were cleaned up on
       2026-08-09. Marlin answered "delete all of them except one distinct file of each", so
@@ -155,3 +147,23 @@ plan when the item carries a decision or a sequence.
 ## Archived
 
 - **Per-Workspace API Keys** [plan](docs/plans/2026-04-06-per-workspace-api-keys.md): superseded by the company-isolation plan's company-scoped key model.
+
+## Archived by decision (2026-11-26)
+
+Marlin decided on 2026-11-26 that Lola Stories is archived and that there is no successor team.
+The lines below left the open set through that decision. Archived is not done: archiving a line
+paid, cancelled, revoked, rotated or executed nothing. Each label says what is on record, and an
+outcome marked unknown stays unknown. The original text is kept as evidence; no work in it is
+scheduled.
+
+- Archived 2026-11-26. Consumer key cutover never executed as far as recorded. State of the old workspace-scoped key and of the unused orphaned key: unknown, nothing was revoked by this archive. Original line:
+  tenant-scope rebinding: issue the tenant-scoped service-account key for lola-stories in
+  auth.lumitra.co, store it in the lola-stories Infisical project, redeploy, then revoke
+  the old workspace-scoped key plus one unused orphaned key
+  [plan](docs/plans/2026-08-13-tenant-scope-rebinding.md) : code side is shipped (the
+  `authTenantId` route accepts it); only this operator cutover is left, needs Marlin
+  because it is a production/secret action Reviewed 2026-11-12, kept open and NOT verified: whether the old workspace-scoped key and the orphaned key still exist, and whether lola-stories still uses a key at all after the 2026-11-07 teardown, is unknown and needs an investigation before any revoke; no production or secret action was taken (2026-11-12)
+- Archived 2026-11-26, the Lola Stories part of the auth-brain cutover residuals: revoking its legacy Storage
+  Brain tenant key after a soak period. External outcome unknown: no key-level check is recorded here, and
+  nothing was revoked by this archive. The dead `8263***` client secret named by the same line: Marlin's
+  private roadmap records that it no longer exists (confirmed 2026-11-09).
