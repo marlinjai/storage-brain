@@ -165,5 +165,5 @@ scheduled.
   because it is a production/secret action Reviewed 2026-11-12, kept open and NOT verified: whether the old workspace-scoped key and the orphaned key still exist, and whether lola-stories still uses a key at all after the 2026-11-07 teardown, is unknown and needs an investigation before any revoke; no production or secret action was taken (2026-11-12)
 - Archived 2026-11-26, the Lola Stories part of the auth-brain cutover residuals: revoking its legacy Storage
   Brain tenant key after a soak period. External outcome unknown: no key-level check is recorded here, and
-  nothing was revoked by this archive. The dead `8263***` client secret named by the same line: Marlin's
-  private roadmap records that it no longer exists (confirmed 2026-11-09).
+  nothing was revoked by this archive. The dead `8263***` client secret named by the same line:
+  recorded elsewhere as no longer existing (confirmed 2026-11-09).
