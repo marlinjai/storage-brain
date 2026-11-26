@@ -9,6 +9,10 @@ date: 2026-04-06
 
 # Automated Key Rotation with Tenant Isolation
 
+> [!info] Decision 2026-11-26: Lola Stories is archived
+> Every Lola Stories row and step below (its tenant, its API, its key switch) is archived and not to be
+> carried out; no outcome is claimed for it. The plan for the other consumers is unchanged.
+
 ## Problem
 
 1. **Shared tenant** — 5 projects share a single `production-tenant` API key. A leak in one project exposes all projects' files.
